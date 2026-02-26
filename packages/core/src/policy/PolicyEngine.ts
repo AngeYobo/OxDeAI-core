@@ -30,7 +30,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 export class PolicyEngine {
   private readonly opts: EngineOptions;
   private readonly usedNonces = new Set<string>(); // v0.1 replay protection (in-memory)
-  public readonly audit = new HashChainedLog();
+  public readonly audit: HashChainedLog = new HashChainedLog();
 
   constructor(opts: EngineOptions) {
     this.opts = opts;

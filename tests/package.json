@@ -8,6 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && node --test $(find dist -type f -name '*.test.js' | sort)"
   },
+  "dependencies": {
+    "@oxdeai/core": "workspace:*"
+  },
   "devDependencies": {
     "tsx": "^4.21.0"
   }
