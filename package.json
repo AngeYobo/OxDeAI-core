@@ -1,7 +1,7 @@
 {
   "name": "oxdeai-core",
   "private": true,
-  "packageManager": "pnpm.12.2",
+  "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build:core": "pnpm --filter @oxdeai/core build",
     "typecheck": "pnpm build:core && pnpm -r typecheck",

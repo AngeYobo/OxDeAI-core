@@ -15,8 +15,7 @@ jobs:
       # 1 Install pnpm FIRST
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.2
+        
 
       - name: Enable Corepack
         run: corepack enable
