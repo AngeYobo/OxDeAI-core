@@ -1,6 +1,6 @@
 {
-  "name": "@docybo/oxdeai-core",
-  "version": "0.2.1",
+  "name": "@oxdeai/core",
+  "version": "0.2.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
