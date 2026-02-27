@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PolicyEngine } from "@oxdeai/core";
 import type { Intent, State, ActionType } from "@oxdeai/core";
+import { makeIntent } from "../helpers/intent.js";
+import { makeState } from "../helpers/state.js";
 
 const DEFAULT_ITERS = 300;
 const MAX_ITERS = 50_000;
@@ -101,46 +103,40 @@ test(`META(${ITERS}): ALLOW implies predicates hold (on pre-state)`, () => {
     const windowStart = now - randInt(r, 0, 2 * window);
     const hasCounter = randInt(r, 0, 1) === 1;
 
-    const intent: Intent = {
+    const intent = makeIntent({
       intent_id: `meta-${i}`,
-      agent_id: "agent-A",
       action_type: pick(r, ACTIONS),
       amount,
       asset: pick(r, ASSETS),
       target: pick(r, TARGETS),
       timestamp: now,
-      metadata_hash: "0x" + "0".repeat(64),
-      nonce: BigInt(2_000_000 + i), // avoid replay in this test
-      signature: "sig"
-    };
+      nonce: BigInt(2_000_000 + i) // avoid replay in this test
+    });
 
-    const state: State = {
+    const state: State = makeState({
       policy_version: "0.1.0",
-      period_id: "p1",
-      kill_switch: { global: false, agents: {} },
       allowlists: {
         action_types: ["PAYMENT"],
         assets: ["USDC", "ETH"],
         targets: ["merchant", "svc:cloud", "svc:gpu"]
       },
       budget: {
-        budget_limit: { "agent-A": limit },
-        spent_in_period: { "agent-A": spent }
+        budget_limit: { "agent-1": limit },
+        spent_in_period: { "agent-1": spent }
       },
-      max_amount_per_action: { "agent-A": cap },
+      max_amount_per_action: { "agent-1": cap },
       velocity: {
         config: { window_seconds: window, max_actions: maxActions },
-        counters: hasCounter ? { "agent-A": { window_start: windowStart, count } } : {}
+        counters: hasCounter ? { "agent-1": { window_start: windowStart, count } } : {}
       },
-      replay: { window_seconds: 3600, max_nonces_per_agent: 256, nonces: {} },
-      concurrency: { max_concurrent: { "agent-A": 1000 }, active: {}, active_auths: {} },
-      recursion: { max_depth: { "agent-A": 5 } }
-    };
+      concurrency: { max_concurrent: { "agent-1": 1000 }, active: {}, active_auths: {} },
+      recursion: { max_depth: { "agent-1": 5 } }
+    });
 
-    // Snapshot PRE-STATE because engine.evaluate mutates state
+    // Snapshot PRE-STATE for predicate checks
     const preState: State = structuredClone(state);
 
-    const out = engine.evaluate(intent, state);
+    const out = engine.evaluatePure(intent, state);
 
     if (out.decision === "ALLOW") {
       const chk = predicatesHold(intent, preState);

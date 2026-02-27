@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PolicyEngine } from "@oxdeai/core";
 import type { Intent, State } from "@oxdeai/core";
+import { makeIntent } from "../helpers/intent.js";
+import { makeState } from "../helpers/state.js";
 
 /**
  * Fuzz configuration
@@ -58,33 +60,27 @@ test(`FUZZ(${ITERS}): budget & per-action cap consistency`, () => {
     const cap = BigInt(randInt(r, 1, 50)) * 1_000_000n;
     const amount = BigInt(randInt(r, 0, 60)) * 1_000_000n;
 
-    const intent: Intent = {
+    const intent = makeIntent({
       intent_id: `i-${i}`,
-      agent_id: "agent-A",
-      action_type: "PAYMENT",
       amount,
       asset: "USDC",
       target: "merchant",
       timestamp: now,
-      metadata_hash: "0x" + "0".repeat(64),
-      nonce: BigInt(i + 1),
-      signature: "sig"
-    };
+      nonce: BigInt(i + 1)
+    });
 
-    const state: State = {
+    const state = makeState({
       policy_version: "0.1.0",
-      period_id: "p1",
-      kill_switch: { global: false, agents: {} },
       allowlists: { action_types: ["PAYMENT"], assets: ["USDC"], targets: ["merchant"] },
-      budget: { budget_limit: { "agent-A": limit }, spent_in_period: { "agent-A": spent } },
-      max_amount_per_action: { "agent-A": cap },
+      budget: { budget_limit: { "agent-1": limit }, spent_in_period: { "agent-1": spent } },
+      max_amount_per_action: { "agent-1": cap },
       velocity: { config: { window_seconds: 60, max_actions: 1000 }, counters: {} },
-      replay: { window_seconds: 3600, max_nonces_per_agent: 256, nonces: {} },
-      concurrency: { max_concurrent: { "agent-A": 1000 }, active: {}, active_auths: {} },
-      recursion: { max_depth: { "agent-A": 5 } }
-    };
+      concurrency: { max_concurrent: { "agent-1": 1000 }, active: {}, active_auths: {} },
+      recursion: { max_depth: { "agent-1": 5 } },
+      tool_limits: { window_seconds: 60, max_calls: { "agent-1": 1_000_000 }, calls: {} }
+    });
 
-    const out = engine.evaluate(intent, state);
+    const out = engine.evaluatePure(intent, state);
 
     const capViolated = amount > cap;
     const budgetViolated = spent + amount > limit;
@@ -118,38 +114,35 @@ test(`FUZZ(${ITERS}): velocity window edge cases`, () => {
     const boundaryTs = windowStart + window;
 
     const mkState = (ts: number): State => ({
+      ...makeState({
       policy_version: "0.1.0",
-      period_id: "p1",
-      kill_switch: { global: false, agents: {} },
       allowlists: { action_types: ["PAYMENT"], assets: ["USDC"], targets: ["merchant"] },
-      budget: { budget_limit: { "agent-A": 1_000_000_000n }, spent_in_period: { "agent-A": 0n } },
-      max_amount_per_action: { "agent-A": 1_000_000_000n },
+      budget: { budget_limit: { "agent-1": 1_000_000_000n }, spent_in_period: { "agent-1": 0n } },
+      max_amount_per_action: { "agent-1": 1_000_000_000n },
       velocity: {
         config: { window_seconds: window, max_actions: maxActions },
-        counters: { "agent-A": { window_start: windowStart, count } }
+        counters: { "agent-1": { window_start: windowStart, count } }
       },
-      replay: { window_seconds: 3600, max_nonces_per_agent: 256, nonces: {} },
-      concurrency: { max_concurrent: { "agent-A": 1000 }, active: {}, active_auths: {} },
-      recursion: { max_depth: { "agent-A": 5 } }
+      concurrency: { max_concurrent: { "agent-1": 1000 }, active: {}, active_auths: {} },
+      recursion: { max_depth: { "agent-1": 5 } }
+      })
     });
 
     const mkIntent = (nonce: bigint, ts: number): Intent => ({
-      intent_id: `v-${i}-${ts}`,
-      agent_id: "agent-A",
-      action_type: "PAYMENT",
-      amount: 1_000_000n,
-      asset: "USDC",
-      target: "merchant",
-      timestamp: ts,
-      metadata_hash: "0x" + "0".repeat(64),
-      nonce,
-      signature: "sig"
-    });
+      ...makeIntent({
+        intent_id: `v-${i}-${ts}`,
+        amount: 1_000_000n,
+        asset: "USDC",
+        target: "merchant",
+        timestamp: ts,
+        nonce
+      })
+    } as Intent);
 
     // Inside window
     {
       const state = mkState(insideTs);
-      const out = engine.evaluate(mkIntent(BigInt(10_000 + i), insideTs), state);
+      const out = engine.evaluatePure(mkIntent(BigInt(10_000 + i), insideTs), state);
       const shouldDeny = count + 1 > maxActions;
 
       if (shouldDeny) {
@@ -161,7 +154,7 @@ test(`FUZZ(${ITERS}): velocity window edge cases`, () => {
     // Boundary reset
     {
       const state = mkState(boundaryTs);
-      const out = engine.evaluate(mkIntent(BigInt(20_000 + i), boundaryTs), state);
+      const out = engine.evaluatePure(mkIntent(BigInt(20_000 + i), boundaryTs), state);
       assert.equal(out.decision, "ALLOW", `boundary reset failed i=${i}`);
     }
   }

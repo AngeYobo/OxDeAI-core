@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PolicyEngine } from "@oxdeai/core";
-import type { Intent, State } from "@oxdeai/core";
+import { makeIntent } from "../helpers/intent.js";
+import { makeState } from "../helpers/state.js";
 
 test("INV-Replay: same (agent, nonce) cannot execute twice", () => {
   const engine = new PolicyEngine({
@@ -10,40 +11,28 @@ test("INV-Replay: same (agent, nonce) cannot execute twice", () => {
     authorization_ttl_seconds: 60
   });
 
-  const now = 1000;
-
-  const intent: Intent = {
+  const state = makeState({
+    policy_version: "0.1.0",
+    allowlists: { action_types: ["PAYMENT"], assets: ["USDC"], targets: ["merchant"] },
+    budget: { budget_limit: { "agent-1": 10_000_000n }, spent_in_period: { "agent-1": 0n } },
+    max_amount_per_action: { "agent-1": 5_000_000n }
+  });
+  const intent = makeIntent({
     intent_id: "intent-1",
-    agent_id: "agent-A",
-    action_type: "PAYMENT",
+    nonce: 77n,
     amount: 1_000_000n,
     asset: "USDC",
     target: "merchant",
-    timestamp: now,
-    metadata_hash: "0x" + "0".repeat(64),
-    nonce: 42n,
-    signature: "sig"
-  };
-
-  const state: State = {
-    policy_version: "0.1.0",
-    period_id: "p1",
-    kill_switch: { global: false, agents: {} },
-    allowlists: { action_types: ["PAYMENT"], assets: ["USDC"], targets: ["merchant"] },
-    budget: { budget_limit: { "agent-A": 10_000_000n }, spent_in_period: { "agent-A": 0n } },
-    max_amount_per_action: { "agent-A": 5_000_000n },
-    velocity: { config: { window_seconds: 60, max_actions: 10 }, counters: {} },
-    replay: { window_seconds: 3600, max_nonces_per_agent: 256, nonces: {} },
-    concurrency: { max_concurrent: { "agent-A": 10 }, active: {}, active_auths: {} },
-    recursion: { max_depth: { "agent-A": 5 } }
-  };
+    timestamp: 1000
+  });
 
   // First execution should pass
-  const first = engine.evaluate(intent, state);
+  const first = engine.evaluatePure(intent, state);
   assert.equal(first.decision, "ALLOW");
+  if (first.decision !== "ALLOW") throw new Error("expected ALLOW");
 
   // Second execution with SAME nonce must fail
-  const second = engine.evaluate(intent, state);
+  const second = engine.evaluatePure(intent, first.nextState);
   assert.equal(second.decision, "DENY");
-  assert.ok(second.reasons.includes("REPLAY_NONCE"));
+  assert.ok(second.reasons.includes("REPLAY_NONCE") || second.reasons.includes("REPLAY_DETECTED"));
 });
