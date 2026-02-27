@@ -12,5 +12,6 @@
     "@types/node": "^22.19.11",
     "typescript": "^5.6.0"
   },
-  "version": "0.0.1"
+  "version": "0.0.1" 
+  
 }
