@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 function nonceKey(intent: Intent): string {
   // keep consistent formatting across versions
@@ -48,3 +49,5 @@ export function ReplayModule(intent: Intent, state: State): PolicyResult {
     }
   };
 }
+
+export const ReplayModuleCodec = statelessModuleCodec("ReplayModule");

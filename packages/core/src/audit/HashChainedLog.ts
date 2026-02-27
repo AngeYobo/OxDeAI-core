@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import type { AuditEvent } from "./AuditLog.js";
-import { sha256HexFromJson } from "../crypto/hashes.js";
+import { canonicalJson } from "../crypto/hashes.js";
 
 type ChainedEntry = {
   event: AuditEvent;
@@ -7,13 +8,33 @@ type ChainedEntry = {
   hash: string;
 };
 
+type AuditEntryLike = AuditEvent;
+
 export class HashChainedLog {
   private chain: ChainedEntry[] = [];
   private head: string = "GENESIS";
 
+  private canonicalizeEntry(e: AuditEntryLike): Uint8Array {
+    const normalized = {
+      ...e,
+      // Always include policyId in canonical bytes (null when absent).
+      policyId: e.policyId ?? null
+    };
+    return new TextEncoder().encode(canonicalJson(normalized));
+  }
+
+  private computeNextHash(prev_hash: string, event: AuditEntryLike): string {
+    const canonicalEvent = this.canonicalizeEntry(event);
+    return createHash("sha256")
+      .update(prev_hash, "utf8")
+      .update("\n", "utf8")
+      .update(canonicalEvent)
+      .digest("hex");
+  }
+
   append(event: AuditEvent): string {
     const prev_hash = this.head;
-    const hash = sha256HexFromJson({ prev_hash, event });
+    const hash = this.computeNextHash(prev_hash, event);
     this.chain.push({ event, prev_hash, hash });
     this.head = hash;
     return hash;
@@ -23,7 +44,7 @@ export class HashChainedLog {
    * snapshot(): read-only view of events (defensive copy).
    */
   snapshot(): AuditEvent[] {
-    return this.chain.map((e) => JSON.parse(JSON.stringify(e.event)));
+    return this.chain.map((e) => structuredClone(e.event));
   }
 
   /**
@@ -47,7 +68,7 @@ export class HashChainedLog {
     let prev = "GENESIS";
     for (const e of this.chain) {
       if (e.prev_hash !== prev) return false;
-      const expected = sha256HexFromJson({ prev_hash: e.prev_hash, event: e.event });
+      const expected = this.computeNextHash(e.prev_hash, e.event);
       if (expected !== e.hash) return false;
       prev = e.hash;
     }

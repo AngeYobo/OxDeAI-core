@@ -1,4 +1,5 @@
-import { State } from "../index.js";
+import type { Intent } from "./intent.js";
+import type { ModuleStateCodec, State } from "./state.js";
 
 export const Decision = {
   ALLOW: "ALLOW",
@@ -35,5 +36,13 @@ export type PolicyResult =
   | { decision: "ALLOW"; reasons: []; stateDelta?: Partial<State> }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+export interface PolicyModule {
+  id: string;
+  evaluate(intent: Intent, state: State): PolicyResult;
+  codec: ModuleStateCodec;
+}
+
 // Backward-compatible alias for older imports.
 export type ModuleResult = PolicyResult;
+
+export type PolicyId = string;

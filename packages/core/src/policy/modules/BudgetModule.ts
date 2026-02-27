@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 
 export function BudgetModule(intent: Intent, state: State): PolicyResult {
@@ -30,3 +31,5 @@ export function BudgetModule(intent: Intent, state: State): PolicyResult {
     }
   };
 }
+
+export const BudgetModuleCodec = statelessModuleCodec("BudgetModule");

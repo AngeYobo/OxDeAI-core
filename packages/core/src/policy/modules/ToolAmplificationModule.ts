@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 function prune(events: Array<{ ts: number; tool?: string }>, cutoff: number): Array<{ ts: number; tool?: string }> {
   // deterministic prune: keep only events within window
@@ -63,3 +64,5 @@ export function ToolAmplificationModule(intent: Intent, state: State): PolicyRes
     }
   };
 }
+
+export const ToolAmplificationModuleCodec = statelessModuleCodec("ToolAmplificationModule");

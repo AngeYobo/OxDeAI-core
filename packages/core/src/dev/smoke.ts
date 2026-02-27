@@ -1,8 +1,18 @@
 // packages/core/src/dev/smoke.ts
 import { PolicyEngine } from "../policy/PolicyEngine.js"; // adjust path if needed
+import { intentHash } from "../crypto/hashes.js";
+import { ReplayEngine } from "../replay/ReplayEngine.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
 import type { ReasonCode } from "../types/policy.js";
+
+(() => {
+  const base: any = { type: "TOOL_CALL", tool: "x", params: { a: 1 }, nonce: "n1" };
+  const withSig = { ...base, signature: "0xdeadbeef" };
+  if (intentHash(base) !== intentHash(withSig)) {
+    throw new Error("regression: intentHash must ignore signature");
+  }
+})();
 
 function baseState(): State {
   return {
@@ -212,6 +222,37 @@ async function main() {
 
     console.log("- Tool amplification test passed");
   }
+
+  // ---- Snapshot determinism smoke (manual) ----
+  {
+    const state = baseState();
+    const snap1 = engine.exportState(state);
+    const hash1 = engine.computeStateHash(state);
+
+    const clone = structuredClone(state);
+    engine.importState(clone, snap1);
+    const hash2 = engine.computeStateHash(clone);
+
+    console.log(hash1 === hash2);
+  }
+
+  // ---- Replay equivalence smoke (audit-level invariants) ----
+  {
+    const events = engine.audit.snapshot();
+    const replay = ReplayEngine.replay(events, { policyId: engine.computePolicyId() });
+    console.log(replay.invariantViolations.length === 0);
+  }
+
+  // ---- Deterministic rebuild fingerprint ----
+  {
+    const policyId = engine.computePolicyId();
+    const stateHash = engine.computeStateHash(baseState());
+    const auditHeadHash = engine.audit.headHash();
+    console.log(`DETERMINISM policyId=${policyId}`);
+    console.log(`DETERMINISM stateHash=${stateHash}`);
+    console.log(`DETERMINISM auditHeadHash=${auditHeadHash}`);
+  }
+  
 
   console.log("🎉 All smoke tests passed");
 }

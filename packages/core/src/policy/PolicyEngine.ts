@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import type { Intent } from "../types/intent.js";
-import type { State } from "../types/state.js";
+import type { State, CanonicalState } from "../types/state.js";
 import type { Authorization } from "../types/authorization.js";
-import type { ReasonCode, PolicyResult } from "../types/policy.js";
+import type { ReasonCode, PolicyResult, PolicyModule } from "../types/policy.js";
 
-import { sha256HexFromJson } from "../crypto/hashes.js";
+import { canonicalJson, intentHash, sha256HexFromJson } from "../crypto/hashes.js";
 import { engineSignHmac } from "../crypto/sign.js";
 import { engineVerifyHmac } from "../crypto/verify.js";
 
@@ -17,6 +18,17 @@ import { ReplayModule } from "./modules/ReplayModule.js";
 import { ConcurrencyModule } from "./modules/ConcurrencyModule.js";
 import { RecursionDepthModule } from "./modules/RecursionDepthModule.js";
 import { ToolAmplificationModule } from "./modules/ToolAmplificationModule.js";
+import { KillSwitchModuleCodec } from "./modules/KillSwitchModule.js";
+import { AllowlistModuleCodec } from "./modules/AllowlistModule.js";
+import { ReplayModuleCodec } from "./modules/ReplayModule.js";
+import { RecursionDepthModuleCodec } from "./modules/RecursionDepthModule.js";
+import { ConcurrencyModuleCodec } from "./modules/ConcurrencyModule.js";
+import { ToolAmplificationModuleCodec } from "./modules/ToolAmplificationModule.js";
+import { BudgetModuleCodec } from "./modules/BudgetModule.js";
+import { VelocityModuleCodec } from "./modules/VelocityModule.js";
+import { stableStringify } from "../utils/stableStringify.js";
+import { createCanonicalState, withModuleState } from "../snapshot/CanonicalState.js";
+import { MODULE_CODECS } from "./modules/registry.js";
 
 export type EngineEvalOptions = {
   mode?: "fail-fast" | "collect-all";
@@ -26,11 +38,22 @@ export type EvaluateOutput =
   | { decision: "ALLOW"; reasons: []; authorization: Authorization }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+export type EvaluatePureOutput =
+  | { decision: "ALLOW"; reasons: []; authorization: Authorization; nextState: State }
+  | { decision: "DENY"; reasons: ReasonCode[] };
+
+export type SimulationResult = {
+  outputs: EvaluatePureOutput[];
+  finalState: State;
+};
+
 export type EngineOptions = {
   policy_version: string;
   engine_secret: string;
   authorization_ttl_seconds: number;
   deny_mode?: "collect-all" | "fail-fast";
+  policyId?: string;
+  strictDeterminism?: boolean;
 };
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -61,10 +84,28 @@ function deepMerge<T>(base: T, patch: Partial<T>): T {
   return out as T;
 }
 
-const MODULES = [KillSwitchModule, AllowlistModule, BudgetModule, VelocityModule] as const;
+const ENGINE_VERSION = process.env.npm_package_version ?? "unknown";
+
+const RELEASE_MODULES: readonly PolicyModule[] = [
+  { id: "KillSwitchModule", evaluate: KillSwitchModule, codec: KillSwitchModuleCodec },
+  { id: "ReplayModule", evaluate: ReplayModule, codec: ReplayModuleCodec },
+  { id: "ConcurrencyModule", evaluate: ConcurrencyModule, codec: ConcurrencyModuleCodec }
+];
+
+const EXECUTE_MODULES: readonly PolicyModule[] = [
+  { id: "KillSwitchModule", evaluate: KillSwitchModule, codec: KillSwitchModuleCodec },
+  { id: "AllowlistModule", evaluate: AllowlistModule, codec: AllowlistModuleCodec },
+  { id: "ReplayModule", evaluate: ReplayModule, codec: ReplayModuleCodec },
+  { id: "RecursionDepthModule", evaluate: RecursionDepthModule, codec: RecursionDepthModuleCodec },
+  { id: "ConcurrencyModule", evaluate: ConcurrencyModule, codec: ConcurrencyModuleCodec },
+  { id: "ToolAmplificationModule", evaluate: ToolAmplificationModule, codec: ToolAmplificationModuleCodec },
+  { id: "BudgetModule", evaluate: BudgetModule, codec: BudgetModuleCodec },
+  { id: "VelocityModule", evaluate: VelocityModule, codec: VelocityModuleCodec }
+];
 
 export class PolicyEngine {
   private readonly opts: EngineOptions;
+  private currentState?: State;
   public readonly audit: HashChainedLog = new HashChainedLog();
 
   constructor(opts: EngineOptions) {
@@ -165,9 +206,13 @@ export class PolicyEngine {
   evaluate(intent: Intent, state: State): EvaluateOutput {
     const out = this.evaluatePure(intent, state, { mode: "fail-fast" });
 
-    if (out.decision === "DENY") return out;
+    if (out.decision === "DENY") {
+      this.currentState = structuredClone(state);
+      return out;
+    }
 
     Object.assign(state, out.nextState);
+    this.currentState = structuredClone(state);
 
     return { decision: "ALLOW", reasons: [], authorization: out.authorization };
   }
@@ -179,9 +224,16 @@ export class PolicyEngine {
     now?: number
   ): { valid: boolean; reason?: ReasonCode } {
     try {
-      const t = now ?? Math.floor(Date.now() / 1000);
+      const t =
+        now ??
+        (() => {
+          if (this.opts.strictDeterminism) {
+            throw new Error("strictDeterminism: 'now' must be provided (no Date.now fallback)");
+          }
+          return Math.floor(Date.now() / 1000);
+        })();
 
-      const intent_hash = sha256HexFromJson(intent);
+      const intent_hash = intentHash(intent);
       if (intent_hash !== authorization.intent_hash) return { valid: false, reason: "AUTH_INTENT_MISMATCH" };
       if (t > authorization.expires_at) return { valid: false, reason: "AUTH_EXPIRED" };
       if (state.policy_version !== authorization.policy_version) return { valid: false, reason: "POLICY_VERSION_MISMATCH" };
@@ -203,9 +255,7 @@ export class PolicyEngine {
     }
   }
 
-  evaluatePure(intent: Intent, state: State, opts?: EngineEvalOptions):
-    | { decision: "ALLOW"; reasons: []; authorization: Authorization; nextState: State }
-    | { decision: "DENY"; reasons: ReasonCode[] } {
+  evaluatePure(intent: Intent, state: State, opts?: EngineEvalOptions): EvaluatePureOutput {
 
     const mode = opts?.mode ?? "fail-fast";
 
@@ -221,12 +271,14 @@ export class PolicyEngine {
     }
 
     try {
-      const intent_hash = sha256HexFromJson(intent);
+      const intent_hash = intentHash(intent);
+      const policyId = this.computePolicyId();
       this.audit.append({
         type: "INTENT_RECEIVED",
         intent_hash,
         agent_id: intent.agent_id,
-        timestamp: intent.timestamp
+        timestamp: intent.timestamp,
+        policyId
       });
 
       // IMPORTANT: start from the original state, but do not mutate it
@@ -234,23 +286,8 @@ export class PolicyEngine {
       const denyReasons: ReasonCode[] = [];
       const t = intent.type ?? "EXECUTE";
 
-      const results: PolicyResult[] =
-        t === "RELEASE"
-          ? [
-              KillSwitchModule(intent, working),
-              ReplayModule(intent, working),
-              ConcurrencyModule(intent, working)
-            ]
-          : [
-              KillSwitchModule(intent, working),
-              AllowlistModule(intent, working),
-              ReplayModule(intent, working),
-              RecursionDepthModule(intent, working),
-              ConcurrencyModule(intent, working),
-              ToolAmplificationModule(intent, working),
-              BudgetModule(intent, working),
-              VelocityModule(intent, working)
-            ];
+      const modules = t === "RELEASE" ? RELEASE_MODULES : EXECUTE_MODULES;
+      const results: PolicyResult[] = modules.map((m) => m.evaluate(intent, working));
 
       // Apply deltas in-order to working copy (deterministic), but still pure
       for (const r of results) {
@@ -270,7 +307,8 @@ export class PolicyEngine {
           decision: "DENY",
           reasons: denyReasons,
           policy_version: state.policy_version,
-          timestamp: intent.timestamp
+          timestamp: intent.timestamp,
+          policyId
         });
         return out;
       }
@@ -325,7 +363,8 @@ export class PolicyEngine {
         decision: "ALLOW",
         reasons: [],
         policy_version: state.policy_version,
-        timestamp: now
+        timestamp: now,
+        policyId
       });
 
       this.audit.append({
@@ -333,7 +372,8 @@ export class PolicyEngine {
         authorization_id,
         intent_hash,
         expires_at,
-        timestamp: now
+        timestamp: now,
+        policyId
       });
 
       return { decision: "ALLOW", reasons: [], authorization, nextState: working };
@@ -342,6 +382,116 @@ export class PolicyEngine {
     }
 
     
+  }
+
+  computePolicyId(): string {
+    if (this.opts.policyId) return this.opts.policyId;
+    const describeModules = (mods: readonly PolicyModule[]) =>
+      [...mods]
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map((m) => ({ id: m.id, version: (m as any).version ?? null }));
+    const payload = stableStringify({
+      engine: "PolicyEngine",
+      engineVersion: ENGINE_VERSION,
+      modules: {
+        execute: describeModules(EXECUTE_MODULES),
+        release: describeModules(RELEASE_MODULES)
+      },
+      opts: {
+        policy_version: this.opts.policy_version ?? null,
+        authorization_ttl_seconds: this.opts.authorization_ttl_seconds,
+        deny_mode: this.opts.deny_mode ?? "fail-fast",
+        strict: this.opts.strictDeterminism ?? false
+      }
+    });
+    return createHash("sha256").update(payload, "utf8").digest("hex");
+  }
+
+  exportState(): CanonicalState;
+  exportState(state: State): CanonicalState;
+  exportState(state?: State): CanonicalState {
+    const current = state ?? this.currentState;
+    if (!current) throw new Error("exportState: engine has no current state");
+
+    let snapshot = createCanonicalState({
+      engineVersion: ENGINE_VERSION,
+      policyId: this.computePolicyId(),
+      moduleStates: {},
+      globalStateHash: ""
+    });
+
+    const ids = Object.keys(MODULE_CODECS).sort();
+    for (const id of ids) {
+      snapshot = withModuleState(snapshot, id, MODULE_CODECS[id].serializeState(current));
+    }
+
+    return {
+      ...snapshot,
+      globalStateHash: this.computeStateHashFor(current)
+    };
+  }
+
+  importState(state: CanonicalState): void;
+  importState(target: State, state: CanonicalState): void;
+  importState(arg1: State | CanonicalState, arg2?: CanonicalState): void {
+    const state = (arg2 ?? arg1) as CanonicalState;
+    const expected = this.computePolicyId();
+    if (state.policyId && state.policyId !== expected) {
+      throw new Error(`importState: policyId mismatch (state=${state.policyId}, engine=${expected})`);
+    }
+
+    const target = arg2 ? (arg1 as State) : structuredClone(this.currentState);
+    if (!target) throw new Error("importState: engine has no mutable state target");
+
+    const ids = Object.keys(state.moduleStates).sort();
+    for (const id of ids) {
+      const codec = MODULE_CODECS[id];
+      if (!codec) throw new Error(`importState: unknown module codec: ${id}`);
+      codec.deserializeState(target, state.moduleStates[id]);
+    }
+
+    const actual = this.computeStateHashFor(target);
+    if (state.globalStateHash && state.globalStateHash !== actual) {
+      throw new Error(`importState: state hash mismatch (state=${state.globalStateHash}, engine=${actual})`);
+    }
+
+    this.currentState = structuredClone(target);
+  }
+
+  computeStateHash(): string;
+  computeStateHash(state: State): string;
+  computeStateHash(state?: State): string {
+    const current = state ?? this.currentState;
+    if (!current) throw new Error("computeStateHash: engine has no current state");
+    return this.computeStateHashFor(current);
+  }
+
+  simulateSequence(intents: Intent[], opts?: EngineEvalOptions): SimulationResult {
+    const base = this.currentState;
+    if (!base) throw new Error("simulateSequence: engine has no current state");
+
+    let working = structuredClone(base);
+    const outputs: EvaluatePureOutput[] = [];
+    for (const intent of intents) {
+      const out = this.evaluatePure(intent, working, opts);
+      outputs.push(out);
+      if (out.decision === "ALLOW") {
+        working = out.nextState;
+      }
+    }
+
+    return { outputs, finalState: working };
+  }
+
+  private computeStateHashFor(state: State): string {
+    const ids = Object.keys(MODULE_CODECS).sort();
+    const moduleHashes: Record<string, string> = {};
+    for (const id of ids) {
+      moduleHashes[id] = MODULE_CODECS[id].stateHash(state);
+    }
+
+    const bytes = new TextEncoder().encode(canonicalJson({ moduleHashes }));
+    return createHash("sha256").update(bytes).digest("hex");
   }
   
 }

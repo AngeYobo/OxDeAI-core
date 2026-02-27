@@ -7,6 +7,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function canonicalize(value: unknown): unknown {
+  if (value === undefined) return null;
   if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return value.map(canonicalize);
   if (isPlainObject(value)) {
@@ -21,7 +22,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 export function sha256HexFromJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+  return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
 export function intentHash(intent: Intent): string {
   const { signature: _sig, ...rest } = intent;

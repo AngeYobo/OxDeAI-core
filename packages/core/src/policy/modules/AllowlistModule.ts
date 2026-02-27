@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult, ReasonCode } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 export function AllowlistModule(intent: Intent, state: State): PolicyResult {
   const reasons: ReasonCode[] = [];
@@ -18,3 +19,5 @@ export function AllowlistModule(intent: Intent, state: State): PolicyResult {
 
   return reasons.length ? { decision: "DENY", reasons } : { decision: "ALLOW", reasons: [] };
 }
+
+export const AllowlistModuleCodec = statelessModuleCodec("AllowlistModule");

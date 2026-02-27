@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 export function ConcurrencyModule(intent: Intent, state: State): PolicyResult {
   const agent = intent.agent_id;
@@ -63,3 +64,5 @@ export function ConcurrencyModule(intent: Intent, state: State): PolicyResult {
     }
   };
 }
+
+export const ConcurrencyModuleCodec = statelessModuleCodec("ConcurrencyModule");

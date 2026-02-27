@@ -79,3 +79,18 @@ export type State = {
 
   tool_limits?: ToolLimitsState;
 };
+
+export type StateHash = string;
+
+export type CanonicalState = {
+  engineVersion: string;
+  policyId?: string;
+  moduleStates: Record<string, Uint8Array>;
+  globalStateHash: StateHash;
+};
+
+export interface ModuleStateCodec {
+  serialize(): Uint8Array;
+  deserialize(bytes: Uint8Array): void;
+  stateHash(): StateHash;
+}

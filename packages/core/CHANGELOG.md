@@ -7,6 +7,59 @@ This project follows Semantic Versioning.
 
 ---
 
+## [0.5.0] - 2026-02-27
+
+### Added
+
+- Canonical state snapshot layer:
+  - `CanonicalState`
+  - `createCanonicalState`
+  - `withModuleState`
+  - `encodeCanonicalState` / `decodeCanonicalState`
+- Deterministic `computeStateHash()` derived from module state codecs.
+- Content-addressed `computePolicyId()`:
+  - Stable module ordering
+  - Canonicalized engine configuration
+  - SHA-256 over canonical payload.
+- `ReplayEngine` (deterministic log replay interface).
+- Strict determinism mode:
+  - `Date.now()` fallback disallowed when `strictDeterminism` is enabled.
+- Signature-stripped canonical intent identity:
+  - `intentHash(intent)` excludes signature.
+  - `verifyAuthorization()` aligned to canonical intent identity.
+
+### Changed
+
+- Audit chain canonicalization now binds `policyId` (null-normalized) into hash computation.
+- State type exports made explicit (no wildcard re-export).
+- Root export surface tightened:
+  - Removed wildcard `utils` export.
+  - Removed duplicate replay/determinism exports.
+- Module ordering normalized via sorted registry when computing snapshots and state hashes.
+
+### Security
+
+- Deterministic triple guaranteed across runs:
+  - `policyId`
+  - `stateHash`
+  - `auditHeadHash`
+- Canonical JSON hardened:
+  - Sorted keys
+  - BigInt normalization
+  - undefined normalization
+  - Explicit UTF-8 hashing.
+- Intent identity separated from signature proof to prevent hash fragmentation across signature encodings.
+- Strict-mode clock injection required for reproducible authorization validation.
+
+### Invariants
+
+- Same engine version + module set + deterministic opts => identical `policyId`.
+- Same state => identical `stateHash`.
+- Same event sequence + `policyId` => identical audit head hash.
+- Signature presence does not alter intent identity.
+
+---
+
 ## [0.4.3] - 2026-02-27
 
 ### Fixed

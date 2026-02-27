@@ -1,6 +1,7 @@
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
+import { statelessModuleCodec } from "./_codec.js";
 
 export function VelocityModule(intent: Intent, state: State): PolicyResult {
   const cfg = state.velocity?.config;
@@ -36,3 +37,5 @@ export function VelocityModule(intent: Intent, state: State): PolicyResult {
     }
   };
 }
+
+export const VelocityModuleCodec = statelessModuleCodec("VelocityModule");
