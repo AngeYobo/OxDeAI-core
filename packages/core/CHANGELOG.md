@@ -7,6 +7,15 @@ This project follows Semantic Versioning.
 
 ---
 
+## [0.4.1] - 2026-02-27
+
+### Fixed
+
+- Test suite updated to use shared state/intent helpers and `evaluatePure()`.
+- Helper typing improvements to keep overrides valid (State/tool_limits and Intent/RELEASE shape).
+
+---
+
 ## [0.4.0] - 2026-02-27
 
 ### Added
