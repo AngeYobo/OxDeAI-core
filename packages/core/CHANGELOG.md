@@ -7,10 +7,10 @@ This project follows Semantic Versioning.
 
 ---
 
-## [0.4.2] - 2026-02-27
+## [0.4.3] - 2026-02-27
 
 ### Fixed
-- Test suite migrated to `evaluatePure()` using shared `makeState` / `makeIntent` helpers.
+- Test suite aligned to `evaluatePure()` using shared `makeState` / `makeIntent` helpers.
 - Helper typing hardened so overrides remain valid (State/tool_limits merge, Intent RELEASE shape).
 
 ---
