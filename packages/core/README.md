@@ -2,12 +2,13 @@
 
 # @oxdeai/core
 
+## Deterministic Economic Containment Engine for Autonomous Systems
+
+
 [![npm version](https://img.shields.io/npm/v/@oxdeai/core.svg)](https://www.npmjs.com/package/@oxdeai/core)
 [![license](https://img.shields.io/npm/l/@oxdeai/core.svg)](https://github.com/AngeYobo/oxdeai-core/blob/main/packages/core/LICENSE)
 [![build](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml)
 
-
-**Deterministic Economic Containment Engine for Autonomous Systems**
 
 `@oxdeai/core` is a TypeScript library that enforces **economic invariants** for autonomous agents and programmable services **before execution**.
 
