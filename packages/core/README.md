@@ -1,68 +1,131 @@
-
-
 # @oxdeai/core
 
-## Deterministic Economic Containment Engine for Autonomous Systems
-
+**Deterministic Economic Containment Engine for Autonomous Systems**
 
 [![npm version](https://img.shields.io/npm/v/@oxdeai/core.svg)](https://www.npmjs.com/package/@oxdeai/core)
 [![license](https://img.shields.io/npm/l/@oxdeai/core.svg)](https://github.com/AngeYobo/oxdeai-core/blob/main/packages/core/LICENSE)
 [![build](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml)
 
 
-`@oxdeai/core` is a TypeScript library that enforces **economic invariants** for autonomous agents and programmable services **before execution**.
+`@oxdeai/core` is a TypeScript policy engine that enforces hard economic invariants *before* an agent executes an action.
 
-It evaluates structured action intents against a deterministic policy state, and emits a signed authorization when allowed.
+It answers a narrow question:
 
-This is not observability. This is **pre-execution containment**.
+> Given an intent and a policy state, is this action economically allowed - deterministically?
 
----
+If allowed, it emits a signed, expiring authorization bound to the intent and state snapshot.
+If denied, it fails closed.
 
-## Why
+No dashboards.
+No LLM classifiers.
+No heuristics.
+No post-fact monitoring.
 
-Agentic systems amplify cost and risk via:
-- tool-call chains and retries
-- recursion / planning loops
-- parallel executions (concurrency blowups)
-- consumption-based billing (tokens, APIs, compute)
-
-Most teams rely on dashboards and alerts (post-fact). `@oxdeai/core` aims to provide **hard, deterministic guardrails** at the execution boundary.
+Just deterministic pre-execution containment.
 
 ---
 
-## What this library does (and does not)
+## The Problem
 
-### Does
-- Deterministic evaluation: given `(intent, state, policy_version)` ⇒ stable decision
-- Pure evaluation path (`evaluatePure`) returning `nextState`
-- Backward-compatible state-committing path (`evaluate`)
-- Signed authorizations (HMAC) + verification
-- Hash-chained audit log for decisions
-- Composable invariant modules (budget / velocity / replay / recursion / concurrency)
+Autonomous systems fail economically before they fail semantically.
 
-### Does NOT
-- move funds, custody keys, or manage wallets
-- replace cloud budgets or billing tools
-- do content moderation or prompt-injection security
-- provide a dashboard (by design)
+Common failure modes:
+
+* runaway tool-call loops
+* recursive planning explosions
+* uncontrolled concurrency
+* replayed actions
+* silent budget drain
+* consumption-based billing surprises
+
+Most “guardrails” operate after execution or rely on probabilistic models.
+
+Economic invariants should not be probabilistic.
 
 ---
 
-## Core model
+## What This Library Is
 
-`@oxdeai/core` evaluates:
+A deterministic policy substrate that:
 
+* evaluates `(intent, state)` → stable decision
+* enforces:
+
+  * per-period budgets
+  * per-action caps
+  * velocity windows
+  * recursion depth limits
+  * concurrency slots
+  * replay protection
+* emits signed authorizations (HMAC)
+* produces hash-chained audit logs
+* supports pure evaluation (`evaluatePure`)
+* produces content-addressed `policyId`
+* produces canonical `stateHash`
+* produces tamper-evident `auditHeadHash`
+
+Same inputs ⇒ same outputs.
+
+---
+
+## What This Library Is Not
+
+* Not a billing tool
+* Not a cloud budget monitor
+* Not a prompt filter
+* Not a dashboard
+* Not distributed coordination
+
+It is the deterministic outer boundary.
+
+---
+
+## Deterministic Guarantees
+
+v0.5.0 formalizes three reproducible identifiers:
+
+* `policyId` - content-addressed engine configuration
+* `stateHash` - canonical snapshot hash
+* `auditHeadHash` - tamper-evident execution trace hash
+
+If the engine version, module set, state, and event sequence are the same, these hashes are identical across runs.
+
+Intent identity is canonical and signature-stripped.
+
+Strict mode removes implicit entropy sources.
+
+---
+
+## Show me the invariant
+
+```ts
+const out = engine.evaluatePure(intent, state);
+const { policyId } = engine;
+const stateHash = engine.computeStateHash(out.nextState);
+const auditHead = engine.audit.headHash();
+
+console.log(policyId, stateHash, auditHead);
 ```
 
-Agent / Runtime
-↓
-Structured Intent (what you want to do)
-↓
-PolicyEngine (@oxdeai/core)  →  ALLOW + Authorization  OR  DENY + Reasons
-↓
-Execution Layer (APIs / payments / infra provisioning)
+**Invariant:**
 
-````
+Same `(engine version + modules + options + state + intent sequence)`
+⇒ identical `policyId`, `stateHash`, and `auditHead`.
+
+No randomness.
+No hidden clocks (in strict mode).
+No non-deterministic ordering.
+
+---
+
+## Design Philosophy
+
+* Fail closed.
+* Make invariants explicit.
+* Make state portable.
+* Make execution replayable.
+* Separate identity from proof.
+* Prefer deterministic containment over probabilistic detection.
 
 ---
 
@@ -70,7 +133,23 @@ Execution Layer (APIs / payments / infra provisioning)
 
 ```bash
 npm install @oxdeai/core
-````
+```
+
+---
+
+## Core Model
+
+```
+Agent / Runtime
+↓
+Structured Intent
+↓
+PolicyEngine (@oxdeai/core)
+    → ALLOW + Authorization
+    → DENY + Reasons
+↓
+Execution Layer (APIs / payments / infra provisioning)
+```
 
 ---
 
@@ -78,59 +157,68 @@ npm install @oxdeai/core
 
 ### Intent
 
-A structured request representing an economic action.
+A structured economic action.
 
 Examples:
 
-* EXECUTE a paid tool call
-* RELEASE an execution slot after completion
+* `EXECUTE` a paid tool call
+* `RELEASE` an authorization-bound concurrency slot
+
+---
 
 ### State
 
-A deterministic policy state containing:
+Deterministic policy state containing:
 
-* per-agent budget limits and spend
+* per-agent budgets
+* per-action caps
 * velocity windows
-* replay protection (nonce windows)
+* replay nonce windows
 * recursion depth caps
-* concurrency caps and active authorizations
+* concurrency caps + active authorizations
+* tool amplification limits
+* kill switches and allowlists
+
+---
 
 ### Authorization
 
 If an intent is allowed, the engine emits a signed authorization:
 
-* bound to `intent_hash`, `policy_version`, and `state_snapshot_hash`
-* includes an expiry (`expires_at`)
+* bound to `intent_hash`
+* bound to `policy_version`
+* bound to `state_snapshot_hash`
+* includes `expires_at`
 * verifiable via `verifyAuthorization()`
 
 ---
 
-## Example: Evaluate + Commit (backward-compatible)
-
-`evaluate()` mutates the passed state by committing `nextState`.
+## Example: Pure Evaluation (Recommended)
 
 ```ts
 import { PolicyEngine } from "@oxdeai/core";
 import type { State, Intent } from "@oxdeai/core";
 
 const engine = new PolicyEngine({
-  policy_version: "v0.2",
+  policy_version: "v0.5",
   engine_secret: process.env.OXDEAI_ENGINE_SECRET!,
   authorization_ttl_seconds: 60,
+  strictDeterminism: false
 });
 
+const now = 1730000000; // injected timestamp (seconds)
+
 const state: State = {
-  policy_version: "v0.2",
+  policy_version: "v0.5",
   period_id: "2026-02",
   kill_switch: { global: false, agents: {} },
   allowlists: {},
   budget: { budget_limit: { "agent-1": 10_000n }, spent_in_period: { "agent-1": 0n } },
   max_amount_per_action: { "agent-1": 5_000n },
   velocity: { config: { window_seconds: 60, max_actions: 100 }, counters: {} },
-
   replay: { window_seconds: 3600, max_nonces_per_agent: 256, nonces: {} },
   recursion: { max_depth: { "agent-1": 2 } },
-  concurrency: { max_concurrent: { "agent-1": 2 }, active: {}, active_auths: {} },
+  concurrency: { max_concurrent: { "agent-1": 2 }, active: {}, active_auths: {} }
 };
 
 const intent: Intent = {
@@ -140,42 +228,25 @@ const intent: Intent = {
   tool: "openai.responses",
   nonce: 42n,
   amount: 100n,
-  timestamp: Math.floor(Date.now() / 1000),
-  depth: 0,
+  timestamp: now,
+  depth: 0
 };
 
-const result = engine.evaluate(intent, state);
-
-if (result.decision === "DENY") {
-  console.error("Blocked:", result.reasons);
-  process.exit(1);
-}
-
-console.log("Allowed, authorization:", result.authorization.authorization_id);
-```
-
----
-
-## Example: Pure evaluation (recommended for infra)
-
-`evaluatePure()` returns `nextState` without mutating the input state.
-
-```ts
 const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
 
 if (out.decision === "DENY") {
   console.error(out.reasons);
 } else {
-  // persist out.nextState in your store (db/redis/etc)
-  // then execute the action using out.authorization
+  // persist out.nextState
+  // execute using out.authorization
 }
 ```
 
 ---
 
-## Concurrency lifecycle: RELEASE (authorization-bound)
+## Concurrency Lifecycle: RELEASE
 
-To avoid concurrency deadlocks, `RELEASE` must reference a real `authorization_id` that is currently active.
+`RELEASE` must reference a valid active `authorization_id`.
 
 ```ts
 const releaseIntent: Intent = {
@@ -184,59 +255,62 @@ const releaseIntent: Intent = {
   authorization_id: out.authorization.authorization_id,
   nonce: 43n,
   amount: 0n,
-  timestamp: Math.floor(Date.now() / 1000),
+  timestamp: now
 };
 
 const rel = engine.evaluatePure(releaseIntent, out.nextState);
-
-if (rel.decision === "DENY") {
-  console.error("Release denied:", rel.reasons);
-} else {
-  // persist rel.nextState
-}
 ```
 
 ---
 
-## Built-in modules
+## Built-In Modules
 
-* **KillSwitchModule**: global or per-agent shutdown
-* **AllowlistModule**: allowlist action types / assets / targets
-* **ReplayModule**: nonce window (prevents replay)
-* **RecursionDepthModule**: max planning / tool-call depth
-* **ConcurrencyModule**: max in-flight executions + authorization-bound release
-* **ToolAmplificationModule**: windowed tool/API call caps (prevents tool-call amplification loops)
-* **BudgetModule**: per-period spend cap + per-action cap
-* **VelocityModule**: action count rate limit per window
+* KillSwitchModule
+* AllowlistModule
+* ReplayModule
+* RecursionDepthModule
+* ConcurrencyModule
+* ToolAmplificationModule
+* BudgetModule
+* VelocityModule
 
 ---
 
-## Determinism and auditability
+## Determinism and Auditability
 
-* Decisions are deterministic for the same `(intent, state, policy_version)`
-* The engine produces signed authorizations (HMAC)
-* A hash-chained audit log records intent hashes and decisions
+* Pure evaluation mode available
+* Stable canonical JSON encoding
+* BigInt normalization
+* Sorted key hashing
+* Hash-chained audit log
+* Strict-mode clock injection
 
 ---
 
 ## Roadmap
 
-### Near-term (v0.3)
+### v0.6 -  Stateful Canonical Snapshots
 
-* Tool amplification limits (tool-call cap per window)
-* Deterministic replay trace hash (evaluation id)
-* Cleaner audit output as data (optional pure mode: return events instead of mutating `engine.audit`)
+* State-bound module codecs
+* Snapshot round-trip invariants
+* Versioned canonical snapshot format
+* Strict determinism completeness
 
-### Mid-term
+### v0.7 -  Replay as Verification
 
-* Pluggable state adapter interface (Redis / Postgres reference adapters)
-* Simulation tooling (policy stress tests / Monte Carlo)
-* WASM-compatible build target
+* Replay verification API
+* Optional state checkpoints
+* Misuse hardening (explicit “inconclusive” mode)
+
+### v0.8 -  Host Integration Adapters
+
+* StateStore interface
+* AuditSink interface
+* Minimal in-memory + file adapters
 
 ---
 
 ## License
 
 Apache-2.0
-
 
