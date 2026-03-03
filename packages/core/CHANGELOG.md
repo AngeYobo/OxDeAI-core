@@ -7,6 +7,25 @@ This project follows Semantic Versioning.
 
 ---
 
+## [0.6.0] - 2026-03-03
+
+### Added
+- Versioned canonical snapshot format (`formatVersion: 1`) with schema validation.
+- Deterministic module snapshot payloads (canonical JSON) replacing v8 byte snapshots.
+- Property-based test suite for determinism invariants (seeded, no deps).
+
+### Changed
+- `CanonicalState` schema: `modules` replaces `moduleStates`; snapshot payloads are JSON.
+- Authorization binding now uses canonical engine `stateHash` (normalized) for snapshot determinism.
+- Tool amplification snapshot import tolerates `tool: null` (canonical undefined normalization).
+
+### Invariants
+- Snapshot `export → encode → decode → import` preserves `stateHash`.
+- Equivalent key insertion orders produce identical per-module and global state hashes.
+- Replay and decision sequences match before/after snapshot import.
+
+---
+
 ## [0.5.1] - 2026-03-03
 
 ### Changed
