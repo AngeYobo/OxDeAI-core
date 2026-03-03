@@ -22,6 +22,7 @@ export * from "./audit/HashChainedLog.js";
 export * from "./policy/PolicyEngine.js";
 export { createCanonicalState, withModuleState } from "./snapshot/CanonicalState.js";
 export { encodeCanonicalState, decodeCanonicalState } from "./snapshot/CanonicalCodec.js";
+export * from "./verification/index.js";
 export * from "./adapters/index.js";
 export * from "./replay/index.js";
 export * from "./determinism/index.js";
