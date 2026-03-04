@@ -22,6 +22,7 @@ function invalid(
   };
 }
 
+/** @public */
 export function verifySnapshot(
   snapshotBytes: Uint8Array,
   opts?: { expectedPolicyId?: string }

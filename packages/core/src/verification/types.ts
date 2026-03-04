@@ -1,5 +1,7 @@
+/** @public */
 export type VerificationStatus = "ok" | "invalid" | "inconclusive";
 
+/** @public */
 export type VerificationViolationCode =
   | "MALFORMED_EVENT"
   | "POLICY_ID_MISSING"
@@ -11,12 +13,14 @@ export type VerificationViolationCode =
   | "SNAPSHOT_CORRUPT"
   | "ENVELOPE_MALFORMED";
 
+/** @public */
 export type VerificationViolation = {
   code: VerificationViolationCode;
   message?: string;
   index?: number;
 };
 
+/** @public */
 export type VerificationResult = {
   ok: boolean;
   status: VerificationStatus;
@@ -27,12 +31,14 @@ export type VerificationResult = {
   auditHeadHash?: string;
 };
 
+/** @public */
 export type VerifyAuditOptions = {
   expectedPolicyId?: string;
   mode?: "strict" | "best-effort";
   requireStateAnchors?: boolean;
 };
 
+/** @public */
 export type VerifyEnvelopeOptions = {
   expectedPolicyId?: string;
   mode?: "strict" | "best-effort";

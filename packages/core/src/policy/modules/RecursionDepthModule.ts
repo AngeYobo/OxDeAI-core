@@ -3,6 +3,7 @@ import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
 import { statelessModuleCodec } from "./_codec.js";
 
+/** @public */
 export function RecursionDepthModule(intent: Intent, state: State): PolicyResult {
   const agent = intent.agent_id;
 
@@ -17,4 +18,5 @@ export function RecursionDepthModule(intent: Intent, state: State): PolicyResult
   return { decision: "ALLOW", reasons: [] };
 }
 
+/** @public */
 export const RecursionDepthModuleCodec = statelessModuleCodec("RecursionDepthModule");

@@ -1,3 +1,4 @@
+/** @public */
 export type Authorization = {
   authorization_id: string;
   intent_hash: string; // sha256 hex

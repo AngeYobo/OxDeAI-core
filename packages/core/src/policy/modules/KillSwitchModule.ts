@@ -3,6 +3,7 @@ import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
 import { statelessModuleCodec } from "./_codec.js";
 
+/** @public */
 export function KillSwitchModule(intent: Intent, state: State): PolicyResult {
   if (state.kill_switch.global) return { decision: "DENY", reasons: ["KILL_SWITCH"] };
   if (state.kill_switch.agents[intent.agent_id] === true) {
@@ -11,4 +12,5 @@ export function KillSwitchModule(intent: Intent, state: State): PolicyResult {
   return { decision: "ALLOW", reasons: [] };
 }
 
+/** @public */
 export const KillSwitchModuleCodec = statelessModuleCodec("KillSwitchModule");

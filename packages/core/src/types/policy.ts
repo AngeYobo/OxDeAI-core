@@ -1,13 +1,16 @@
 import type { Intent } from "./intent.js";
 import type { ModuleStateCodec, State } from "./state.js";
 
+/** @public */
 export const Decision = {
   ALLOW: "ALLOW",
   DENY: "DENY"
 } as const;
 
+/** @public */
 export type Decision = (typeof Decision)[keyof typeof Decision];
 
+/** @public */
 export const ReasonCode = {
   KILL_SWITCH: "KILL_SWITCH",
   ALLOWLIST_ACTION: "ALLOWLIST_ACTION",
@@ -30,12 +33,15 @@ export const ReasonCode = {
   TOOL_CALL_LIMIT_EXCEEDED: "TOOL_CALL_LIMIT_EXCEEDED",
 } as const;
 
+/** @public */
 export type ReasonCode = (typeof ReasonCode)[keyof typeof ReasonCode];
 
+/** @public */
 export type PolicyResult =
   | { decision: "ALLOW"; reasons: []; stateDelta?: Partial<State> }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+/** @public */
 export interface PolicyModule {
   id: string;
   evaluate(intent: Intent, state: State): PolicyResult;
@@ -43,6 +49,8 @@ export interface PolicyModule {
 }
 
 // Backward-compatible alias for older imports.
+/** @public */
 export type ModuleResult = PolicyResult;
 
+/** @public */
 export type PolicyId = string;

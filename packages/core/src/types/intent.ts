@@ -1,3 +1,4 @@
+/** @public */
 export type ActionType = "PAYMENT" | "PURCHASE" | "PROVISION" | "ONCHAIN_TX";
 
 type IntentBase = {
@@ -16,6 +17,7 @@ type IntentBase = {
   tool_call?: boolean;
 };
 
+/** @public */
 export type Intent =
   | (IntentBase & {
       type?: "EXECUTE";

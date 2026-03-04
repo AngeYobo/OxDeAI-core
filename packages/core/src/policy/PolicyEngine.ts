@@ -24,23 +24,28 @@ import { stableStringify } from "../utils/stableStringify.js";
 import { createCanonicalState, withModuleState } from "../snapshot/CanonicalState.js";
 import { MODULE_CODECS } from "./modules/registry.js";
 
+/** @public */
 export type EngineEvalOptions = {
   mode?: "fail-fast" | "collect-all";
 };
 
+/** @public */
 export type EvaluateOutput =
   | { decision: "ALLOW"; reasons: []; authorization: Authorization }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+/** @public */
 export type EvaluatePureOutput =
   | { decision: "ALLOW"; reasons: []; authorization: Authorization; nextState: State }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+/** @public */
 export type SimulationResult = {
   outputs: EvaluatePureOutput[];
   finalState: State;
 };
 
+/** @public */
 export type EngineOptions = {
   policy_version: string;
   engine_secret: string;
@@ -101,6 +106,7 @@ const EXECUTE_MODULES: readonly PolicyModule[] = [
   { id: "VelocityModule", evaluate: VelocityModule, codec: MODULE_CODECS.VelocityModule }
 ];
 
+/** @public */
 export class PolicyEngine {
   private readonly opts: EngineOptions;
   private currentState?: State;

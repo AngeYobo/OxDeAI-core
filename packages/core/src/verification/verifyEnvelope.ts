@@ -11,6 +11,7 @@ function sortViolations(violations: VerificationViolation[]): VerificationViolat
   });
 }
 
+/** @public */
 export function verifyEnvelope(
   envelopeBytes: Uint8Array,
   opts?: VerifyEnvelopeOptions

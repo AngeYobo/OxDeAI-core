@@ -3,6 +3,7 @@ import type { State } from "../../types/state.js";
 import type { PolicyResult } from "../../types/policy.js";
 import { statelessModuleCodec } from "./_codec.js";
 
+/** @public */
 export function VelocityModule(intent: Intent, state: State): PolicyResult {
   const cfg = state.velocity?.config;
   if (!cfg || typeof cfg.window_seconds !== "number" || typeof cfg.max_actions !== "number") {
@@ -38,4 +39,5 @@ export function VelocityModule(intent: Intent, state: State): PolicyResult {
   };
 }
 
+/** @public */
 export const VelocityModuleCodec = statelessModuleCodec("VelocityModule");

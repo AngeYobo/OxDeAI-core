@@ -8,6 +8,7 @@ function nonceKey(intent: Intent): string {
   return intent.nonce.toString();
 }
 
+/** @public */
 export function ReplayModule(intent: Intent, state: State): PolicyResult {
   const agent = intent.agent_id;
 
@@ -50,4 +51,5 @@ export function ReplayModule(intent: Intent, state: State): PolicyResult {
   };
 }
 
+/** @public */
 export const ReplayModuleCodec = statelessModuleCodec("ReplayModule");

@@ -32,6 +32,7 @@ function asAuditEvent(value: unknown): value is AuditEvent {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** @public */
 export function verifyAuditEvents(
   events: readonly AuditEvent[],
   opts?: VerifyAuditOptions

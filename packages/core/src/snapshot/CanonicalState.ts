@@ -1,7 +1,9 @@
 import type { CanonicalState as CanonicalStateType } from "../types/state.js";
 
+/** @public */
 export type CanonicalState = CanonicalStateType;
 
+/** @public */
 export function createCanonicalState(args: {
   formatVersion?: 1;
   engineVersion: string;
@@ -16,6 +18,7 @@ export function createCanonicalState(args: {
   };
 }
 
+/** @public */
 export function withModuleState(state: CanonicalState, moduleId: string, payload: unknown): CanonicalState {
   return {
     ...state,

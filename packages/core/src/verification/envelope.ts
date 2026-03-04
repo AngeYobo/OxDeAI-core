@@ -1,6 +1,7 @@
 import { canonicalJson } from "../crypto/hashes.js";
 import type { AuditEntry } from "../audit/AuditLog.js";
 
+/** @public */
 export type VerificationEnvelopeV1 = {
   formatVersion: 1;
   snapshot: Uint8Array;
@@ -48,6 +49,7 @@ function assertEnvelope(value: unknown): EnvelopeWire {
   };
 }
 
+/** @public */
 export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array {
   if (envelope.formatVersion !== 1) {
     throw new Error("invalid verification envelope: unsupported formatVersion");
@@ -68,6 +70,7 @@ export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array {
   return new TextEncoder().encode(canonicalJson(wire));
 }
 
+/** @public */
 export function decodeEnvelope(bytes: Uint8Array): VerificationEnvelopeV1 {
   const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   const wire = assertEnvelope(parsed);

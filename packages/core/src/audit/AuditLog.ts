@@ -3,6 +3,7 @@ type AuditEntryBase = {
   policyId?: string;
 };
 
+/** @public */
 export type AuditEntry =
   | (AuditEntryBase & {
       type: "INTENT_RECEIVED";
@@ -32,8 +33,10 @@ export type AuditEntry =
       stateHash: string;
     });
 
+/** @public */
 export type AuditEvent = AuditEntry;
 
+/** @public */
 export interface AuditLog {
   append(event: AuditEntry): void;
   getEvents(): readonly AuditEntry[];

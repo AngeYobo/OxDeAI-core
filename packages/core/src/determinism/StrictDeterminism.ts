@@ -1,3 +1,4 @@
+/** @public */
 export class StrictDeterminismError extends Error {
   constructor(message: string) {
     super(message);
@@ -5,6 +6,7 @@ export class StrictDeterminismError extends Error {
   }
 }
 
+/** @public */
 export function assertNoEntropy(signal: { hasEntropy: boolean; context?: string }): void {
   if (signal.hasEntropy) {
     throw new StrictDeterminismError(

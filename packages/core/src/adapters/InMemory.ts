@@ -2,6 +2,7 @@ import type { AuditEvent } from "../audit/AuditLog.js";
 import type { CanonicalState } from "../types/state.js";
 import type { AuditSink, StateStore } from "./types.js";
 
+/** @public */
 export class InMemoryStateStore implements StateStore {
   private state: CanonicalState | null = null;
 
@@ -14,6 +15,7 @@ export class InMemoryStateStore implements StateStore {
   }
 }
 
+/** @public */
 export class InMemoryAuditSink implements AuditSink {
   private events: AuditEvent[] = [];
 

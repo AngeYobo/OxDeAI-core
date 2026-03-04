@@ -5,6 +5,7 @@ function hexToBuf(hex: string): Buffer {
   return Buffer.from(hex, "hex");
 }
 
+/** @public */
 export function engineVerifyHmac(
   payload: unknown,
   signatureHex: string,

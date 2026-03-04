@@ -8,6 +8,7 @@ import type { AuditEvent } from "../audit/AuditLog.js";
 import type { CanonicalState } from "../types/state.js";
 import type { AuditSink, StateStore } from "./types.js";
 
+/** @public */
 export class FileStateStore implements StateStore {
   private readonly path: string;
 
@@ -36,6 +37,7 @@ export class FileStateStore implements StateStore {
   }
 }
 
+/** @public */
 export class FileAuditSink implements AuditSink {
   private readonly path: string;
   private readonly mode: "ndjson";

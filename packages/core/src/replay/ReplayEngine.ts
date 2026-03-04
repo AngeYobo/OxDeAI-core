@@ -6,16 +6,19 @@ import type { State } from "../types/state.js";
 import type { VerifyOptions, VerifyResult } from "./verify.js";
 import { verifyReplayEvents } from "./verify.js";
 
+/** @public */
 export type ReplayResult = {
   outputs: EvaluatePureOutput[];
   finalState: State;
   allDeterministic: boolean;
 };
 
+/** @public */
 export type AuditReplayResult = {
   invariantViolations: string[];
 };
 
+/** @public */
 export class ReplayEngine {
   private readonly engine: PolicyEngine;
 

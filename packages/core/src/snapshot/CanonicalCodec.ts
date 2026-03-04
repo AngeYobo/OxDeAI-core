@@ -34,11 +34,13 @@ function assertCanonicalState(value: unknown): CanonicalState {
   };
 }
 
+/** @public */
 export function encodeCanonicalState(state: CanonicalState): Uint8Array {
   const normalized = assertCanonicalState(state);
   return new TextEncoder().encode(canonicalJson(normalized));
 }
 
+/** @public */
 export function decodeCanonicalState(bytes: Uint8Array): CanonicalState {
   const json = new TextDecoder().decode(bytes);
   const parsed = JSON.parse(json) as unknown;

@@ -10,6 +10,7 @@ type ChainedEntry = {
 
 type AuditEntryLike = AuditEvent;
 
+/** @public */
 export class HashChainedLog {
   private chain: ChainedEntry[] = [];
   private head: string = "GENESIS";

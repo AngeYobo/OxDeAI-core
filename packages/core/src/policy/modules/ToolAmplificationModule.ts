@@ -8,6 +8,7 @@ function prune(events: Array<{ ts: number; tool?: string }>, cutoff: number): Ar
   return events.filter((e) => e.ts >= cutoff);
 }
 
+/** @public */
 export function ToolAmplificationModule(intent: Intent, state: State): PolicyResult {
   const agent = intent.agent_id;
 
@@ -65,4 +66,5 @@ export function ToolAmplificationModule(intent: Intent, state: State): PolicyRes
   };
 }
 
+/** @public */
 export const ToolAmplificationModuleCodec = statelessModuleCodec("ToolAmplificationModule");

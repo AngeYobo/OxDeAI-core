@@ -2,19 +2,23 @@ import { createHash } from "node:crypto";
 import { canonicalJson } from "../crypto/hashes.js";
 import type { AuditEntry } from "../audit/AuditLog.js";
 
+/** @public */
 export type VerifyStatus = "ok" | "violation" | "inconclusive";
 
+/** @public */
 export type VerifyViolation = {
   code: string;
   at?: number;
   detail?: string;
 };
 
+/** @public */
 export type VerifyOptions = {
   policyId?: string;
   mode?: "strict" | "best-effort";
 };
 
+/** @public */
 export type VerifyResult = {
   ok: boolean;
   status: VerifyStatus;
@@ -41,6 +45,7 @@ function computeNextHash(prev: string, event: AuditEntry): string {
     .digest("hex");
 }
 
+/** @public */
 export function verifyReplayEvents(events: readonly AuditEntry[], opts?: VerifyOptions): VerifyResult {
   const mode = opts?.mode ?? "strict";
   const violations: VerifyViolation[] = [];

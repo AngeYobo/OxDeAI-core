@@ -18,20 +18,25 @@ function canonicalize(value: unknown): unknown {
   }
   return value;
 }
+/** @public */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
+/** @public */
 export function sha256HexFromJson(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
+/** @public */
 export function intentHash(intent: Intent): string {
   const { signature: _sig, ...rest } = intent;
   void _sig;
   return sha256HexFromJson(rest);
 }
+/** @public */
 export function stateSnapshotHash(state: State): string {
   return sha256HexFromJson(state);
 }
+/** @public */
 export function authPayloadString(auth: Omit<Authorization, "engine_signature">): string {
   return canonicalJson(auth);
 }
