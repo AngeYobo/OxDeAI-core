@@ -8,46 +8,11 @@
 export type ActionType = "PAYMENT" | "PURCHASE" | "PROVISION" | "ONCHAIN_TX";
 
 // @public (undocumented)
-export function AllowlistModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
 export type AllowLists = {
     action_types?: ActionType[];
     assets?: string[];
     targets?: string[];
 };
-
-// @public (undocumented)
-export function assertNoEntropy(signal: {
-    hasEntropy: boolean;
-    context?: string;
-}): void;
-
-// Warning: (ae-forgotten-export) The symbol "AuditEntry" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export type AuditEvent = AuditEntry;
-
-// @public (undocumented)
-export interface AuditLog {
-    // (undocumented)
-    append(event: AuditEntry): void;
-    // (undocumented)
-    getEvents(): readonly AuditEntry[];
-}
-
-// @public (undocumented)
-export type AuditReplayResult = {
-    invariantViolations: string[];
-};
-
-// @public (undocumented)
-export interface AuditSink {
-    // (undocumented)
-    append(event: AuditEvent): MaybePromise<void>;
-    // (undocumented)
-    flush?(): MaybePromise<void>;
-}
 
 // @public (undocumented)
 export type Authorization = {
@@ -61,19 +26,10 @@ export type Authorization = {
 };
 
 // @public (undocumented)
-export function authPayloadString(auth: Omit<Authorization, "engine_signature">): string;
-
-// @public (undocumented)
-export function BudgetModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
 export type BudgetState = {
     budget_limit: Record<string, bigint | undefined>;
     spent_in_period: Record<string, bigint | undefined>;
 };
-
-// @public (undocumented)
-export function canonicalJson(value: unknown): string;
 
 // @public (undocumented)
 export type CanonicalState = {
@@ -84,19 +40,6 @@ export type CanonicalState = {
 };
 
 // @public (undocumented)
-export function ConcurrencyModule(intent: Intent, state: State): PolicyResult;
-
-// Warning: (ae-forgotten-export) The symbol "CanonicalState_2" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export function createCanonicalState(args: {
-    formatVersion?: 1;
-    engineVersion: string;
-    modules: Record<string, unknown>;
-    policyId: string;
-}): CanonicalState_2;
-
-// @public (undocumented)
 export const Decision: {
     readonly ALLOW: "ALLOW";
     readonly DENY: "DENY";
@@ -105,9 +48,13 @@ export const Decision: {
 // @public (undocumented)
 export type Decision = (typeof Decision)[keyof typeof Decision];
 
+// Warning: (ae-forgotten-export) The symbol "CanonicalState_2" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function decodeCanonicalState(bytes: Uint8Array): CanonicalState_2;
 
+// Warning: (ae-forgotten-export) The symbol "VerificationEnvelopeV1" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function decodeEnvelope(bytes: Uint8Array): VerificationEnvelopeV1;
 
@@ -116,99 +63,6 @@ export function encodeCanonicalState(state: CanonicalState_2): Uint8Array;
 
 // @public (undocumented)
 export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array;
-
-// @public (undocumented)
-export type EngineEvalOptions = {
-    mode?: "fail-fast" | "collect-all";
-};
-
-// @public (undocumented)
-export type EngineOptions = {
-    policy_version: string;
-    engine_secret: string;
-    authorization_ttl_seconds: number;
-    deny_mode?: "collect-all" | "fail-fast";
-    policyId?: string;
-    strictDeterminism?: boolean;
-    checkpoint_every_n_events?: number;
-    stateStore?: StateStore;
-    auditSink?: AuditSink;
-    autoPersist?: boolean;
-};
-
-// @public (undocumented)
-export function engineSignHmac(payload: unknown, secret: string): string;
-
-// @public (undocumented)
-export function engineVerifyHmac(payload: unknown, signatureHex: string, secret: string): boolean;
-
-// @public (undocumented)
-export type EvaluateOutput = {
-    decision: "ALLOW";
-    reasons: [];
-    authorization: Authorization;
-} | {
-    decision: "DENY";
-    reasons: ReasonCode[];
-};
-
-// @public (undocumented)
-export type EvaluatePureOutput = {
-    decision: "ALLOW";
-    reasons: [];
-    authorization: Authorization;
-    nextState: State;
-} | {
-    decision: "DENY";
-    reasons: ReasonCode[];
-};
-
-// @public (undocumented)
-export class FileAuditSink implements AuditSink {
-    constructor(path: string, opts?: {
-        mode?: "ndjson";
-    });
-    // (undocumented)
-    append(event: AuditEvent): Promise<void>;
-    // (undocumented)
-    flush(): Promise<void>;
-}
-
-// @public (undocumented)
-export class FileStateStore implements StateStore {
-    constructor(path: string);
-    // (undocumented)
-    get(): Promise<CanonicalState | null>;
-    // (undocumented)
-    set(state: CanonicalState): Promise<void>;
-}
-
-// @public (undocumented)
-export class HashChainedLog {
-    // (undocumented)
-    append(event: AuditEvent): string;
-    // (undocumented)
-    drain(): AuditEvent[];
-    headHash(): string;
-    snapshot(): AuditEvent[];
-    verify(): boolean;
-}
-
-// @public (undocumented)
-export class InMemoryAuditSink implements AuditSink {
-    // (undocumented)
-    append(event: AuditEvent): void;
-    // (undocumented)
-    drain(): AuditEvent[];
-}
-
-// @public (undocumented)
-export class InMemoryStateStore implements StateStore {
-    // (undocumented)
-    get(): CanonicalState | null;
-    // (undocumented)
-    set(state: CanonicalState): void;
-}
 
 // Warning: (ae-forgotten-export) The symbol "IntentBase" needs to be exported by the entry point index.d.ts
 //
@@ -222,19 +76,10 @@ export type Intent = (IntentBase & {
 });
 
 // @public (undocumented)
-export function intentHash(intent: Intent): string;
-
-// @public (undocumented)
-export function KillSwitchModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
 export type KillSwitchState = {
     global: boolean;
     agents: Record<string, boolean | undefined>;
 };
-
-// @public (undocumented)
-export type MaybePromise<T> = T | Promise<T>;
 
 // @public (undocumented)
 export type ModuleResult = PolicyResult;
@@ -253,7 +98,10 @@ export interface ModuleStateCodec {
 
 // @public (undocumented)
 export class PolicyEngine {
+    // Warning: (ae-forgotten-export) The symbol "EngineOptions" needs to be exported by the entry point index.d.ts
     constructor(opts: EngineOptions);
+    // Warning: (ae-forgotten-export) The symbol "HashChainedLog" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     readonly audit: HashChainedLog;
     // (undocumented)
@@ -264,8 +112,13 @@ export class PolicyEngine {
     computeStateHash(): string;
     // (undocumented)
     computeStateHash(state: State): string;
+    // Warning: (ae-forgotten-export) The symbol "EvaluateOutput" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     evaluate(intent: Intent, state: State): EvaluateOutput;
+    // Warning: (ae-forgotten-export) The symbol "EngineEvalOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "EvaluatePureOutput" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     evaluatePure(intent: Intent, state: State, opts?: EngineEvalOptions): EvaluatePureOutput;
     // (undocumented)
@@ -280,6 +133,8 @@ export class PolicyEngine {
     importState(state: CanonicalState): void;
     // (undocumented)
     importState(target: State, state: CanonicalState): void;
+    // Warning: (ae-forgotten-export) The symbol "SimulationResult" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     simulateSequence(intents: Intent[], opts?: EngineEvalOptions): SimulationResult;
     // (undocumented)
@@ -339,45 +194,8 @@ export const ReasonCode: {
 export type ReasonCode = (typeof ReasonCode)[keyof typeof ReasonCode];
 
 // @public (undocumented)
-export function RecursionDepthModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
 export type RecursionState = {
     max_depth: Record<string, number | undefined>;
-};
-
-// @public (undocumented)
-export class ReplayEngine {
-    constructor(engine: PolicyEngine);
-    // (undocumented)
-    replay(initialState: State, intents: Intent[], opts?: EngineEvalOptions): ReplayResult;
-    // (undocumented)
-    static replay(events: readonly AuditEntry[], opts?: {
-        policyId?: string;
-    }): AuditReplayResult;
-    // (undocumented)
-    replayFromAudit(initialState: State, _audit: readonly AuditEntry[], intents: Intent[], opts?: EngineEvalOptions): ReplayResult;
-    // (undocumented)
-    static verify(events: readonly AuditEntry[], opts?: VerifyOptions): VerifyResult;
-}
-
-// @public (undocumented)
-export function ReplayModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
-export type ReplayResult = {
-    outputs: EvaluatePureOutput[];
-    finalState: State;
-    allDeterministic: boolean;
-};
-
-// @public (undocumented)
-export function sha256HexFromJson(value: unknown): string;
-
-// @public (undocumented)
-export type SimulationResult = {
-    outputs: EvaluatePureOutput[];
-    finalState: State;
 };
 
 // @public (undocumented)
@@ -423,25 +241,6 @@ export type State = {
 export type StateHash = string;
 
 // @public (undocumented)
-export function stateSnapshotHash(state: State): string;
-
-// @public (undocumented)
-export interface StateStore {
-    // (undocumented)
-    get(): MaybePromise<CanonicalState | null>;
-    // (undocumented)
-    set(state: CanonicalState): MaybePromise<void>;
-}
-
-// @public (undocumented)
-export class StrictDeterminismError extends Error {
-    constructor(message: string);
-}
-
-// @public (undocumented)
-export function ToolAmplificationModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
 export type ToolLimitsState = {
     window_seconds: number;
     max_calls: Record<string, number | undefined>;
@@ -463,16 +262,6 @@ export type VelocityCounters = Record<string, {
     window_start: number;
     count: number;
 } | undefined>;
-
-// @public (undocumented)
-export function VelocityModule(intent: Intent, state: State): PolicyResult;
-
-// @public (undocumented)
-export type VerificationEnvelopeV1 = {
-    formatVersion: 1;
-    snapshot: Uint8Array;
-    events: AuditEntry[];
-};
 
 // @public (undocumented)
 export type VerificationResult = {
@@ -497,6 +286,8 @@ export type VerificationViolation = {
 // @public (undocumented)
 export type VerificationViolationCode = "MALFORMED_EVENT" | "POLICY_ID_MISSING" | "POLICY_ID_MISMATCH" | "MIXED_POLICY_ID" | "NON_MONOTONIC_TIMESTAMP" | "HASH_CHAIN_INVALID" | "NO_STATE_ANCHOR" | "SNAPSHOT_CORRUPT" | "ENVELOPE_MALFORMED";
 
+// Warning: (ae-forgotten-export) The symbol "AuditEvent" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function verifyAuditEvents(events: readonly AuditEvent[], opts?: VerifyAuditOptions): VerificationResult;
 
@@ -517,41 +308,9 @@ export type VerifyEnvelopeOptions = {
 };
 
 // @public (undocumented)
-export type VerifyOptions = {
-    policyId?: string;
-    mode?: "strict" | "best-effort";
-};
-
-// @public (undocumented)
-export function verifyReplayEvents(events: readonly AuditEntry[], opts?: VerifyOptions): VerifyResult;
-
-// @public (undocumented)
-export type VerifyResult = {
-    ok: boolean;
-    status: VerifyStatus;
-    violations: VerifyViolation[];
-    expectedPolicyId?: string;
-    observedPolicyId?: string;
-    auditHeadHash?: string;
-};
-
-// @public (undocumented)
 export function verifySnapshot(snapshotBytes: Uint8Array, opts?: {
     expectedPolicyId?: string;
 }): VerificationResult;
-
-// @public (undocumented)
-export type VerifyStatus = "ok" | "violation" | "inconclusive";
-
-// @public (undocumented)
-export type VerifyViolation = {
-    code: string;
-    at?: number;
-    detail?: string;
-};
-
-// @public (undocumented)
-export function withModuleState(state: CanonicalState_2, moduleId: string, payload: unknown): CanonicalState_2;
 
 // (No @packageDocumentation comment for this package)
 
