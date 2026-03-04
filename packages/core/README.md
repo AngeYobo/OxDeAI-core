@@ -3,6 +3,7 @@
 Deterministic Economic Containment Engine for Autonomous Systems
 
 [![npm version](https://img.shields.io/npm/v/@oxdeai/core.svg)](https://www.npmjs.com/package/@oxdeai/core)
+[![Snyk](https://snyk.io/test/github/AngeYobo/oxdeai-core/badge.svg)](https://snyk.io/test/github/AngeYobo/oxdeai-core)
 [![license](https://img.shields.io/npm/l/@oxdeai/core.svg)](https://github.com/AngeYobo/oxdeai-core/blob/main/packages/core/LICENSE)
 [![build](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml)
 
@@ -293,7 +294,7 @@ import type { State, Intent } from "@oxdeai/core";
 
 const engine = new PolicyEngine({
   policy_version: "v0.9",
-  engine_secret: process.env.OXDEAI_ENGINE_SECRET!,
+  engine_secret: process.env.oxdeai_ENGINE_SECRET!,
   authorization_ttl_seconds: 60,
   strictDeterminism: false
 });

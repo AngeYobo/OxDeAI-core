@@ -16,6 +16,8 @@ export { encodeCanonicalState, decodeCanonicalState } from "./snapshot/Canonical
 // Engine + core domain types (runtime evaluator)
 // ─────────────────────────────────────────────────────────────
 export { PolicyEngine } from "./policy/PolicyEngine.js";
+export { HashChainedLog } from "./audit/HashChainedLog.js";
+export { sha256HexFromJson } from "./crypto/hashes.js";
 
 export type * from "./types/intent.js";
 export type {
