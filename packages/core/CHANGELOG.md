@@ -7,6 +7,32 @@ This project follows Semantic Versioning.
 
 ---
 
+## [1.0.0] - 2026-03-04
+
+Protocol stability release.
+
+### Added
+
+- Stable stateless verification API.
+- Verification Envelope specification.
+- Unified VerificationResult schema.
+- Protocol documentation (`docs/protocol.md`).
+
+### Changed
+
+- Project status upgraded from pre-release to stable protocol library.
+
+### Notes
+
+This release freezes:
+
+- verification API surface
+- envelope encoding format
+- verification result schema
+- deterministic invariants
+
+---
+
 ## [0.9.3] - 2026-03-04
 
 Documentation release before v1.0.

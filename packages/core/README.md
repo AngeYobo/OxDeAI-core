@@ -7,6 +7,23 @@ Deterministic Economic Containment Engine for Autonomous Systems
 [![build](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AngeYobo/oxdeai-core/actions/workflows/ci.yml)
 
 
+## Status
+
+`@oxdeai/core` is a stable protocol library.
+
+Version 1.0.0 freezes the stateless verification surface introduced in v0.9:
+
+- verifySnapshot
+- verifyAuditEvents
+- verifyEnvelope
+- VerificationResult schema
+- Verification Envelope format
+
+Future releases will maintain backward compatibility for these artifacts.
+
+---
+
+
 `@oxdeai/core` is a TypeScript policy engine that enforces hard economic invariants *before* an agent executes an action.
 
 It answers a narrow question:
@@ -460,13 +477,16 @@ console.log(verified.ok, verified.status); // true, "ok" when checkpoints exist
 * AuditSink interface
 * Minimal in-memory + file adapters
 
-### v0.9 — Stateless Verification Surface (shipped)
+### v0.9 - Stateless Verification Surface (shipped)
+
+Stateless verification layer for protocol artifacts.
+
 * Pure verifiers: `verifySnapshot`, `verifyAuditEvents`, `verifyEnvelope`
 * Portable Verification Envelope (snapshot + audit events)
-* Unified `VerificationResult` (ok / invalid / inconclusive)
-* Deterministic violation ordering (stable outputs across runtimes)
+* Unified `VerificationResult` (`ok` / `invalid` / `inconclusive`)
+* Deterministic violation ordering
 
-### v1.0 — Protocol Stability Release (planned)
+### v1.0 - Protocol Stability Release (shipped)
 * API freeze for verification surface + envelope codec
 * Spec lock (formats, invariants, violation codes)
 * Backwards-compat policy and conformance tests
