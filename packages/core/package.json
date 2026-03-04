@@ -51,6 +51,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:node": "node --test \"dist/test/*.test.js\"",
-    "test": "pnpm build && pnpm test:node"
+    "test": "pnpm build && pnpm test:node",
+    "api:report": "pnpm build && api-extractor run --local --config api-extractor.json",
+    "api:check": "pnpm build && api-extractor run --config api-extractor.json"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.57.6"
   }
 }
