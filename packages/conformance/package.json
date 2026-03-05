@@ -1,6 +1,6 @@
 {
   "name": "@oxdeai/conformance",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "validate": "pnpm build && node dist/src/validate.js"
   },
   "dependencies": {
-    "@oxdeai/core": "workspace:*"
+    "@oxdeai/core": "^1.0.1"
   },
   "devDependencies": {
     "ts-node": "^10.9.0",
