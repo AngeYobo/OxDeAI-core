@@ -7,8 +7,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "test": "node --test"
+    "test": "pnpm build && node --test \"dist/**/*.test.js\""
   }
 }
