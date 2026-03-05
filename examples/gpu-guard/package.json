@@ -1,0 +1,9 @@
+{
+  "name": "@oxdeai/example-gpu-guard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:core": "pnpm -C ../../packages/core build",
+    "demo": "pnpm run build:core && node demo.mjs"
+  }
+}

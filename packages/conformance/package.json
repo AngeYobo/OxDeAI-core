@@ -2,8 +2,11 @@
   "name": "@oxdeai/conformance",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "extract": "ts-node scripts/extract-vectors.ts"
+    "build": "tsc -p tsconfig.json",
+    "extract": "pnpm build && node dist/scripts/extract-vectors.js",
+    "validate": "pnpm build && node dist/src/validate.js"
   },
   "dependencies": {
     "@oxdeai/core": "workspace:*"

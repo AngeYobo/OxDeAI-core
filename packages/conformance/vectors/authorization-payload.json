@@ -23,10 +23,10 @@
       "expected": {
         "intent_hash": "c272c586c9c9bd258cc1e794322401f3de021882f255ba16ff921255776066a5",
         "policy_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "state_hash": "af09972eef400827903e75e75ff0b0be7cb467167433ae01e38686b18f02550f",
+        "state_hash": "3081689029423573c8dcc173d5ac4ad856b3fe6cfde6ddf5761c385b943b38c6",
         "expires_at": 1730000060,
-        "canonical_signing_payload": "{\"expires_at\":1730000060,\"intent_hash\":\"c272c586c9c9bd258cc1e794322401f3de021882f255ba16ff921255776066a5\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"af09972eef400827903e75e75ff0b0be7cb467167433ae01e38686b18f02550f\"}",
-        "signature": "bb71bc1240f0c8593767f2cf9bede744adee3d004b80e5253833e112f03823d2"
+        "canonical_signing_payload": "{\"expires_at\":1730000060,\"intent_hash\":\"c272c586c9c9bd258cc1e794322401f3de021882f255ba16ff921255776066a5\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"3081689029423573c8dcc173d5ac4ad856b3fe6cfde6ddf5761c385b943b38c6\"}",
+        "signature": "682dd59178c0b81e271b0f5a908dc9e55c1fd91185d5a2f765d87b4a10a16362"
       }
     },
     {
@@ -50,8 +50,8 @@
         "intent_hash": "cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e",
         "expires_at": 60,
         "expires_at_derivation": "intent.timestamp(0) + ttl_seconds(60) = 60",
-        "canonical_signing_payload": "{\"expires_at\":60,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"b6546e0417c651053f6150bfd4c8c33ccbe12be2faf67f646aad5397397d5cb5\"}",
-        "signature": "329db42141f75a7b50d389ea2aca354df0eb52dbd59b85f7212ab46eda3df766"
+        "canonical_signing_payload": "{\"expires_at\":60,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"2bf90dd9e4c9f26b9d0234e1a035a06b9e60e68933497c24d95e1d02ae92e88d\"}",
+        "signature": "470d2b3c5076c33618347ee106a34e8d86ba71025c259bda06db982d8b7a7fdb"
       }
     }
   ]
