@@ -7,8 +7,8 @@
       "expected": {
         "status": "ok",
         "policyId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "stateHash": "343583cdb32ec10dae8f1f824afc1fffd06978ae8a87904a65683d3e11f8bcd1",
-        "auditHeadHash": "c70408b47892206887ead2bae10bd173db151c5e46ef8a6fc078e81c22bc4284",
+        "stateHash": "30a1b0957089e6cc9e43afd0a71ad9a02389afc59657dafb66d5768c62987c75",
+        "auditHeadHash": "bc0efb39c9f03a0517275a22aa103436bd337cf7a7f73390af3856f7b61f6edb",
         "violations": []
       }
     },
@@ -56,7 +56,7 @@
         "violations": [
           {
             "code": "ENVELOPE_MALFORMED",
-            "message": "envelope decode failed"
+            "message": "Unexpected token '\u0001', \"\u0001\u0002\u0003\u0004\u0005\" is not valid JSON"
           }
         ]
       }
