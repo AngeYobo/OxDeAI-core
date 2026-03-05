@@ -64,6 +64,19 @@ export function encodeCanonicalState(state: CanonicalState_2): Uint8Array;
 // @public (undocumented)
 export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array;
 
+// @public (undocumented)
+export class HashChainedLog {
+    // Warning: (ae-forgotten-export) The symbol "AuditEvent" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    append(event: AuditEvent): string;
+    // (undocumented)
+    drain(): AuditEvent[];
+    headHash(): string;
+    snapshot(): AuditEvent[];
+    verify(): boolean;
+}
+
 // Warning: (ae-forgotten-export) The symbol "IntentBase" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -100,8 +113,6 @@ export interface ModuleStateCodec {
 export class PolicyEngine {
     // Warning: (ae-forgotten-export) The symbol "EngineOptions" needs to be exported by the entry point index.d.ts
     constructor(opts: EngineOptions);
-    // Warning: (ae-forgotten-export) The symbol "HashChainedLog" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly audit: HashChainedLog;
     // (undocumented)
@@ -199,6 +210,9 @@ export type RecursionState = {
 };
 
 // @public (undocumented)
+export function sha256HexFromJson(value: unknown): string;
+
+// @public (undocumented)
 export type State = {
     policy_version: string;
     period_id: string;
@@ -286,8 +300,6 @@ export type VerificationViolation = {
 // @public (undocumented)
 export type VerificationViolationCode = "MALFORMED_EVENT" | "POLICY_ID_MISSING" | "POLICY_ID_MISMATCH" | "MIXED_POLICY_ID" | "NON_MONOTONIC_TIMESTAMP" | "HASH_CHAIN_INVALID" | "NO_STATE_ANCHOR" | "SNAPSHOT_CORRUPT" | "ENVELOPE_MALFORMED";
 
-// Warning: (ae-forgotten-export) The symbol "AuditEvent" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export function verifyAuditEvents(events: readonly AuditEvent[], opts?: VerifyAuditOptions): VerificationResult;
 
