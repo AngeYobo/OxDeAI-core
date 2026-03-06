@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/verification-envelope-v1.schema.json",
   "title": "OxDeAI VerificationEnvelopeV1",
   "description": "Portable envelope carrying snapshot bytes (base64) and audit events.",
+  "$comment": "Version: OxDeAI protocol v1.0.2. Wire shape uses base64 snapshot and JSON events.",
   "type": "object",
   "additionalProperties": false,
   "required": ["formatVersion", "snapshot", "events"],

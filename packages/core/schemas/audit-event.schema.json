@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/audit-event.schema.json",
   "title": "OxDeAI AuditEvent",
   "description": "Single audit event in the OxDeAI hash-chained audit stream.",
+  "$comment": "Version: OxDeAI protocol v1.0.2. policyId is optional by type.",
   "oneOf": [
     {
       "type": "object",
@@ -10,7 +11,7 @@
       "required": ["type", "intent_hash", "agent_id", "timestamp"],
       "properties": {
         "type": { "type": "string", "const": "INTENT_RECEIVED" },
-        "intent_hash": { "type": "string", "minLength": 1 },
+        "intent_hash": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
         "agent_id": { "type": "string", "minLength": 1 },
         "timestamp": { "type": "integer", "minimum": 0 },
         "policyId": { "type": "string", "minLength": 1 }
@@ -22,7 +23,7 @@
       "required": ["type", "intent_hash", "decision", "reasons", "policy_version", "timestamp"],
       "properties": {
         "type": { "type": "string", "const": "DECISION" },
-        "intent_hash": { "type": "string", "minLength": 1 },
+        "intent_hash": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
         "decision": { "type": "string", "enum": ["ALLOW", "DENY"] },
         "reasons": { "type": "array", "items": { "type": "string" } },
         "policy_version": { "type": "string", "minLength": 1 },
@@ -36,8 +37,8 @@
       "required": ["type", "authorization_id", "intent_hash", "expires_at", "timestamp"],
       "properties": {
         "type": { "type": "string", "const": "AUTH_EMITTED" },
-        "authorization_id": { "type": "string", "minLength": 1 },
-        "intent_hash": { "type": "string", "minLength": 1 },
+        "authorization_id": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
+        "intent_hash": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
         "expires_at": { "type": "integer", "minimum": 0 },
         "timestamp": { "type": "integer", "minimum": 0 },
         "policyId": { "type": "string", "minLength": 1 }
@@ -49,7 +50,7 @@
       "required": ["type", "intent_hash", "execution_ref", "timestamp"],
       "properties": {
         "type": { "type": "string", "const": "EXECUTION_ATTESTED" },
-        "intent_hash": { "type": "string", "minLength": 1 },
+        "intent_hash": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
         "execution_ref": { "type": "string", "minLength": 1 },
         "timestamp": { "type": "integer", "minimum": 0 },
         "policyId": { "type": "string", "minLength": 1 }
@@ -61,7 +62,7 @@
       "required": ["type", "stateHash", "timestamp"],
       "properties": {
         "type": { "type": "string", "const": "STATE_CHECKPOINT" },
-        "stateHash": { "type": "string", "minLength": 1 },
+        "stateHash": { "type": "string", "pattern": "^[0-9a-fA-F]+$" },
         "timestamp": { "type": "integer", "minimum": 0 },
         "policyId": { "type": "string", "minLength": 1 }
       }

@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/canonical-state.schema.json",
   "title": "OxDeAI CanonicalState",
   "description": "Versioned canonical snapshot object used for portable verification.",
+  "$comment": "Version: OxDeAI protocol v1.0.2; canonical snapshot formatVersion is fixed to 1.",
   "type": "object",
   "additionalProperties": false,
   "required": ["formatVersion", "engineVersion", "policyId", "modules"],

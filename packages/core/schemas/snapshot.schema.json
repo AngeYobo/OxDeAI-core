@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxdeai.org/schemas/v1/snapshot.schema.json",
+  "title": "OxDeAI Snapshot (CanonicalState)",
+  "description": "Canonical snapshot object for OxDeAI v1.x. This is an alias schema for canonical-state.schema.json.",
+  "$comment": "Version: OxDeAI protocol v1.0.2. formatVersion is fixed to 1.",
+  "allOf": [
+    {
+      "$ref": "https://oxdeai.org/schemas/v1/canonical-state.schema.json"
+    }
+  ]
+}

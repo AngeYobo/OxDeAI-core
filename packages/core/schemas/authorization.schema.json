@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/authorization.schema.json",
   "title": "OxDeAI Authorization",
   "description": "Signed ALLOW authorization emitted by the policy engine.",
+  "$comment": "Version: OxDeAI protocol v1.0.2. Signature profile is implementation-defined in v1.x reference implementation.",
   "type": "object",
   "additionalProperties": false,
   "required": [

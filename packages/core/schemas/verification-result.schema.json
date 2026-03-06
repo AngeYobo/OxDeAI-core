@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/verification-result.schema.json",
   "title": "OxDeAI VerificationResult",
   "description": "Unified stateless verifier result shape.",
+  "$comment": "Version: OxDeAI protocol v1.0.2. Violation ordering is deterministic in runtime implementation.",
   "type": "object",
   "additionalProperties": false,
   "required": ["ok", "status", "violations"],

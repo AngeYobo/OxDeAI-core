@@ -3,6 +3,7 @@
   "$id": "https://oxdeai.org/schemas/v1/audit-log.schema.json",
   "title": "OxDeAI AuditLog",
   "description": "Ordered list of audit events.",
+  "$comment": "Version: OxDeAI protocol v1.0.2.",
   "type": "array",
   "items": {
     "$ref": "https://oxdeai.org/schemas/v1/audit-event.schema.json"

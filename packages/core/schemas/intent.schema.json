@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oxdeai.org/schemas/v1/intent.schema.json",
   "title": "OxDeAI Intent",
-  "description": "Protocol-level intent payload (JSON representation).",
+  "description": "Protocol-level intent payload (JSON representation) aligned to v1.0.2 runtime types.",
+  "$comment": "Version: OxDeAI protocol v1.0.2",
   "oneOf": [
     {
       "type": "object",
@@ -27,7 +28,7 @@
         "asset": { "type": "string" },
         "target": { "type": "string", "minLength": 1 },
         "timestamp": { "type": "integer", "minimum": 0 },
-        "metadata_hash": { "type": "string", "minLength": 1 },
+        "metadata_hash": { "type": "string", "pattern": "^(0x)?[0-9a-fA-F]+$" },
         "nonce": { "oneOf": [{ "type": "integer" }, { "type": "string", "pattern": "^-?[0-9]+n?$" }] },
         "signature": { "type": "string" },
         "tool": { "type": "string" },
@@ -61,7 +62,7 @@
         "asset": { "type": "string" },
         "target": { "type": "string", "minLength": 1 },
         "timestamp": { "type": "integer", "minimum": 0 },
-        "metadata_hash": { "type": "string", "minLength": 1 },
+        "metadata_hash": { "type": "string", "pattern": "^(0x)?[0-9a-fA-F]+$" },
         "nonce": { "oneOf": [{ "type": "integer" }, { "type": "string", "pattern": "^-?[0-9]+n?$" }] },
         "signature": { "type": "string" },
         "tool": { "type": "string" },

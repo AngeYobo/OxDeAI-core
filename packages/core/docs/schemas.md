@@ -8,6 +8,7 @@ These schemas are stable contract artifacts for non-TypeScript implementations a
 
 - `intent.schema.json`
 - `canonical-state.schema.json`
+- `snapshot.schema.json`
 - `authorization.schema.json`
 - `audit-event.schema.json`
 - `audit-log.schema.json`
