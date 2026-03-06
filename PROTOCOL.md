@@ -85,6 +85,7 @@ Operational meaning:
 - `inconclusive`: not invalid, but insufficient strict anchor evidence
 
 Strict/best-effort behavior and deterministic violation ordering are specified in [`SPEC.md`](./SPEC.md).
+Relying-party execution gate requirements are specified in [`SPEC.md` §10](./SPEC.md#10-relying-party-pep-contract).
 
 ## 6) Package Roles
 
@@ -136,6 +137,7 @@ See release policy:
 ## 9) Where to Go Next
 
 - Full protocol companion spec: [`SPEC.md`](./SPEC.md)
+- Relying-party execution gate contract: [`SPEC.md` §10](./SPEC.md#10-relying-party-pep-contract)
 - Normative protocol text: [`protocol/protocol.md`](./protocol/protocol.md)
 - Threat model details: [`protocol/threat-model.md`](./protocol/threat-model.md)
 - Envelope profile details: [`protocol/envelope.md`](./protocol/envelope.md)

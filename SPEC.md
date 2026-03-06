@@ -320,7 +320,68 @@ Current assertion categories include:
 
 A conformant implementation MUST reproduce expected outputs for the published vector set for its targeted protocol version.
 
-## 10. Future Work (Explicitly Non-v1.0.2)
+## 10. Relying Party (PEP) Contract
+
+This section defines how an external Policy Enforcement Point (PEP), tool gateway, or provider MUST gate execution.
+
+Two verification paths are distinct:
+
+- Authorization pre-exec verification (capability-token style gate)
+- Envelope post-exec verification (audit-grade verification evidence)
+
+## 10.1 Authorization Pre-Execution Verification
+
+Before executing any side effect, a relying party MUST verify authorization validity against the intended execution input.
+
+Required checks:
+
+1. Signature validity  
+The relying party MUST validate the authorization signature using the configured v1.0.2 trust profile (shared-secret/HMAC profile in the reference implementation).
+
+2. TTL / expiry  
+The relying party MUST reject authorization when `now > expires_at`.
+
+3. Intent binding  
+The relying party MUST recompute expected `intent_hash` from the execution intent binding fields and require equality with `authorization.intent_hash`.
+
+4. Policy identity binding  
+The relying party SHOULD require policy identity consistency with its expected environment profile.  
+In v1.0.2 artifacts this is primarily enforced via policy version/state binding checks and runtime policy identity configuration.
+
+5. Decision binding  
+The relying party MUST require `decision == "ALLOW"` in the authorization artifact.
+
+If any required check fails, execution MUST be denied (fail closed).
+
+## 10.2 Envelope Post-Execution Verification
+
+Envelope verification is not a pre-execution capability check by itself.  
+It is an audit-grade integrity proof over snapshot + audit stream.
+
+A relying party/auditor verifying envelope evidence MUST:
+
+1. Run `verifyEnvelope(envelopeBytes, opts?)`.
+2. Require `status == "ok"` for strict pass outcomes.
+3. Treat `status == "invalid"` as failed evidence.
+4. Treat `status == "inconclusive"` as non-pass under strict compliance policy.
+
+Required consistency checks (performed by verifier surface):
+
+- snapshot integrity (`verifySnapshot`)
+- audit integrity and ordering (`verifyAuditEvents`)
+- policy identity consistency between snapshot and audit (`policyId` checks)
+- deterministic violation ordering in output
+
+## 10.3 Strict State-Anchor Constraints
+
+When strict mode is selected:
+
+- missing `STATE_CHECKPOINT` anchor MUST produce `inconclusive`
+- relying parties requiring strict evidence MUST reject `inconclusive` for final settlement/compliance acceptance
+
+Best-effort mode MAY be used for diagnostics, but MUST NOT be treated as strict proof in systems that require anchored replay evidence.
+
+## 11. Future Work (Explicitly Non-v1.0.2)
 
 - Non-forgeable verification profile (public-key signatures) targeted for v1.2.
 - Extended multi-party verification metadata profiles.
