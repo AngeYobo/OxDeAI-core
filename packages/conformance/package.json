@@ -22,11 +22,16 @@
     "validate": "pnpm build && node dist/src/validate.js"
   },
   "dependencies": {
-    "@oxdeai/core": "^1.0.3"
+    "@oxdeai/core": "workspace:*"
   },
   "devDependencies": {
     "ts-node": "^10.9.0",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "dependencies": {
+      "@oxdeai/core": "^1.0.3"
+    }
   }
 }

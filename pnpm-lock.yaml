@@ -36,8 +36,8 @@ importers:
   packages/conformance:
     dependencies:
       '@oxdeai/core':
-        specifier: ^1.0.2
-        version: 1.0.2
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       ts-node:
         specifier: ^10.9.0
@@ -255,10 +255,6 @@ packages:
 
   '@microsoft/tsdoc@0.16.0':
     resolution: {integrity: sha512-xgAyonlVVS+q7Vc7qLW0UrJU7rSFcETRWsqdXZtjzRU8dF+6CkozTK4V4y1LwOX7j8r/vHphjDeMeGI4tNGeGA==}
-
-  '@oxdeai/core@1.0.2':
-    resolution: {integrity: sha512-OObxKQeKiBttXNYLKuKj6vAn7oDvWzJSRg+UY7+Er+73PDR5dc1OtPc2RdgRuqJJ12he3PLvCMWf81BllikTXA==}
-    engines: {node: '>=18'}
 
   '@rushstack/node-core-library@5.20.3':
     resolution: {integrity: sha512-95JgEPq2k7tHxhF9/OJnnyHDXfC9cLhhta0An/6MlkDsX2A6dTzDrTUG18vx4vjc280V0fi0xDH9iQczpSuWsw==}
@@ -652,8 +648,6 @@ snapshots:
       resolve: 1.22.11
 
   '@microsoft/tsdoc@0.16.0': {}
-
-  '@oxdeai/core@1.0.2': {}
 
   '@rushstack/node-core-library@5.20.3(@types/node@25.3.3)':
     dependencies:
