@@ -12,5 +12,6 @@ export { encodeEnvelope, decodeEnvelope } from "./verification/envelope.js";
 export { verifySnapshot } from "./verification/verifySnapshot.js";
 export { verifyAuditEvents } from "./verification/verifyAuditEvents.js";
 export { verifyEnvelope } from "./verification/verifyEnvelope.js";
+export { verifyAuthorization } from "./verification/verifyAuthorization.js";
 export { PolicyEngine } from "./policy/PolicyEngine.js";
 export { HashChainedLog } from "./audit/HashChainedLog.js";

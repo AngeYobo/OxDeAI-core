@@ -1,0 +1,234 @@
+{
+  "version": "1.1.0",
+  "vectors": [
+    {
+      "id": "authorization-verify-001",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 120,
+          "expectedIssuer": "oxdeai.policy-engine",
+          "expectedAudience": "merchant-gateway",
+          "expectedPolicyId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "consumedAuthIds": []
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "authorization-verify-002",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 120
+        },
+        "opts": {
+          "now": 120
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_EXPIRED",
+            "message": "authorization has expired"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-003",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_MISSING_FIELD",
+            "message": "intent_hash is required"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-004",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "DENY",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_DECISION_INVALID",
+            "message": "authorization decision must be ALLOW"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-005",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110,
+          "consumedAuthIds": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_REPLAY",
+            "message": "auth_id has already been consumed"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-006",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110,
+          "expectedAudience": "vault-service"
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_AUDIENCE_MISMATCH",
+            "message": "audience does not match expectedAudience"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-007",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110,
+          "expectedIssuer": "other-issuer"
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_ISSUER_MISMATCH",
+            "message": "issuer does not match expectedIssuer"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-008",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expiry": 160
+        },
+        "opts": {
+          "now": 110,
+          "expectedPolicyId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_POLICY_ID_MISMATCH",
+            "message": "policy_id does not match expectedPolicyId"
+          }
+        ]
+      }
+    }
+  ]
+}

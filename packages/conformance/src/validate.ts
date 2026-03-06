@@ -6,16 +6,25 @@ import {
   encodeEnvelope,
   PolicyEngine,
   sha256HexFromJson,
+  verifyAuthorization,
   verifyAuditEvents,
   verifyEnvelope,
   verifySnapshot
 } from "@oxdeai/core";
-import type { Intent, State, VerificationResult } from "@oxdeai/core";
+import type { AuthorizationV1, Intent, State, VerificationResult } from "@oxdeai/core";
 
 type JsonRecord = Record<string, unknown>;
 
 type AuthorizationLike = {
+  auth_id: string;
+  issuer: string;
+  audience: string;
   intent_hash: string;
+  state_hash: string;
+  policy_id: string;
+  decision: "ALLOW" | "DENY";
+  issued_at: number;
+  expiry: number;
   state_snapshot_hash: string;
   expires_at: number;
   engine_signature: string;
@@ -35,6 +44,13 @@ type ConformanceAdapter = {
     opts?: { expectedPolicyId?: string; mode?: "strict" | "best-effort"; requireStateAnchors?: boolean }
   ): VerificationResult;
   verifyEnvelope(bytes: Uint8Array, opts?: { expectedPolicyId?: string; mode?: "strict" | "best-effort" }): VerificationResult;
+  verifyAuthorization(auth: AuthorizationV1, opts?: {
+    now?: number;
+    expectedIssuer?: string;
+    expectedAudience?: string;
+    expectedPolicyId?: string;
+    consumedAuthIds?: readonly string[];
+  }): VerificationResult;
 };
 
 const CORE_ENGINE_SECRET = "test-secret";
@@ -240,7 +256,8 @@ const coreAdapter: ConformanceAdapter = {
   verifyAuditEvents(events, opts) {
     return verifyAuditEvents(events as any, opts);
   },
-  verifyEnvelope
+  verifyEnvelope,
+  verifyAuthorization
 };
 
 function loadJson<T>(name: string): T {
@@ -314,6 +331,28 @@ function validateAuthorizationVectors(ctx: CheckCtx, adapter: ConformanceAdapter
     });
     eq(ctx, `${id} canonical_signing_payload`, payload, String(expected.canonical_signing_payload));
     eq(ctx, `${id} signature`, authorization.engine_signature, String(expected.signature));
+  }
+}
+
+function validateAuthorizationVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
+  const file = loadJson<VectorFile>("authorization-verification.json");
+
+  for (const v of file.vectors) {
+    const id = String(v.id);
+    const input = asRecord(v.input);
+    const auth = asRecord(input.auth) as AuthorizationV1;
+    const opts = (input.opts ? asRecord(input.opts) : {}) as {
+      now?: number;
+      expectedIssuer?: string;
+      expectedAudience?: string;
+      expectedPolicyId?: string;
+      consumedAuthIds?: readonly string[];
+    };
+    const expected = asRecord(v.expected);
+    const got = adapter.verifyAuthorization(auth, opts);
+
+    eq(ctx, `${id} status`, got.status, String(expected.status));
+    eq(ctx, `${id} violations`, got.violations, expected.violations ?? []);
   }
 }
 
@@ -591,6 +630,7 @@ function main(): void {
 
   validateIntentHashVectors(ctx, adapter);
   validateAuthorizationVectors(ctx, adapter);
+  validateAuthorizationVerificationVectors(ctx, adapter);
   validateSnapshotVectors(ctx, adapter);
   validateAuditChainVectors(ctx, adapter);
   validateAuditVerificationVectors(ctx, adapter);

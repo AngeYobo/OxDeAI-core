@@ -72,25 +72,41 @@ export function validateAuthorizationJson(value: unknown): SchemaValidationIssue
 
   const required = [
     "authorization_id",
+    "auth_id",
+    "issuer",
+    "audience",
     "intent_hash",
+    "state_hash",
+    "policy_id",
     "policy_version",
     "state_snapshot_hash",
     "decision",
+    "issued_at",
+    "expiry",
     "expires_at",
     "engine_signature"
   ] as const;
   for (const key of required) {
     if (!(key in value)) issues.push({ path: "$", code: "REQUIRED", message: `missing ${key}` });
   }
-  pushAdditional(value, required, "$", issues);
+  const allowed = [...required, "nonce", "capability", "signature"] as const;
+  pushAdditional(value, allowed, "$", issues);
 
+  if ("auth_id" in value && (typeof value.auth_id !== "string" || value.auth_id.length === 0)) issues.push({ path: "$.auth_id", code: "TYPE", message: "must be non-empty string" });
+  if ("issuer" in value && (typeof value.issuer !== "string" || value.issuer.length === 0)) issues.push({ path: "$.issuer", code: "TYPE", message: "must be non-empty string" });
+  if ("audience" in value && (typeof value.audience !== "string" || value.audience.length === 0)) issues.push({ path: "$.audience", code: "TYPE", message: "must be non-empty string" });
   if ("authorization_id" in value && !hex64(value.authorization_id)) issues.push({ path: "$.authorization_id", code: "FORMAT", message: "must be 64-char lowercase hex" });
   if ("intent_hash" in value && !hex64(value.intent_hash)) issues.push({ path: "$.intent_hash", code: "FORMAT", message: "must be 64-char lowercase hex" });
+  if ("state_hash" in value && !hex64(value.state_hash)) issues.push({ path: "$.state_hash", code: "FORMAT", message: "must be 64-char lowercase hex" });
+  if ("policy_id" in value && !hex64(value.policy_id)) issues.push({ path: "$.policy_id", code: "FORMAT", message: "must be 64-char lowercase hex" });
   if ("policy_version" in value && typeof value.policy_version !== "string") issues.push({ path: "$.policy_version", code: "TYPE", message: "must be string" });
   if ("state_snapshot_hash" in value && !hex64(value.state_snapshot_hash)) issues.push({ path: "$.state_snapshot_hash", code: "FORMAT", message: "must be 64-char lowercase hex" });
-  if ("decision" in value && value.decision !== "ALLOW") issues.push({ path: "$.decision", code: "ENUM", message: "must be ALLOW" });
+  if ("decision" in value && value.decision !== "ALLOW" && value.decision !== "DENY") issues.push({ path: "$.decision", code: "ENUM", message: "must be ALLOW or DENY" });
+  if ("issued_at" in value && !intNonNegative(value.issued_at)) issues.push({ path: "$.issued_at", code: "TYPE", message: "must be non-negative integer" });
+  if ("expiry" in value && !intNonNegative(value.expiry)) issues.push({ path: "$.expiry", code: "TYPE", message: "must be non-negative integer" });
   if ("expires_at" in value && !intNonNegative(value.expires_at)) issues.push({ path: "$.expires_at", code: "TYPE", message: "must be non-negative integer" });
   if ("engine_signature" in value && !hex64(value.engine_signature)) issues.push({ path: "$.engine_signature", code: "FORMAT", message: "must be 64-char lowercase hex" });
+  if ("signature" in value && value.signature !== undefined && typeof value.signature !== "string") issues.push({ path: "$.signature", code: "TYPE", message: "must be string when present" });
   return sorted(issues);
 }
 

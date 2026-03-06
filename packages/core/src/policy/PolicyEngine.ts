@@ -49,7 +49,9 @@ export type SimulationResult = {
 export type EngineOptions = {
   policy_version: string;
   engine_secret: string;
-  authorization_ttl_seconds: number;
+  authorization_ttl_seconds?: number;
+  authorization_issuer?: string;
+  authorization_audience?: string;
   deny_mode?: "collect-all" | "fail-fast";
   policyId?: string;
   strictDeterminism?: boolean;
@@ -121,6 +123,18 @@ export class PolicyEngine {
 
   constructor(opts: EngineOptions) {
     this.opts = opts;
+  }
+
+  private authorizationTtlSeconds(): number {
+    return this.opts.authorization_ttl_seconds ?? 60;
+  }
+
+  private authorizationIssuer(): string {
+    return this.opts.authorization_issuer ?? "oxdeai.policy-engine";
+  }
+
+  private authorizationAudience(): string {
+    return this.opts.authorization_audience ?? "oxdeai.relying-party";
   }
 
   /**
@@ -312,7 +326,9 @@ export class PolicyEngine {
 
       const intent_hash = intentHash(intent);
       if (intent_hash !== authorization.intent_hash) return { valid: false, reason: "AUTH_INTENT_MISMATCH" };
-      if (t > authorization.expires_at) return { valid: false, reason: "AUTH_EXPIRED" };
+      const expiry = authorization.expiry ?? authorization.expires_at;
+      if (t > expiry) return { valid: false, reason: "AUTH_EXPIRED" };
+      if (authorization.decision !== "ALLOW") return { valid: false, reason: "AUTH_SIGNATURE_INVALID" };
       if (state.policy_version !== authorization.policy_version) return { valid: false, reason: "POLICY_VERSION_MISMATCH" };
 
       const authPayload = {
@@ -393,8 +409,11 @@ export class PolicyEngine {
 
       // Authorization is now bound to nextState snapshot
       const state_snapshot_hash = this.computeStateHashFor(working);
-      const now = intent.timestamp;
-      const expires_at = now + this.opts.authorization_ttl_seconds;
+      const issued_at = intent.timestamp;
+      const expires_at = issued_at + this.authorizationTtlSeconds();
+      const policy_id = policyId;
+      const issuer = this.authorizationIssuer();
+      const audience = this.authorizationAudience();
 
       const authPayload = {
         intent_hash,
@@ -409,10 +428,20 @@ export class PolicyEngine {
 
       const authorization: Authorization = {
         authorization_id,
+        auth_id: authorization_id,
+        issuer,
+        audience,
         intent_hash,
+        state_hash: state_snapshot_hash,
+        policy_id,
         policy_version: state.policy_version,
         state_snapshot_hash,
         decision: "ALLOW",
+        issued_at,
+        expiry: expires_at,
+        nonce: intent.nonce.toString(),
+        capability: intent.action_type,
+        signature: engine_signature,
         expires_at,
         engine_signature
       };
@@ -441,7 +470,7 @@ export class PolicyEngine {
         decision: "ALLOW",
         reasons: [],
         policy_version: state.policy_version,
-        timestamp: now,
+        timestamp: issued_at,
         policyId
       });
 
@@ -450,10 +479,10 @@ export class PolicyEngine {
         authorization_id,
         intent_hash,
         expires_at,
-        timestamp: now,
+        timestamp: issued_at,
         policyId
       });
-      this.maybeEmitCheckpoint(policyId, now, working);
+      this.maybeEmitCheckpoint(policyId, issued_at, working);
 
       return { decision: "ALLOW", reasons: [], authorization, nextState: working };
     } catch {
@@ -478,7 +507,7 @@ export class PolicyEngine {
       },
       opts: {
         policy_version: this.opts.policy_version ?? null,
-        authorization_ttl_seconds: this.opts.authorization_ttl_seconds,
+        authorization_ttl_seconds: this.authorizationTtlSeconds(),
         deny_mode: this.opts.deny_mode ?? "fail-fast",
         strict: this.opts.strictDeterminism ?? false
       }

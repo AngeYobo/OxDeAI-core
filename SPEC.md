@@ -107,34 +107,60 @@ Canonical JSON requirements:
 - bigint-like values represented as base-10 strings in canonical JSON paths
 - non-finite numbers rejected
 
-## 3.4 Authorization Artifact (Current v1.0.2 Behavior)
+## 3.4 Authorization Artifact (AuthorizationV1)
 
-The authorization object emitted on `ALLOW` includes:
+AuthorizationV1 is the first-class pre-execution artifact emitted by the PDP on `ALLOW`.
+It is consumed by a PEP / relying party before any side effect is executed.
 
-- `authorization_id`
+AuthorizationV1 fields:
+
+- `auth_id`
+- `issuer`
+- `audience`
 - `intent_hash`
-- `policy_version`
-- `state_snapshot_hash`
-- `decision` (`ALLOW`)
-- `expires_at`
-- `engine_signature`
+- `state_hash`
+- `policy_id`
+- `decision` (`ALLOW | DENY`, but execution requires `ALLOW`)
+- `issued_at`
+- `expiry`
+- optional `nonce`
+- optional `capability`
+- optional `signature`
 
-Signature scheme in v1.0.2 is symmetric-key HMAC (implementation profile in `@oxdeai/core`).
-Public-key non-forgeable signatures are not part of v1.0.2 protocol requirements.
+Reference implementation compatibility note:
 
-Minimal authorization example:
+- `@oxdeai/core` keeps legacy v1.0.x authorization fields for backward compatibility.
+- Public-key non-forgeable signatures are future work (v1.2+). Current signature profile remains implementation-defined.
+
+Minimal AuthorizationV1 example:
 
 ```json
 {
-  "authorization_id": "19e9022f6bc34e77489c3c480629ae41a68f17c8b42685c482ae060755b800ef",
+  "auth_id": "19e9022f6bc34e77489c3c480629ae41a68f17c8b42685c482ae060755b800ef",
+  "issuer": "oxdeai.policy-engine",
+  "audience": "merchant-gateway",
   "intent_hash": "0378394eb990e096126013b090ac3271c9368074477f58d46f03ba18e1aa7510",
-  "policy_version": "v1",
-  "state_snapshot_hash": "8e0d8542b8c9b02fdd9862d720f4755ff3ae04bd51fae5fb58dae7089ddf1beb",
+  "state_hash": "8e0d8542b8c9b02fdd9862d720f4755ff3ae04bd51fae5fb58dae7089ddf1beb",
+  "policy_id": "6586c13bd8fa4e9de87d4c84ca8efdb7677e0a397609bd9ded7ee9ef048274de",
   "decision": "ALLOW",
-  "expires_at": 1772718222,
-  "engine_signature": "hex-hmac"
+  "issued_at": 1772718162,
+  "expiry": 1772718222
 }
 ```
+
+Authorization verification rules:
+
+- `decision` MUST equal `ALLOW`
+- `expiry` MUST be in the future at verification time
+- `intent_hash`, `state_hash`, `policy_id`, `issuer`, `audience`, `auth_id` MUST be present
+- expected issuer / audience / policy bindings MUST match when configured
+- consumed `auth_id` MUST be rejected (single-use)
+
+PDP / PEP architecture requirements:
+
+- PDP issues AuthorizationV1 bound to evaluated intent and state.
+- PEP enforces bindings and denies execution on any verification failure.
+- PEP MUST treat `auth_id` as single-use and maintain consumed-id state.
 
 ## 3.5 Audit Events and Chain Rules
 
@@ -331,25 +357,35 @@ Two verification paths are distinct:
 
 ## 10.1 Authorization Pre-Execution Verification
 
-Before executing any side effect, a relying party MUST verify authorization validity against the intended execution input.
+Before executing any side effect, a relying party MUST verify AuthorizationV1 against the intended execution input.
 
-Required checks:
+### 10.1.1 Relying Party Contract (Normative)
 
-1. Signature validity  
-The relying party MUST validate the authorization signature using the configured v1.0.2 trust profile (shared-secret/HMAC profile in the reference implementation).
+A relying party MUST verify all of the following before execution:
 
-2. TTL / expiry  
-The relying party MUST reject authorization when `now > expires_at`.
+1. Decision binding  
+`authorization.decision` MUST equal `ALLOW`.
 
-3. Intent binding  
-The relying party MUST recompute expected `intent_hash` from the execution intent binding fields and require equality with `authorization.intent_hash`.
+2. Expiry binding  
+`now` MUST be strictly less than `authorization.expiry`.
 
-4. Policy identity binding  
-The relying party SHOULD require policy identity consistency with its expected environment profile.  
-In v1.0.2 artifacts this is primarily enforced via policy version/state binding checks and runtime policy identity configuration.
+3. Issuer binding  
+`authorization.issuer` MUST match a trusted issuer configured by the relying party.
 
-5. Decision binding  
-The relying party MUST require `decision == "ALLOW"` in the authorization artifact.
+4. Audience binding  
+`authorization.audience` MUST match the relying party identity.
+
+5. Policy binding  
+`authorization.policy_id` MUST match the expected policy context.
+
+6. Intent binding  
+Recomputed intent hash from execution input MUST equal `authorization.intent_hash`.
+
+7. State binding  
+Execution MUST be authorized only for the state snapshot identified by `authorization.state_hash`.
+
+8. Non-consumption / replay protection  
+`authorization.auth_id` MUST be rejected if already consumed.
 
 If any required check fails, execution MUST be denied (fail closed).
 

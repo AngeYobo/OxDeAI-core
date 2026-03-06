@@ -11,7 +11,14 @@ export type VerificationViolationCode =
   | "HASH_CHAIN_INVALID"
   | "NO_STATE_ANCHOR"
   | "SNAPSHOT_CORRUPT"
-  | "ENVELOPE_MALFORMED";
+  | "ENVELOPE_MALFORMED"
+  | "AUTH_DECISION_INVALID"
+  | "AUTH_EXPIRED"
+  | "AUTH_MISSING_FIELD"
+  | "AUTH_ISSUER_MISMATCH"
+  | "AUTH_AUDIENCE_MISMATCH"
+  | "AUTH_POLICY_ID_MISMATCH"
+  | "AUTH_REPLAY";
 
 /** @public */
 export type VerificationViolation = {
