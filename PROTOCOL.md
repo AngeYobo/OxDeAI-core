@@ -141,3 +141,4 @@ See release policy:
 - Normative protocol text: [`protocol/protocol.md`](./protocol/protocol.md)
 - Threat model details: [`protocol/threat-model.md`](./protocol/threat-model.md)
 - Envelope profile details: [`protocol/envelope.md`](./protocol/envelope.md)
+- Future v1.2 non-forgeable verification design: [`docs/NON_FORGEABLE_VERIFICATION.md`](./docs/NON_FORGEABLE_VERIFICATION.md)

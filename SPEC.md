@@ -384,6 +384,7 @@ Best-effort mode MAY be used for diagnostics, but MUST NOT be treated as strict 
 ## 11. Future Work (Explicitly Non-v1.0.2)
 
 - Non-forgeable verification profile (public-key signatures) targeted for v1.2.
+- Design note: see [`docs/NON_FORGEABLE_VERIFICATION.md`](./docs/NON_FORGEABLE_VERIFICATION.md).
 - Extended multi-party verification metadata profiles.
 - Additional cross-runtime conformance vectors.
 
