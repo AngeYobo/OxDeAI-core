@@ -11,10 +11,11 @@
     "demo:autogen": "pnpm -C examples/autogen build && node examples/autogen/dist/run.js"
   },
   "dependencies": {
-    "@oxdeai/core": "workspace:*",
-    "@oxdeai/autogen": "workspace:*"
+    "@oxdeai/autogen": "workspace:*",
+    "@oxdeai/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "typescript": "^5.0.0"
   }
 }

@@ -14,6 +14,7 @@
     "@oxdeai/guard": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "typescript": "^5.0.0"
   }
 }
