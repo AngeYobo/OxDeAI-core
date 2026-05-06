@@ -160,6 +160,10 @@ export async function runOpenAIDemo(
     };
 
     for (const toolCall of message.tool_calls) {
+      if (toolCall.type !== "function") {
+        throw new Error(`Unsupported OpenAI tool call type: ${toolCall.type}`);
+      }
+
       const args = JSON.parse(toolCall.function.arguments) as { asset: string; region: string };
       const { asset, region } = args;
       const step = callIndex + 1;

@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@oxdeai/sdk": "workspace:*",
-    "@oxdeai/core": "workspace:*"
+    "@oxdeai/core": "workspace:*",
+    "@oxdeai/sdk": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "tsx": "^4.20.5"
   },
   "scripts": {

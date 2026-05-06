@@ -8,10 +8,12 @@ import { tmpdir } from "node:os";
 import { PolicyEngine, encodeCanonicalState, encodeEnvelope } from "@oxdeai/core";
 import type { State } from "@oxdeai/core";
 
-import { runCli } from "./main.js";
 
-// CLI tests invoke buildEngine() in-process; satisfy the mandatory secret requirement.
+
+// (Dynamic import instead) CLI tests invoke buildEngine() in-process; satisfy the mandatory secret requirement.
 process.env["OXDEAI_ENGINE_SECRET"] = "test-secret-must-be-at-least-32-chars!!";
+
+const { runCli } = await import("./main.js");
 
 function baseState(): State {
   return {
