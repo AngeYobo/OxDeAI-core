@@ -739,11 +739,11 @@ Stateless verification layer for protocol artifacts.
 ## See also
 
 - [Root README](https://github.com/oxdeai/oxdeai/blob/main/README.md)
-- [Architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/architecture.md)
+- [Architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/architecture/overview.md)
 - [Why OxDeAI](https://github.com/oxdeai/oxdeai/blob/main/docs/architecture/why-oxdeai.md)
 - [Adapter stack](https://github.com/oxdeai/oxdeai/blob/main/docs/integrations/adapter-stack.md)
 - [Integrations index](https://github.com/oxdeai/oxdeai/blob/main/docs/integrations/README.md)
-- [Conformance vectors](https://github.com/oxdeai/oxdeai/blob/main/docs/conformance-vectors.md)
+- [Conformance vectors](https://github.com/oxdeai/oxdeai/blob/main/docs/conformance/conformance-vectors.md)
 
 ## License
 

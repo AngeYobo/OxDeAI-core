@@ -18,10 +18,10 @@ Shared references:
 
 - [Adapter stack architecture](./adapter-stack.md)
 - [Shared demo scenario](./shared-demo-scenario.md)
-- [Adapter validation](./adapter-validation.md)
-- [Shared adapter contract](../adapter-contract.md)
-- [Production PEP wiring guide](../pep-production-guide.md)
-- [Adapter reference architecture](../adapter-reference-architecture.md)
+- [Adapter validation](../archive/integrations/adapter-validation.md)
+- [Shared adapter contract](../adapters/adapter-contract.md)
+- [Production PEP wiring guide](../architecture/pep-production-guide.md)
+- [Adapter reference architecture](../adapters/adapter-reference-architecture.md)
 
 Maintained integration guides:
 

@@ -290,7 +290,7 @@ For signed verification:
 - The signature MUST be computed over the canonicalized AuthorizationV1 object using `canonicalization-v1` rules, **excluding** the `signature` field value.
 - Different artifact classes MUST use distinct signing domains to prevent cross-artifact signature confusion.
 - Unsupported algorithms MUST fail closed.
-- Canonicalization for authorization payloads MUST follow `docs/spec/canonicalization-v1.md`.
+- Canonicalization for authorization payloads MUST follow `docs/spec/core/canonicalization-v1.md`.
 
 Verifiers MUST NOT accept unsigned substitutions for artifacts that require signature validation under local policy.
 

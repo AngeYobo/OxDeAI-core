@@ -167,5 +167,5 @@ and [`docs/testing/delegation-pbt.md`](../../docs/testing/delegation-pbt.md).
 
 - [OpenAI Agents SDK integration guide](https://github.com/oxdeai/oxdeai/blob/main/docs/integrations/openai-agents-sdk.md)
 - [Adapter stack architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/integrations/adapter-stack.md)
-- [Adapter reference architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/adapter-reference-architecture.md)
+- [Adapter reference architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/adapters/adapter-reference-architecture.md)
 - [Root README](https://github.com/oxdeai/oxdeai/blob/main/README.md)

@@ -190,6 +190,6 @@ OxDeAI does not replace runtimes, orchestration engines, or prompt layers. It en
 - [`docs/spec/delegation-v1.md`](../spec/artifacts/delegation-v1.md)
 - [`docs/adapter-contract.md`](../adapters/adapter-contract.md)
 - [`docs/pep-production-guide.md`](../architecture/pep-production-guide.md)
-- [`docs/integrations/README.md`](../archive/integrations/README.md)
-- [`docs/integrations/shared-demo-scenario.md`](../archive/integrations/shared-demo-scenario.md)
+- [`docs/integrations/README.md`](../integrations/README.md)
+- [`docs/integrations/shared-demo-scenario.md`](../integrations/shared-demo-scenario.md)
 - [`docs/cases/README.md`](../cases/README.md)

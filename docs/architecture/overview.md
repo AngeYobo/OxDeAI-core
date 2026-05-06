@@ -77,5 +77,5 @@ Framework choice changes adapter code, not protocol semantics.
 ## References
 
 - [Adapter reference architecture](../adapters/adapter-reference-architecture.md)
-- [Adapter stack](../archive/integrations/adapter-stack.md)
+- [Adapter stack](../integrations/adapter-stack.md)
 - [Production PEP wiring guide](./pep-production-guide.md)

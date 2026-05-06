@@ -119,9 +119,9 @@ This is conservative evidence, not a claim of provider-side attestation. It conf
 
 - [`examples/openai-tools`](../../examples/openai-tools)
 - [`examples/openclaw`](../../examples/openclaw)
-- [`docs/integrations/openclaw.md`](../archive/integrations/openclaw.md)
-- [`docs/integrations/shared-demo-scenario.md`](../archive/integrations/shared-demo-scenario.md)
-- [`docs/integrations/adapter-validation.md`](../archive/integrations/adapter-validation.md)
+- [`docs/integrations/openclaw.md`](../integrations/openclaw.md)
+- [`docs/integrations/shared-demo-scenario.md`](../integrations/shared-demo-scenario.md)
+- [`docs/adapters/adapter-verification.md`](../adapters/adapter-verification.md)
 - [`docs/adapter-contract.md`](../adapters/adapter-contract.md)
 - [`docs/pep-production-guide.md`](../architecture/pep-production-guide.md)
 - [`SPEC.md`](../../SPEC.md)
