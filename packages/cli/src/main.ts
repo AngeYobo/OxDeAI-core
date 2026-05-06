@@ -528,7 +528,7 @@ function buildValidationIntent(state: State): Intent {
 function validateStateStructure(state: State): void {
   const engine = new PolicyEngine({
     policy_version: state.policy_version,
-    engine_secret: "validate-secret",
+    engine_secret: "validate-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 1
   });
   const probe = buildValidationIntent(state);
