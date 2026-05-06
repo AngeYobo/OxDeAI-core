@@ -12,4 +12,4 @@ pnpm -C examples/openai-agents-sdk start
 
 Expected sequence: `ALLOW`, `ALLOW`, `DENY` with strict `verifyEnvelope()` result `ok`.
 
-See the canonical shared scenario: [`docs/archive/integrations/shared-demo-scenario.md`](../../docs/archive/integrations/shared-demo-scenario.md).
+See the canonical shared scenario: [`docs/integrations/shared-demo-scenario.md`](../../docs/integrations/shared-demo-scenario.md).

@@ -8,7 +8,7 @@ Non-normative (developer documentation)
 
 
 
-This document is a companion reference (non-normative). For the canonical normative specification, see [../SPEC.md](../SPEC.md) and `docs/spec/`; artifact status is defined there.
+This document is a companion reference (non-normative). For the canonical normative specification, see [SPEC.md](../../SPEC.md) and `docs/spec/`; artifact status is defined there.
 
 # OxDeAI Threat Model
 
@@ -16,11 +16,10 @@ This document captures the protocol threat model for OxDeAI.
 All hashes and signature preimages MUST use `canonicalization-v1`; protocol decisions are ALLOW/DENY with deterministic error codes defined in the specs.
 
 Reference:
-- Primary protocol spec: [SPEC.md](../SPEC.md)
-- Protocol overview: [PROTOCOL.md](../PROTOCOL.md)
-- Developer companion: [protocol/spec.md](./spec.md)
-- Conformance guidance (fail-closed, deterministic ordering): [docs/spec/conformance-v1.md](../docs/spec/conformance-v1.md)
-- Delegation invariants and replay/multi-hop constraints: [docs/spec/delegation-v1.md](../docs/spec/delegation-v1.md)
+- Primary protocol spec: [SPEC.md](../../SPEC.md)
+- Protocol overview: [Protocol overview](../protocol/overview.md)
+- Conformance guidance (fail-closed, deterministic ordering): [docs/spec/conformance/conformance-v1.md](../spec/conformance/conformance-v1.md)
+- Delegation invariants and replay/multi-hop constraints: [docs/spec/artifacts/delegation-v1.md](../spec/artifacts/delegation-v1.md)
 
 ## Covered Risks
 - Replay abuse

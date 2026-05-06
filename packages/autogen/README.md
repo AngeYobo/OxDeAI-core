@@ -124,7 +124,7 @@ All of that lives in `@oxdeai/guard`.
 
 ## See also
 
-- [AutoGen integration guide](../../docs/archive/integrations/autogen.md)
-- [Adapter stack architecture](../../docs/archive/integrations/adapter-stack.md)
+- [AutoGen integration guide](../../docs/integrations/autogen.md)
+- [Adapter stack architecture](../../docs/integrations/adapter-stack.md)
 - [Adapter reference architecture](../../docs/adapters/adapter-reference-architecture.md)
 - [Root README](../../README.md)

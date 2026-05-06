@@ -94,7 +94,7 @@ Replay passed.  Artifact verified independently - engine not involved.
 ```
 
 This example is the reference implementation of the shared cross-adapter scenario:
-[`docs/archive/integrations/shared-demo-scenario.md`](../../docs/archive/integrations/shared-demo-scenario.md)
+[`docs/integrations/shared-demo-scenario.md`](../../docs/integrations/shared-demo-scenario.md)
 
 ---
 

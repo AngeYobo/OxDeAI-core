@@ -293,6 +293,6 @@ closed), G-D3 (wrong parent hash mismatch).
 ## See also
 
 - [Adapter stack architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/integrations/adapter-stack.md)
-- [Adapter reference architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/adapter-reference-architecture.md)
-- [Adapter release notes](https://github.com/oxdeai/oxdeai/blob/main/docs/adapter-stack-release-notes.md)
+- [Adapter reference architecture](https://github.com/oxdeai/oxdeai/blob/main/docs/adapters/adapter-reference-architecture.md)
+- [Adapter release notes](https://github.com/oxdeai/oxdeai/blob/main/docs/adapters/adapter-stack-release-notes.md)
 - [Root README](https://github.com/oxdeai/oxdeai/blob/main/README.md)

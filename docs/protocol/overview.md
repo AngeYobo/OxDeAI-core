@@ -85,7 +85,7 @@ The protocol-stable verifier surface is:
 
 Protocol decisions are ALLOW or DENY; error codes are defined in the respective specs (canonicalization, PEP, delegation).
 `ok` / `invalid` / `inconclusive` are interface-level summaries, not protocol-level decisions.
-Violation ordering follows conformance guidance in `docs/spec/conformance-v1.md` for determinism.
+Violation ordering follows conformance guidance in `docs/spec/conformance/conformance-v1.md` for determinism.
 
 ---
 
@@ -105,12 +105,12 @@ No valid authorization → no execution path (fail-closed).
 
 ## Where to Go Next
 
-- Normative spec: [`SPEC.md`](./SPEC.md)
-- Delegation artifact details: [`docs/spec/delegation-v1.md`](./docs/spec/delegation-v1.md)
-- Conformance vectors: [`packages/conformance`](./packages/conformance)
-- Locked vectors: [`docs/spec/test-vectors/canonicalization-v1.json`](./docs/spec/test-vectors/canonicalization-v1.json), [`docs/spec/test-vectors/authorization-v1.json`](./docs/spec/test-vectors/authorization-v1.json), [`docs/spec/test-vectors/pep-vectors-v1.json`](./docs/spec/test-vectors/pep-vectors-v1.json), [`docs/spec/test-vectors/delegation-vectors-v1.json`](./docs/spec/test-vectors/delegation-vectors-v1.json)
-- Invariant mapping: [`docs/invariants.md`](./docs/invariants.md)
-- Adapter integration: [`docs/integrations/README.md`](./docs/integrations/README.md)
+- Normative spec: [`SPEC.md`](../../SPEC.md)
+- Delegation artifact details: [`docs/spec/artifacts/delegation-v1.md`](../spec/artifacts/delegation-v1.md)
+- Conformance vectors: [`packages/conformance`](../../packages/conformance)
+- Locked vectors: [`docs/spec/test-vectors/canonicalization-v1.json`](../spec/test-vectors/canonicalization-v1.json), [`docs/spec/test-vectors/authorization-v1.json`](../spec/test-vectors/authorization-v1.json), [`docs/spec/test-vectors/pep-vectors-v1.json`](../spec/test-vectors/pep-vectors-v1.json), [`docs/spec/test-vectors/delegation-vectors-v1.json`](../spec/test-vectors/delegation-vectors-v1.json)
+- Invariant mapping: [`docs/architecture/invariants.md`](../architecture/invariants.md)
+- Adapter integration: [`docs/integrations/README.md`](../integrations/README.md)
 
 ---
 
@@ -118,7 +118,7 @@ No valid authorization → no execution path (fail-closed).
 
 The v1.0.2 protocol profile is preserved for historical and reference compatibility at:
 
-[`docs/archive/PROTOCOL-v1.0.2.md`](./docs/archive/PROTOCOL-v1.0.2.md)
+[`docs/archive/PROTOCOL-v1.0.2.md`](../archive/PROTOCOL-v1.0.2.md)
 
 That document is archival only and does not describe the current protocol surface.
-The current normative protocol is defined in [`SPEC.md`](./SPEC.md).
+The current normative protocol is defined in [`SPEC.md`](../../SPEC.md).
