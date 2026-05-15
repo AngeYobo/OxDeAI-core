@@ -9,7 +9,7 @@
 import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { SiftAdapter } from "../packages/adapter/index.js";
-import { MemoryReplayStore } from "../packages/replay-store/index.js";
+import { MemoryReplayStore, type ReplayStore } from "../packages/replay-store/index.js";
 import { KNOWN_POLICIES, KNOWN_ISSUERS } from "../packages/policy/index.js";
 import { startMockSift } from "../mock-sift/server.js";
 import { startPepGateway } from "../apps/pep-gateway/server.js";
@@ -41,7 +41,7 @@ export interface TestContext {
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
-export async function startTestHarness(): Promise<TestContext> {
+export async function startTestHarness(options?: { replayStore?: ReplayStore }): Promise<TestContext> {
   // ── Key generation ──────────────────────────────────────────────────────────
   const siftKeyPair = generateKeyPairSync("ed25519");
   const adapterKeyPair = generateKeyPairSync("ed25519");
@@ -57,7 +57,7 @@ export async function startTestHarness(): Promise<TestContext> {
     privateKey: siftKeyPair.privateKey,
     kid: siftKid,
   });
-  const replayStore = new MemoryReplayStore();
+  const replayStore = options?.replayStore ?? new MemoryReplayStore();
   const pep = await startPepGateway({
     port: 0,
     adapterPublicKey: adapterKeyPair.publicKey,

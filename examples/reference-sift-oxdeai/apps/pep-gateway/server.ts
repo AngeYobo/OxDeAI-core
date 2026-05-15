@@ -69,7 +69,8 @@ type PepErrorCode =
   | "UNKNOWN_POLICY"
   | "INTENT_HASH_MISMATCH"
   | "STATE_HASH_MISMATCH"
-  | "REPLAY_DETECTED";
+  | "REPLAY_DETECTED"
+  | "REPLAY_STORE_ERROR";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -280,7 +281,17 @@ export function startPepGateway(config: PepConfig): Promise<PepHandle> {
       // ── 10. Replay protection (atomic, last) ──────────────────────────────
       // Replay check is LAST to prevent denial-of-service via replay of any
       // valid auth_id. Only a fully-valid authorization is consumed.
-      const consumed = config.replayStore.consumeAuthId(auth.auth_id, auth.expires_at);
+      // Store errors are fatal — fail-closed, never fall through to execution.
+      let consumed: boolean;
+      try {
+        consumed = await config.replayStore.consumeAuthId(auth.auth_id, auth.expires_at);
+      } catch (e) {
+        return jsonResponse(res, 500, {
+          ok: false,
+          code: "REPLAY_STORE_ERROR",
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
       if (!consumed) {
         return deny(
           res,

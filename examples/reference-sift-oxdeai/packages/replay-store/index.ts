@@ -26,8 +26,11 @@ export interface ReplayStore {
    * `expiresAt` is a Unix timestamp (seconds). Implementations MAY use it
    * to schedule TTL-based eviction of consumed entries; they MUST NOT use
    * it to skip the replay check for expired entries.
+   *
+   * Implementations MUST throw on store errors. The PEP treats any thrown
+   * error as a hard failure (REPLAY_STORE_ERROR, HTTP 500) — fail-closed.
    */
-  consumeAuthId(authId: string, expiresAt: number): boolean;
+  consumeAuthId(authId: string, expiresAt: number): Promise<boolean>;
 }
 
 // ─── In-memory implementation ─────────────────────────────────────────────────
@@ -36,7 +39,7 @@ export class MemoryReplayStore implements ReplayStore {
   // Maps auth_id → expires_at (Unix seconds). Entries are pruned lazily.
   private readonly consumed = new Map<string, number>();
 
-  consumeAuthId(authId: string, expiresAt: number): boolean {
+  async consumeAuthId(authId: string, expiresAt: number): Promise<boolean> {
     this.pruneExpired();
     if (this.consumed.has(authId)) return false;
     this.consumed.set(authId, expiresAt);
@@ -48,5 +51,31 @@ export class MemoryReplayStore implements ReplayStore {
     for (const [id, exp] of this.consumed) {
       if (exp < now) this.consumed.delete(id);
     }
+  }
+}
+
+// ─── Map-backed implementation (durable across restarts when map is shared) ───
+
+/**
+ * A `ReplayStore` backed by an external `Map<string, number>`.
+ *
+ * Passing the same `Map` instance to multiple `MapBackedReplayStore` instances
+ * (e.g. after a simulated process restart) provides durability within a single
+ * process — any auth_id consumed by the first instance is visible to the second.
+ *
+ * This implementation is a stand-in for a Redis `SET NX EX` backend:
+ * - First call for an auth_id: writes the entry and returns `true`.
+ * - Subsequent calls for the same auth_id: returns `false` (replay detected).
+ *
+ * PRODUCTION NOTE: Replace this with a Redis-backed implementation that uses
+ * `SET key 1 NX EX <ttl>` for true distributed atomicity across processes/hosts.
+ */
+export class MapBackedReplayStore implements ReplayStore {
+  constructor(private readonly store: Map<string, number>) {}
+
+  async consumeAuthId(authId: string, expiresAt: number): Promise<boolean> {
+    if (this.store.has(authId)) return false;
+    this.store.set(authId, expiresAt);
+    return true;
   }
 }
