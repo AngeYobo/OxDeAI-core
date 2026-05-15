@@ -44,7 +44,7 @@ export interface PepConfig {
   audience: string;
   /** URL of the protected upstream (e.g. http://127.0.0.1:{port}/execute). */
   upstreamUrl: string;
-  /** Internal token forwarded to upstream via X-Internal-Execution-Token. */
+  /** Internal token forwarded to the protected execution target via x-internal-executor-token. */
   internalToken: string;
   /** Durable, atomic replay protection store. */
   replayStore: ReplayStore;
@@ -295,7 +295,7 @@ export function startPepGateway(config: PepConfig): Promise<PepHandle> {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Internal-Execution-Token": config.internalToken,
+            "x-internal-executor-token": config.internalToken,
           },
           body: JSON.stringify({ intent: parsed.intent, auth_id: auth.auth_id }),
         });
