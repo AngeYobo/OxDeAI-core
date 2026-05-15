@@ -99,3 +99,29 @@ shared module to guarantee identical digest computation.
 The PEP verifies the adapter's Ed25519 signature over the `AuthorizationV1`
 payload. Sift is not reachable from the PEP. The chain of custody ends at
 the adapter's signing step.
+
+## Production deployment notes
+
+**`apps/pep-gateway/` is a pedagogical PEP implementation.**
+
+The PEP gateway in this reference example implements the 10-step
+`AuthorizationV1` verification sequence inline to make the ordering readable
+and independently testable.  It is not the production PEP implementation.
+
+For production deployments, use `packages/guard` (the hardened PEP library)
+or an equivalent implementation with equivalent test coverage.  `packages/guard`
+provides the same verification sequence with additional hardening:
+- strict mode requiring non-empty trusted key sets
+- pluggable replay store with Redis support
+- CAS-based state versioning for TOCTOU prevention
+- 136 conformance tests
+
+**Replay store.**
+
+`packages/replay-store` (in-memory `MemoryReplayStore`) is suitable for
+single-process tests only.  It is not restart-durable and does not
+coordinate across multiple processes or instances.
+
+Production deployments MUST replace it with a durable, distributed store
+that provides atomic consume semantics (check-and-set in a single operation).
+`packages/guard` includes `createRedisReplayStore` for this purpose.

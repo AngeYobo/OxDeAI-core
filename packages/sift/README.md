@@ -303,6 +303,8 @@ Minimum requirements:
 - no fallback guessing
 - deterministic key selection
 
+**KRL payload integrity limitation.** `SiftHttpKeyStore` checks whether a `kid` appears in the fetched KRL but does NOT verify a cryptographic signature over the KRL payload itself. KRL payload integrity depends on transport security (HTTPS to a trusted endpoint). A compromised intermediary could return a modified KRL that omits specific revoked kids. Unknown and revoked kids still fail closed. Production deployments requiring cryptographic revocation integrity must wait for a signed KRL contract from Sift.
+
 ### Prototype safety
 
 All user-controlled normalized objects are created with `Object.create(null)`.
@@ -399,18 +401,25 @@ latency requirements - not just on startup.
 ```ts
 import { SiftHttpKeyStore, createStagingKeyStore, type SiftKeyStore } from "@oxdeai/sift";
 
-// Staging (Sift-hosted JWKS + KRL endpoints):
+// Staging (development / testing only — NOT for production):
 const store = createStagingKeyStore();
 await store.refresh();
+// Note: createStagingKeyStore() throws if NODE_ENV === "production".
+// Use new SiftHttpKeyStore({ jwksUrl, krlUrl }) with your production endpoints.
 
-// Custom endpoints:
-const custom = new SiftHttpKeyStore({ jwksUrl: "...", krlUrl: "..." });
+// Production:
+const prodStore = new SiftHttpKeyStore({
+  jwksUrl: "https://your-production-sift-host/sift-jwks.json",
+  krlUrl:  "https://your-production-sift-host/sift-krl.json",
+});
 
 // Inject a mock fetch for tests:
 const testStore = new SiftHttpKeyStore({ jwksUrl, krlUrl, fetch: mockFetch });
 ```
 
 `SiftKeyStore` is the interface.  `SiftHttpKeyStore` is the HTTP-backed implementation.  Both `getPublicKeyByKid` and `isKidRevoked` operate on the in-memory cache; only `refresh()` makes network calls.
+
+`createStagingKeyStore()` is for development and testing only.  It throws if `NODE_ENV === "production"` unless `{ _allowInProduction: true }` is passed explicitly.  Do not call it in production processes.
 
 Staging endpoints:
 

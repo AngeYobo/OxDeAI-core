@@ -221,6 +221,20 @@ The `alg: "EdDSA"` field is JWKS metadata for key-discovery tooling. It is disti
 - no fallback guessing
 - deterministic key selection
 
+**KRL payload integrity limitation.**
+
+`SiftHttpKeyStore` checks whether a `kid` appears in the fetched KRL, but does NOT verify a cryptographic signature over the KRL payload itself.
+
+KRL payload integrity therefore depends on transport security (HTTPS to a trusted endpoint). A compromised intermediary — a CDN edge, a stale unsigned cache, or a man-in-the-middle — could return a modified KRL that omits specific revoked kids, allowing a revoked Sift signing key to pass the revocation check.
+
+Unknown and revoked kids still fail closed:
+- `kid` in `revoked_kids` → `REVOKED_KID` immediately
+- `kid` not found after one refresh attempt → `UNKNOWN_KID` (no guessing)
+
+Production deployments that require cryptographic revocation integrity MUST wait for the Sift protocol to define and publish a KRL signing contract. Until that contract exists, revocation guarantees depend on the trustworthiness of the transport and the hosting endpoint.
+
+**Do not assert that KRL revocation is cryptographically enforced end-to-end without a signed KRL contract from Sift.**
+
 ---
 
 ## Intent Normalization (Normative)
