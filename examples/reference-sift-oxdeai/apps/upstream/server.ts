@@ -54,7 +54,7 @@ export function startUpstream(config: UpstreamConfig): Promise<UpstreamHandle> {
       // This is the ONLY check that matters. No AuthorizationV1 is inspected
       // here — that is the PEP's responsibility. The upstream trusts only the
       // internal token, which is never reachable from outside the PEP.
-      const token = req.headers["x-internal-execution-token"];
+      const token = req.headers["x-internal-executor-token"];
       if (token !== config.internalToken) {
         return jsonResponse(res, 403, {
           ok: false,
