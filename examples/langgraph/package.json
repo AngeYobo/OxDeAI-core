@@ -11,10 +11,11 @@
     "demo:langgraph": "pnpm -C examples/langgraph build && node examples/langgraph/dist/run.js"
   },
   "dependencies": {
-    "@langchain/core": "^1.1.41",
+    "@langchain/core": "^1.1.46",
     "@langchain/langgraph": "^1.2.9",
     "@oxdeai/core": "workspace:*",
-    "@oxdeai/langgraph": "workspace:*"
+    "@oxdeai/langgraph": "workspace:*",
+    "langsmith": "0.7.1"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

@@ -5,11 +5,12 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  langsmith: 0.5.20
+  langsmith: 0.7.1
   minimatch: '>=10.2.3'
   lodash: '>=4.18.0'
   brace-expansion: '>=5.0.5'
   basic-ftp: '>=5.3.0'
+  fast-uri: 3.1.2
 
 importers:
 
@@ -145,17 +146,20 @@ importers:
   examples/langgraph:
     dependencies:
       '@langchain/core':
-        specifier: ^1.1.41
-        version: 1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
+        specifier: ^1.1.46
+        version: 1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
       '@langchain/langgraph':
         specifier: ^1.2.9
-        version: 1.3.0(@langchain/core@1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0))(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)(zod-to-json-schema@3.25.2(zod@3.25.76))(zod@3.25.76)
+        version: 1.3.0(@langchain/core@1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0))(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)
       '@oxdeai/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@oxdeai/langgraph':
         specifier: workspace:*
         version: link:../../packages/langgraph
+      langsmith:
+        specifier: 0.7.1
+        version: 0.7.1(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -605,8 +609,8 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@langchain/core@1.1.44':
-    resolution: {integrity: sha512-RePW1IjGCHr9ua2vcby3aE8mOOz3EnwDZxMEGbNDT91kf14eqkJqxDXvaZFviGdcN9DTrxM5RPQNAHmwSm4tbg==}
+  '@langchain/core@1.1.46':
+    resolution: {integrity: sha512-i8rDC83BpItxChCw4Lf+6tAr+k+OUcbirc5ZkrhI9ywYWmvxegUljLGOGYvtJNTbEAIFkhYIODPE5QRqyjF6sA==}
     engines: {node: '>=20'}
 
   '@langchain/langgraph-checkpoint@1.0.2':
@@ -785,10 +789,6 @@ packages:
     resolution: {integrity: sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==}
     engines: {node: '>=8'}
 
-  ansi-styles@5.2.0:
-    resolution: {integrity: sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA==}
-    engines: {node: '>=10'}
-
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
@@ -886,10 +886,6 @@ packages:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
 
-  camelcase@6.3.0:
-    resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
-    engines: {node: '>=10'}
-
   canvas@3.2.1:
     resolution: {integrity: sha512-ej1sPFR5+0YWtaVp6S1N1FVz69TQCqmrkGeRvQxZeAB1nAIcjNTHVwrZtYtWFFBmQsF40/uDLehsW5KuYC99mg==}
     engines: {node: ^18.12.0 || >= 20.9.0}
@@ -950,10 +946,6 @@ packages:
     peerDependenciesMeta:
       supports-color:
         optional: true
-
-  decamelize@1.2.0:
-    resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
-    engines: {node: '>=0.10.0'}
 
   decompress-response@6.0.0:
     resolution: {integrity: sha512-aW35yZM6Bb/4oJlZncMH2LCoZtJXTRxES17vE3hoRiowU2kWHaJKFkSBDnDR+cm9J+9QhXmREyIfv0pji9ejCQ==}
@@ -1078,8 +1070,8 @@ packages:
   fast-fifo@1.3.2:
     resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
-  fast-uri@3.1.0:
-    resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
+  fast-uri@3.1.2:
+    resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
 
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
@@ -1228,8 +1220,8 @@ packages:
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
 
-  langsmith@0.5.20:
-    resolution: {integrity: sha512-ULhLM8RswvQDXufLtNtvclHrWCBx8Cb5UPI6lAZC+8Dq59iHsVPz/3Ac9khWNm1VIvChRsuykixD/WrmzuuA3Q==}
+  langsmith@0.7.1:
+    resolution: {integrity: sha512-Wjk90UjNoY5cBHMlNAC/eZx5clI8jnjBOBW8uJu8+MWBtx0QesNjsUiLtjI+I3UnrpxFFpDqGXcnhBjH654Mqg==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -1663,6 +1655,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@babel/code-frame@7.29.0':
@@ -1768,18 +1763,15 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@langchain/core@1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)':
+  '@langchain/core@1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       '@standard-schema/spec': 1.1.0
-      ansi-styles: 5.2.0
-      camelcase: 6.3.0
-      decamelize: 1.2.0
       js-tiktoken: 1.0.21
-      langsmith: 0.5.20(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
+      langsmith: 0.7.1(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
       mustache: 4.2.0
       p-queue: 6.6.2
-      zod: 3.25.76
+      zod: 4.4.3
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@opentelemetry/exporter-trace-otlp-proto'
@@ -1787,14 +1779,14 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/langgraph-checkpoint@1.0.2(@langchain/core@1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0))':
+  '@langchain/langgraph-checkpoint@1.0.2(@langchain/core@1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0))':
     dependencies:
-      '@langchain/core': 1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
+      '@langchain/core': 1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
       uuid: 10.0.0
 
-  '@langchain/langgraph-sdk@1.9.1(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)':
+  '@langchain/langgraph-sdk@1.9.1(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)':
     dependencies:
-      '@langchain/core': 1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
+      '@langchain/core': 1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
       '@langchain/protocol': 0.0.15
       '@types/json-schema': 7.0.15
       p-queue: 9.2.0
@@ -1807,17 +1799,17 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/langgraph@1.3.0(@langchain/core@1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0))(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)(zod-to-json-schema@3.25.2(zod@3.25.76))(zod@3.25.76)':
+  '@langchain/langgraph@1.3.0(@langchain/core@1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0))(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)(zod-to-json-schema@3.25.2(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      '@langchain/core': 1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
-      '@langchain/langgraph-checkpoint': 1.0.2(@langchain/core@1.1.44(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0))
-      '@langchain/langgraph-sdk': 1.9.1(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0)
+      '@langchain/core': 1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
+      '@langchain/langgraph-checkpoint': 1.0.2(@langchain/core@1.1.46(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0))
+      '@langchain/langgraph-sdk': 1.9.1(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0)
       '@langchain/protocol': 0.0.15
       '@standard-schema/spec': 1.1.0
       uuid: 10.0.0
-      zod: 3.25.76
+      zod: 4.4.3
     optionalDependencies:
-      zod-to-json-schema: 3.25.2(zod@3.25.76)
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@opentelemetry/exporter-trace-otlp-proto'
@@ -1987,7 +1979,7 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.0
+      fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -1996,8 +1988,6 @@ snapshots:
   ansi-styles@4.3.0:
     dependencies:
       color-convert: 2.0.1
-
-  ansi-styles@5.2.0: {}
 
   arg@4.1.3: {}
 
@@ -2077,8 +2067,6 @@ snapshots:
 
   callsites@3.1.0: {}
 
-  camelcase@6.3.0: {}
-
   canvas@3.2.1:
     dependencies:
       node-addon-api: 7.1.1
@@ -2134,8 +2122,6 @@ snapshots:
   debug@4.4.3:
     dependencies:
       ms: 2.1.3
-
-  decamelize@1.2.0: {}
 
   decompress-response@6.0.0:
     dependencies:
@@ -2269,7 +2255,7 @@ snapshots:
 
   fast-fifo@1.3.2: {}
 
-  fast-uri@3.1.0: {}
+  fast-uri@3.1.2: {}
 
   fd-slicer@1.1.0:
     dependencies:
@@ -2422,12 +2408,11 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
-  langsmith@0.5.20(openai@6.36.0(ws@8.20.0)(zod@3.25.76))(ws@8.20.0):
+  langsmith@0.7.1(openai@6.36.0(ws@8.20.0)(zod@4.4.3))(ws@8.20.0):
     dependencies:
       p-queue: 6.6.2
-      uuid: 10.0.0
     optionalDependencies:
-      openai: 6.36.0(ws@8.20.0)(zod@3.25.76)
+      openai: 6.36.0(ws@8.20.0)(zod@4.4.3)
       ws: 8.20.0
 
   lines-and-columns@1.2.4: {}
@@ -2495,10 +2480,10 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  openai@6.36.0(ws@8.20.0)(zod@3.25.76):
+  openai@6.36.0(ws@8.20.0)(zod@4.4.3):
     optionalDependencies:
       ws: 8.20.0
-      zod: 3.25.76
+      zod: 4.4.3
     optional: true
 
   p-finally@1.0.0: {}
@@ -2868,9 +2853,11 @@ snapshots:
 
   yn@3.1.1: {}
 
-  zod-to-json-schema@3.25.2(zod@3.25.76):
+  zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
-      zod: 3.25.76
+      zod: 4.4.3
     optional: true
 
   zod@3.25.76: {}
+
+  zod@4.4.3: {}
