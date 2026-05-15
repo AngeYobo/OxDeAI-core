@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import {
   SiftHttpKeyStore,
   KeyStoreError,
+  createStagingKeyStore,
 } from "../src/siftKeyStore.js";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -405,4 +406,63 @@ test("siftKeyStore: failed refresh does not corrupt existing cache", async () =>
 
   const keyAfter = await store.getPublicKeyByKid(RFC8037_KID);
   assert.ok(keyAfter !== null, "key must survive a failed second refresh on the same instance");
+});
+
+// ─── Tests: createStagingKeyStore production guard ────────────────────────────
+
+test("createStagingKeyStore: throws when NODE_ENV is 'production' without override", () => {
+  const orig = process.env["NODE_ENV"];
+  try {
+    process.env["NODE_ENV"] = "production";
+    assert.throws(
+      () => createStagingKeyStore(),
+      (err: unknown) => {
+        assert.ok(err instanceof Error, "must throw an Error");
+        assert.ok(
+          err.message.includes("MUST NOT be called in production"),
+          `unexpected message: ${err.message}`
+        );
+        return true;
+      }
+    );
+  } finally {
+    if (orig === undefined) delete process.env["NODE_ENV"];
+    else process.env["NODE_ENV"] = orig;
+  }
+});
+
+test("createStagingKeyStore: succeeds when NODE_ENV is 'production' and _allowInProduction is true", () => {
+  const orig = process.env["NODE_ENV"];
+  try {
+    process.env["NODE_ENV"] = "production";
+    const store = createStagingKeyStore({ _allowInProduction: true });
+    assert.ok(store instanceof SiftHttpKeyStore, "must return a SiftHttpKeyStore");
+  } finally {
+    if (orig === undefined) delete process.env["NODE_ENV"];
+    else process.env["NODE_ENV"] = orig;
+  }
+});
+
+test("createStagingKeyStore: succeeds when NODE_ENV is 'test'", () => {
+  const orig = process.env["NODE_ENV"];
+  try {
+    process.env["NODE_ENV"] = "test";
+    const store = createStagingKeyStore();
+    assert.ok(store instanceof SiftHttpKeyStore, "must return a SiftHttpKeyStore");
+  } finally {
+    if (orig === undefined) delete process.env["NODE_ENV"];
+    else process.env["NODE_ENV"] = orig;
+  }
+});
+
+test("createStagingKeyStore: succeeds when NODE_ENV is undefined", () => {
+  const orig = process.env["NODE_ENV"];
+  try {
+    delete process.env["NODE_ENV"];
+    const store = createStagingKeyStore();
+    assert.ok(store instanceof SiftHttpKeyStore, "must return a SiftHttpKeyStore");
+  } finally {
+    if (orig === undefined) delete process.env["NODE_ENV"];
+    else process.env["NODE_ENV"] = orig;
+  }
 });

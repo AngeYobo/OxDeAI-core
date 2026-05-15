@@ -46,6 +46,7 @@ export type {
   SiftKeyStore,
   SiftHttpKeyStoreOptions,
   KeyStoreErrorCode,
+  CreateStagingKeyStoreOptions,
 } from "./siftKeyStore.js";
 export {
   KeyStoreError,

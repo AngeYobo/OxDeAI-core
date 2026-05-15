@@ -130,9 +130,23 @@ function parseJwks(body: unknown): Map<string, Uint8Array> {
  * key).  Throws `KeyStoreError("KRL_FETCH_FAILED", ...)` if the top-level
  * shape is not a valid KRL object.
  *
- * KRL signature verification is intentionally not implemented here.
- * The structure is designed so that a verifier can be added later without
- * refactoring: parse first, verify the parsed payload second.
+ * ── KRL payload integrity limitation ─────────────────────────────────────────
+ * `SiftHttpKeyStore` checks whether a `kid` appears in the fetched KRL, but
+ * does NOT verify a cryptographic signature over the KRL payload itself.
+ *
+ * KRL payload integrity therefore depends on transport security (HTTPS to a
+ * trusted endpoint).  A compromised intermediary (e.g. a CDN edge, a man-in-
+ * the-middle, or a stale unsigned cache entry) could return a modified KRL
+ * that omits specific revoked kids — allowing a revoked key to pass the
+ * revocation check.
+ *
+ * Unknown/revoked kids still fail closed:
+ *   - kid in revoked_kids   → REVOKED_KID immediately
+ *   - kid not found after refresh → UNKNOWN_KID (no guessing)
+ *
+ * Production deployments that require cryptographic revocation integrity MUST
+ * wait for the Sift protocol to define a KRL signing contract.  This code is
+ * structured to accept a verify-after-parse step without further refactoring.
  */
 function parseKrl(body: unknown): Set<string> {
   if (typeof body !== "object" || body === null) {
@@ -251,16 +265,52 @@ export class SiftHttpKeyStore implements SiftKeyStore {
 const STAGING_JWKS_URL = "https://sift-staging.walkosystems.com/sift-jwks.json";
 const STAGING_KRL_URL  = "https://sift-staging.walkosystems.com/sift-krl.json";
 
+export interface CreateStagingKeyStoreOptions {
+  /**
+   * Set to `true` to suppress the production-environment guard.
+   *
+   * This escape hatch exists for non-production integration tests that
+   * intentionally run in an environment where NODE_ENV is set to "production".
+   * It MUST NOT be used in real production deployments.
+   */
+  _allowInProduction?: boolean;
+}
+
 /**
- * Returns a new `SiftHttpKeyStore` pre-configured for the Sift staging
+ * Returns a new `SiftHttpKeyStore` pre-configured for the Sift **staging**
  * endpoints.  No network calls are made at construction time.
  *
- * Usage:
- *   const keyStore = createStagingKeyStore();
- *   await keyStore.refresh();           // or let verifyReceiptWithKeyStore do it
- *   const result = await verifyReceiptWithKeyStore(receipt, { kid, keyStore });
+ * @internal
+ *
+ * **NOT FOR PRODUCTION USE.**
+ *
+ * The Sift staging JWKS and KRL endpoints (`sift-staging.walkosystems.com`)
+ * are for development and testing only.  Calling this function in a production
+ * process trusts staging keys for production receipts and exposes internal
+ * staging state to production traffic.
+ *
+ * For production, construct a `SiftHttpKeyStore` directly with your production
+ * JWKS and KRL endpoint URLs:
+ *
+ * ```ts
+ * const keyStore = new SiftHttpKeyStore({
+ *   jwksUrl: "https://your-production-sift-host/sift-jwks.json",
+ *   krlUrl:  "https://your-production-sift-host/sift-krl.json",
+ * });
+ * ```
+ *
+ * This function throws if `NODE_ENV === "production"` unless
+ * `_allowInProduction: true` is explicitly passed.
  */
-export function createStagingKeyStore(): SiftHttpKeyStore {
+export function createStagingKeyStore(opts?: CreateStagingKeyStoreOptions): SiftHttpKeyStore {
+  if (process.env["NODE_ENV"] === "production" && opts?._allowInProduction !== true) {
+    throw new Error(
+      "[createStagingKeyStore] MUST NOT be called in production (NODE_ENV=production). " +
+      "Staging JWKS/KRL endpoints are not suitable for production deployments. " +
+      "Use new SiftHttpKeyStore({ jwksUrl, krlUrl }) with your production endpoints instead. " +
+      "To suppress this guard in a controlled non-production context, pass { _allowInProduction: true }."
+    );
+  }
   return new SiftHttpKeyStore({
     jwksUrl: STAGING_JWKS_URL,
     krlUrl: STAGING_KRL_URL,
