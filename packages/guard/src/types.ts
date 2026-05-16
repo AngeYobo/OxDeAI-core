@@ -148,4 +148,26 @@ export type OxDeAIGuardConfig = {
    * result when unavailable. The guard treats any thrown error as DENY.
    */
   replayStore?: ReplayStore;
+
+  /**
+   * Optional custom function for computing the live-state hash used in
+   * state_hash binding verification (guard step 6c).
+   *
+   * When provided, this function is called instead of
+   * `config.engine.computeStateHash(state)` to produce the hash that is
+   * compared against `authorization.state_hash`.
+   *
+   * Required when authorizations are produced by an external provider that
+   * uses a different state canonicalization algorithm. For example:
+   *   - Sift adapter: uses siftCanonicalJsonHash(state)
+   *   - Core PolicyEngine: uses engine.computeStateHash(state) (default)
+   *
+   * Using the wrong function for the authorization's committed hash algorithm
+   * produces a deterministic state_hash mismatch — execution is blocked,
+   * fail-closed. There is no fallback or partial acceptance.
+   *
+   * Fail-closed: any exception thrown by this function blocks execution
+   * with OxDeAIAuthorizationError.
+   */
+  computeStateHash?: (state: State) => string;
 };
