@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, sign as nodeSign } from "node:crypto";
 import {
   encodeCanonicalState,
   encodeEnvelope,
@@ -692,6 +692,37 @@ function validateDelegationSignatureVectors(ctx: CheckCtx): void {
   }
 }
 
+/**
+ * Builds a signed AuthorizationV1 in Sift-compatible wire format:
+ *   - alg = "ed25519" (lowercase, nested signature object)
+ *   - expires_at (not expiry)
+ *   - base64url-encoded signature bytes
+ *   - signing preimage: canonicalJson(unsigned) with no domain prefix
+ *
+ * The verifier accepts this via the ed25519 branch + verifyEd25519Raw fallback
+ * + base64url decoding in decodeSignatureBytes.
+ */
+function makeSiftWireFormatAuth(now = 1730000000): AuthorizationV1 {
+  const unsigned: Record<string, unknown> = {
+    auth_id:     "f".repeat(64),
+    issuer:      "oxdeai.policy-engine",
+    audience:    "merchant-gateway",
+    intent_hash: "a".repeat(64),
+    state_hash:  "b".repeat(64),
+    policy_id:   "c".repeat(64),
+    decision:    "ALLOW",
+    issued_at:   now,
+    expires_at:  now + 60,
+    signature:   { alg: "ed25519", kid: "2026-01" },
+  };
+  const preimage = Buffer.from(canonicalJson(unsigned), "utf8");
+  const sigBytes = nodeSign(null, preimage, TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION);
+  return {
+    ...unsigned,
+    signature: { alg: "ed25519", kid: "2026-01", sig: sigBytes.toString("base64url") },
+  } as unknown as AuthorizationV1;
+}
+
 function makeSignedAuthorizationBase(now = 1730000000): AuthorizationV1 {
   return signAuthorizationEd25519(
     {
@@ -761,6 +792,12 @@ function validateAuthorizationSignatureVectors(ctx: CheckCtx, adapter: Conforman
       opts.consumedAuthIds = [auth.auth_id];
     } else if (mode === "unknown-alg") {
       auth = { ...auth, alg: "Unknown" as any };
+    } else if (mode === "sift-wire-format") {
+      auth = makeSiftWireFormatAuth();
+    } else if (mode === "unsupported-alg-EdDSA") {
+      auth = { ...auth, alg: "EdDSA" as any };
+    } else if (mode === "unsupported-alg-ED25519") {
+      auth = { ...auth, alg: "ED25519" as any };
     }
 
     const got = adapter.verifyAuthorization(auth, opts);

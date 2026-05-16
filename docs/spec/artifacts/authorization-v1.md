@@ -1,6 +1,6 @@
 # OxDeAI AuthorizationV1 Specification
 
-**Version:** v1
+**Version:** v1.1
 **Status:** Stable (Normative Specification)
 
 ---
@@ -51,39 +51,161 @@ All hashing and signing **MUST** use:
 
 ---
 
-## 4. Schema
+## 4. Canonical Semantic Model
 
-An `AuthorizationV1` artifact **MUST** conform to:
+An `AuthorizationV1` artifact **MUST** carry these semantic fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `auth_id` | string | Unique single-use identifier |
+| `issuer` | string | Issuing authority |
+| `audience` | string | Intended verifier / PEP |
+| `decision` | `"ALLOW"` | Decision outcome |
+| `intent_hash` | hex sha256 | Hash of canonicalized intent |
+| `state_hash` | hex sha256 | Hash of canonicalized state snapshot |
+| `policy_id` | string | Identifies the policy used |
+| `issued_at` | integer (unix s) | Issuance timestamp |
+| expiry | integer (unix s) | Expiration timestamp (see §5 for wire-format field names) |
+| `alg` | string | Signature algorithm (see §5) |
+| `kid` | string | Key identifier |
+| `signature` | string or object | Signature bytes (see §5) |
+
+The `decision` field **MUST** be `"ALLOW"`. Any other value **MUST** be rejected.
+
+---
+
+## 5. Accepted Wire Encodings
+
+**Exactly two** wire encodings are accepted. Any encoding not listed here **MUST** be rejected.
+
+---
+
+### Encoding A — Core-native
+
+Produced by `@oxdeai/core`'s `signAuthorizationEd25519`.
 
 ```json
 {
-  "version": "AuthorizationV1",
   "auth_id": "string",
   "issuer": "string",
   "audience": "string",
   "decision": "ALLOW",
   "intent_hash": "lowercase hex sha256",
   "state_hash": "lowercase hex sha256",
-  "policy_version": "string",
+  "policy_id": "string",
+  "issued_at": 1712448000,
+  "expiry": 1712448060,
+  "alg": "Ed25519",
+  "kid": "string",
+  "signature": "base64-encoded-bytes"
+}
+```
+
+**Distinguishing characteristics:**
+- Expiry field: **`expiry`** (integer unix seconds)
+- Algorithm identifier: **`"Ed25519"`** (capitalized, case-sensitive)
+- Signature: flat string, **standard base64** encoded
+- Signing preimage: `"OXDEAI_AUTH_V1\n"` + `canonicalJson(payload_without_sig_bytes)` (domain-prefixed)
+- Signature shape: flat bare string (legacy) or nested `{ alg, kid, sig }` object
+
+---
+
+### Encoding B — Sift-compatible
+
+Produced by the Sift adapter in `@oxdeai/sift`.
+
+```json
+{
+  "auth_id": "string",
+  "issuer": "string",
+  "audience": "string",
+  "decision": "ALLOW",
+  "intent_hash": "lowercase hex sha256",
+  "state_hash": "lowercase hex sha256",
+  "policy_id": "string",
   "issued_at": 1712448000,
   "expires_at": 1712448060,
   "signature": {
-    "alg": "Ed25519",
+    "alg": "ed25519",
     "kid": "string",
-    "sig": "string"
+    "sig": "base64url-encoded-bytes"
   }
 }
 ```
 
----
-
-## 5. Field Definitions
-
-### version
-
-* **MUST** equal `"AuthorizationV1"`
+**Distinguishing characteristics:**
+- Expiry field: **`expires_at`** (integer unix seconds)
+- Algorithm identifier: **`"ed25519"`** (lowercase, case-sensitive)
+- Signature: nested object, `sig` field is **base64url** encoded (RFC 4648 §5)
+- Signing preimage: `canonicalJson(payload_without_sig_bytes)` (no domain prefix)
 
 ---
+
+### Expiry field resolution
+
+A verifier **MUST** resolve the effective expiry as follows:
+
+1. If `expiry` is present and is an integer: use `expiry`
+2. Else if `expires_at` is present and is an integer: use `expires_at`
+3. Else: reject with `AUTH_MISSING_FIELD`
+
+Both fields **MUST NOT** be accepted simultaneously with conflicting values. `expiry` takes precedence when both are present.
+
+---
+
+### Algorithm identifier resolution
+
+The `alg` field (or `signature.alg` in nested form) **MUST** be one of:
+
+| Value | Encoding | Notes |
+|---|---|---|
+| `"Ed25519"` | Core-native (Encoding A) | Capitalized; domain-prefixed preimage |
+| `"ed25519"` | Sift-compatible (Encoding B) | Lowercase; non-prefixed preimage |
+
+No other values are accepted. Matching is **exact and case-sensitive**. The following are **explicitly rejected**:
+
+| Value | Rejection reason |
+|---|---|
+| `"ED25519"` | All-caps variant; not a recognized identifier |
+| `"EdDSA"` | Different algorithm family; not Ed25519 |
+| `"ed448"` | Different curve; not accepted |
+| Any other string | `AUTH_ALG_UNSUPPORTED` |
+
+> There is no generic case-insensitive algorithm matching. Accepting `"ed25519"` is a specific, deliberate interoperability decision for the Sift protocol. It does not create a precedent for accepting arbitrary casing variants.
+
+---
+
+### Signature encoding
+
+| Encoding | `signature.sig` format | Decoding |
+|---|---|---|
+| Core-native | Standard base64 (RFC 4648 §4) | `Buffer.from(sig, "base64")` |
+| Sift-compatible | Base64url (RFC 4648 §5) | `Buffer.from(sig, "base64url")` |
+
+Auto-detection: if `sig` contains `-` or `_` characters, it is base64url; otherwise standard base64.
+
+Standard base64 never contains `-` or `_`. Base64url never contains `+` or `/`. The two formats are unambiguous.
+
+---
+
+### Signing preimage
+
+The signed payload **MUST** be reconstructed as follows:
+
+1. Take all fields from the authorization object **except** the signature bytes (`signature.sig` or the bare signature string)
+2. For nested signatures: include `signature: { alg, kid }` (without `sig`)
+3. Apply `canonicalJson` (sorted keys, deterministic serialization per `canonicalization-v1.md`)
+4. Encode as UTF-8 bytes
+
+For **Encoding A** (Core-native): prepend `"OXDEAI_AUTH_V1\n"` to the UTF-8 bytes before signing.
+
+For **Encoding B** (Sift-compatible): use the UTF-8 bytes directly, with no prefix.
+
+The canonicalized preimage includes whichever expiry field name (`expiry` or `expires_at`) was present in the artifact. Changing the field name invalidates the signature.
+
+---
+
+## 6. Field Definitions
 
 ### auth_id
 
@@ -128,7 +250,7 @@ An `AuthorizationV1` artifact **MUST** conform to:
 
 ---
 
-### policy_version
+### policy_id
 
 * Identifies the policy used during evaluation
 
@@ -140,46 +262,33 @@ An `AuthorizationV1` artifact **MUST** conform to:
 
 ---
 
-### expires_at
+### expiry / expires_at
 
 * Unix timestamp (seconds)
-* **MUST** be strictly enforced
+* **MUST** be strictly enforced — `now >= expiry` is rejected
+* Wire-format field name depends on encoding (see §5)
 
 ---
 
-### signature.alg
+### alg
 
-* **MUST** be `"Ed25519"`
+* Signature algorithm identifier
+* Accepted values: `"Ed25519"` (Encoding A), `"ed25519"` (Encoding B)
+* See §5 for exact matching rules
 
 ---
 
-### signature.kid
+### kid
 
 * Key identifier used for verification
+* **MUST** resolve in trusted key sets for the artifact's issuer
 
 ---
 
-### signature.sig
+### signature / signature.sig
 
 * Signature over canonicalized payload
-
----
-
-## 6. Signature Preimage (Normative)
-
-The signature **MUST** be computed over:
-
-```text
-canonicalize(AuthorizationV1_without_signature.sig)
-```
-
-### Rules
-
-* The entire AuthorizationV1 object **MUST** be included in the preimage, except `signature.sig`.
-* `signature.alg` and `signature.kid` **MUST** be included.
-* The canonicalization rules in `canonicalization-v1.md` **MUST** be used for this preimage.
-
-Canonicalization **MUST** follow `canonicalization-v1.md`.
+* Encoding (base64 vs base64url) follows the wire encoding (see §5)
 
 ---
 
@@ -197,11 +306,14 @@ Implementations **MUST**:
 
 Verification **MUST**:
 
-* Use Ed25519
-* Resolve `kid` to a trusted public key
-* Verify signature over canonical payload
+* Identify the wire encoding from the `alg` value
+* Resolve `kid` to a trusted public key for the artifact's issuer
+* Reconstruct the signing preimage per §5
+* Verify the Ed25519 signature over the preimage
 
 > Any failure **MUST** result in denial.
+
+Key lookup **MUST** use the canonical key algorithm `"Ed25519"` regardless of whether the artifact uses `"Ed25519"` or `"ed25519"` as its alg identifier — the distinction is a wire-format convention, not a different key type.
 
 ---
 
@@ -211,13 +323,12 @@ Verification **MUST**:
 
 An authorization is valid **only if all conditions hold**:
 
-* Signature verifies
-* Issuer is trusted
-* `kid` resolves in trusted key sets
-* Audience matches verifier
+* Signature verifies against a trusted key
+* Issuer is trusted and `kid` resolves in trusted key sets
+* Audience matches the verifier
 * Artifact is not expired
 * `auth_id` has not been replayed
-* `intent_hash` matches the action
+* `intent_hash` matches the requested action
 
 ### Failure rule
 
@@ -236,17 +347,18 @@ Any condition fails → reject
 A conforming verifier **MUST**:
 
 1. Parse artifact
-2. Validate schema
-3. Canonicalize signed payload
-4. Verify signature
-5. Resolve trusted key
-6. Validate issuer trust
-7. Validate audience
-8. Check expiration
-9. Recompute `intent_hash`
-10. Compare hashes
-11. Check replay (`auth_id`)
-12. Reject ambiguity
+2. Validate all required fields are present
+3. Identify wire encoding from `alg` value
+4. Resolve effective expiry (`expiry` or `expires_at` per §5)
+5. Check expiration: `now >= effectiveExpiry` → reject
+6. Reconstruct signing preimage per §5
+7. Resolve `kid` in trusted key sets for the artifact's issuer
+8. Verify signature
+9. Validate issuer against expected issuer
+10. Validate audience against expected audience
+11. Check replay: `auth_id` previously consumed → reject
+12. Recompute `intent_hash` and compare
+13. Reject ambiguous or unsupported encodings deterministically
 
 ### Failure rule
 
@@ -282,36 +394,99 @@ Verification **MUST** fail closed.
 * Audience mismatch
 * Expiration
 * Replay
+* Unsupported algorithm identifier
 
 > No fallback or partial execution is allowed.
 
 ---
 
-## 13. Example
+## 13. Rejected Encodings
+
+The following encodings are **explicitly rejected** and **MUST** produce `AUTH_ALG_UNSUPPORTED`:
+
+* `alg = "EdDSA"` — different algorithm family
+* `alg = "ED25519"` — all-caps; not a recognized identifier
+* `alg = "ed448"` — different curve
+* Any `alg` value not listed in §5
+
+The following structural forms produce `AUTH_MISSING_FIELD`:
+
+* Neither `expiry` nor `expires_at` present
+* `expiry` or `expires_at` present but not an integer
+
+The following produce `AUTH_SIGNATURE_INVALID`:
+
+* Signature bytes do not verify against the reconstructed preimage
+* Tampering any field covered by the preimage without re-signing
+
+> Ambiguous inputs **MUST** be rejected. There is no partial acceptance.
+
+---
+
+## 14. Conformance Vectors
+
+Conformance is verified by `packages/conformance`. The following vector groups cover wire encoding behavior:
+
+| Vector | Encoding | Proves |
+|---|---|---|
+| `authorization-sig-001` | Core-native (A) | Valid Ed25519, domain-prefixed, base64 → accepted |
+| `authorization-sig-010` | Sift-compatible (B) | Valid ed25519, non-prefixed, base64url → accepted |
+| `authorization-sig-011` | Rejected | EdDSA → AUTH_ALG_UNSUPPORTED |
+| `authorization-sig-012` | Rejected | ED25519 all-caps → AUTH_ALG_UNSUPPORTED |
+| `authorization-verify-009` | Sift-compatible (B) | expires_at accepted as expiry (structural) |
+| `authorization-verify-010` | Sift-compatible (B) | expires_at expiry boundary enforced |
+| `authorization-sig-002` | — | Tampered signature → AUTH_SIGNATURE_INVALID |
+| `authorization-sig-006` | — | Tampered field → AUTH_SIGNATURE_INVALID |
+| `authorization-sig-007` | — | Expired → AUTH_EXPIRED |
+| `authorization-sig-008` | — | Replay → AUTH_REPLAY |
+
+---
+
+## 15. Examples
+
+### Encoding A — Core-native
 
 ```json
 {
-  "version": "AuthorizationV1",
-  "auth_id": "auth_01",
-  "issuer": "oxdeai.pdp.local",
-  "audience": "pep-gateway.local",
+  "auth_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "issuer": "oxdeai.policy-engine",
+  "audience": "merchant-gateway",
   "decision": "ALLOW",
-  "intent_hash": "b75c8d1d9952254b2386f4e412f8fd0b8ac7361ddb54e50c22b19ffc1a3c8c2d",
-  "state_hash": "4e5d7f3b1c2a99887766554433221100aabbccddeeff00112233445566778899",
-  "policy_version": "policy.v1",
-  "issued_at": 1712448000,
-  "expires_at": 1712448060,
+  "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "issued_at": 1730000000,
+  "expiry": 1730000060,
+  "alg": "Ed25519",
+  "kid": "2026-01",
+  "signature": "<base64-encoded Ed25519 signature>"
+}
+```
+
+### Encoding B — Sift-compatible
+
+```json
+{
+  "auth_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "issuer": "adapter-issuer",
+  "audience": "pep-payments",
+  "decision": "ALLOW",
+  "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "issued_at": 1730000000,
+  "expires_at": 1730000060,
   "signature": {
-    "alg": "Ed25519",
-    "kid": "main-1",
-    "sig": "BASE64_OR_HEX_SIGNATURE"
+    "alg": "ed25519",
+    "kid": "adapter-key-1",
+    "sig": "<base64url-encoded Ed25519 signature>"
   }
 }
 ```
 
 ---
 
-## 14. Invariant
+## 16. Invariant
 
 ```text
 No valid AuthorizationV1
@@ -319,33 +494,4 @@ No valid AuthorizationV1
 → no execution path
 ```
 
----
-
-## Remarques critiques (alignement avec ton patch)
-
-### Ce qui est maintenant correct
-
-* séparation claire **artifact vs ETA Core**
-* dépendance explicite à canonicalization
-* modèle de vérification déterministe
-* fail-closed systématique
-* signature préimage bien définie
-
-### Ce que tu pourrais renforcer (prochaine itération)
-
-1. **Types exacts**
-
-   * définir format de `auth_id` (UUID ? string opaque ?)
-   * définir encodage `signature.sig` (base64 vs hex)
-
-2. **Time semantics**
-
-   * tolérance clock skew (sinon edge failures en prod)
-
-3. **Audience matching**
-
-   * exact match vs prefix vs set
-
-4. **State binding mode**
-
-   * optional vs required selon profile (important pour Gateway spec)
+Unknown encoding → DENY → no execution.
