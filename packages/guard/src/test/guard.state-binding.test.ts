@@ -5,20 +5,26 @@
  * Verifies that OxDeAIGuard enforces state_hash binding at the PEP boundary:
  * the authorization's state_hash must equal stateSnapshotHash(executionState).
  *
- * Test IDs: SB-1 through SB-8.
+ * Test IDs: SB-1 through SB-13.
  *
- *   SB-1  Matching state_hash         → execute runs, result returned
- *   SB-2  Mismatched state_hash       → OxDeAIAuthorizationError, execute blocked
- *   SB-3  Empty/missing state_hash    → OxDeAIAuthorizationError, execute blocked
- *   SB-4  Uncanonicalizeable state    → OxDeAIAuthorizationError, execute blocked
- *   SB-5  Determinism                 → same state always produces the same hash
- *   SB-6  TOCTOU state mutation       → state mutated after auth issued → execute blocked
- *   SB-7  Null execution state        → computeStateHash throws → execute blocked
- *   SB-8  Boundary integrity          → mismatch blocks beforeExecute, execute, and setState
+ *   SB-1   Matching state_hash         → execute runs, result returned
+ *   SB-2   Mismatched state_hash       → OxDeAIAuthorizationError, execute blocked
+ *   SB-3   Empty/missing state_hash    → OxDeAIAuthorizationError, execute blocked
+ *   SB-4   Uncanonicalizeable state    → OxDeAIAuthorizationError, execute blocked
+ *   SB-5   Determinism                 → same state always produces the same hash
+ *   SB-6   TOCTOU state mutation       → state mutated after auth issued → execute blocked
+ *   SB-7   Null execution state        → computeStateHash throws → execute blocked
+ *   SB-8   Boundary integrity          → mismatch blocks beforeExecute, execute, and setState
+ *   SB-9   Pluggable computeStateHash  → matching custom strategy → execute runs
+ *   SB-10  Pluggable computeStateHash  → hash mismatch → execute blocked
+ *   SB-11  Compatible hash strategy    → provider hash committed + verified consistently → execute runs
+ *   SB-12  Incompatible hash strategy  → ambiguous config → execute blocked (fail-closed)
+ *   SB-13  computeStateHash throws     → OxDeAIAuthorizationError, execute blocked (fail-closed)
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import type { Authorization, Intent, State } from "@oxdeai/core";
 import { stateSnapshotHash, intentHash } from "@oxdeai/core";
@@ -383,4 +389,196 @@ test("SB-8 boundary integrity: state_hash mismatch blocks beforeExecute, execute
   assert.ok(!beforeExecuteCalled, "beforeExecute must not be called when state_hash mismatches");
   assert.ok(!executeCalled, "execute must not be called when state_hash mismatches");
   assert.ok(!setStateCalled, "setState must not be called when state_hash mismatches");
+});
+
+// ── SB-9 through SB-12: Pluggable computeStateHash strategy ───────────────────
+//
+// These tests verify the config.computeStateHash option, which allows
+// injecting a custom state hash function when authorizations are produced by
+// an external provider with a different state canonicalization algorithm
+// (e.g., Sift adapter: siftCanonicalJsonHash vs Core: stateSnapshotHash).
+
+// Simulates a provider-specific state hash algorithm (e.g., siftCanonicalJsonHash).
+// Deterministic, but distinct from stateSnapshotHash for any state.
+function providerSpecificHash(_state: unknown): string {
+  return createHash("sha256").update("provider-specific-state-repr").digest("hex");
+}
+
+// ── SB-9: Pluggable computeStateHash with matching commitment → execute runs ───
+
+test("SB-9 pluggable computeStateHash: matching hash commitment with custom strategy → execute runs", async () => {
+  const state = makeBaseState();
+  // Auth committed with provider-specific hash (not stateSnapshotHash).
+  const auth = signAuth({
+    auth_id: "sb9-auth",
+    audience: "aud-test",
+    state_hash: providerSpecificHash(state),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  // Guard configured with the matching custom computeStateHash.
+  const guard = OxDeAIGuard(makeGuardConfig(auth, state, {
+    computeStateHash: providerSpecificHash,
+  }));
+  let executed = false;
+  const result = await guard(ACTION, async () => { executed = true; return "sb9-ok"; });
+
+  assert.ok(executed, "execute must be called when computeStateHash matches the commitment");
+  assert.equal(result, "sb9-ok");
+});
+
+// ── SB-10: Pluggable computeStateHash with mismatched hash → execute blocked ───
+
+test("SB-10 pluggable computeStateHash: hash mismatch blocks execution", async () => {
+  const state = makeBaseState();
+  // Auth committed with provider-specific hash.
+  const auth = signAuth({
+    auth_id: "sb10-auth",
+    audience: "aud-test",
+    state_hash: providerSpecificHash(state),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  // Guard configured with a DIFFERENT strategy than was used at signing time.
+  // This simulates using the wrong computeStateHash — incompatible config.
+  const guard = OxDeAIGuard(makeGuardConfig(auth, state, {
+    computeStateHash: (s) => stateSnapshotHash(s),
+  }));
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(ACTION, async () => { executed = true; }),
+    (err: unknown) => {
+      assert.ok(err instanceof OxDeAIAuthorizationError,
+        `expected OxDeAIAuthorizationError, got: ${Object.prototype.toString.call(err)}`);
+      assert.ok(
+        err.message.includes("state_hash"),
+        `error must mention state_hash, got: ${err.message}`
+      );
+      return true;
+    }
+  );
+  assert.ok(!executed, "execute must not be called when hash strategies are incompatible");
+});
+
+// ── SB-11: Provider-specific strategy used consistently → execute runs ─────────
+
+test("SB-11 compatible hash strategy: provider-specific hash committed and verified with same strategy → execute runs", async () => {
+  const state = makeBaseState();
+
+  // Precondition: provider hash differs from Core default to ensure the
+  // test is meaningful (not accidentally testing the same algorithm).
+  assert.notEqual(
+    providerSpecificHash(state),
+    stateSnapshotHash(state),
+    "precondition: provider hash must differ from Core stateSnapshotHash"
+  );
+
+  // Auth committed with provider-specific hash.
+  const auth = signAuth({
+    auth_id: "sb11-auth",
+    audience: "aud-test",
+    state_hash: providerSpecificHash(state),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  // Guard correctly configured with the matching provider strategy.
+  const guard = OxDeAIGuard(makeGuardConfig(auth, state, {
+    computeStateHash: providerSpecificHash,
+  }));
+  let executed = false;
+  const result = await guard(ACTION, async () => { executed = true; return "sb11-ok"; });
+
+  assert.ok(executed, "execute must be called when provider strategy is configured correctly");
+  assert.equal(result, "sb11-ok");
+});
+
+// ── SB-12: Incompatible/unconfigured strategy → execute blocked ────────────────
+//
+// Documents the correct integration requirement: when using an external
+// authorization provider with a non-Core state hash algorithm, omitting
+// config.computeStateHash causes a deterministic state_hash mismatch.
+// This is the "ambiguous config" case — fail-closed.
+
+test("SB-12 incompatible hash strategy (ambiguous config): provider hash committed, Core engine default at verification → blocked", async () => {
+  const state = makeBaseState();
+
+  // Auth committed with provider-specific hash (simulates Sift adapter output).
+  const auth = signAuth({
+    auth_id: "sb12-auth",
+    audience: "aud-test",
+    state_hash: providerSpecificHash(state),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  // Precondition: the two hash functions produce different values for this state.
+  assert.notEqual(
+    stateSnapshotHash(state),
+    providerSpecificHash(state),
+    "precondition: Core and provider hashes must differ for this test to be meaningful"
+  );
+
+  // Guard NOT configured with computeStateHash → uses engine.computeStateHash
+  // (which is stateSnapshotHash). This will not match the committed provider hash.
+  const guard = OxDeAIGuard(makeGuardConfig(auth, state));
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(ACTION, async () => { executed = true; }),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof OxDeAIAuthorizationError,
+        `expected OxDeAIAuthorizationError, got: ${Object.prototype.toString.call(err)}`
+      );
+      assert.ok(
+        err.message.includes("state_hash"),
+        `error message should mention state_hash, got: ${err.message}`
+      );
+      return true;
+    }
+  );
+  assert.ok(
+    !executed,
+    "execute must not be called when computeStateHash is not configured for a non-Core provider"
+  );
+});
+
+// ── SB-13: computeStateHash throws → OxDeAIAuthorizationError, execute blocked ──
+//
+// When config.computeStateHash throws for any reason, the guard must wrap the
+// exception in OxDeAIAuthorizationError and block execution — fail-closed.
+// The error message must clearly indicate that state hash computation failed.
+
+test("SB-13 custom computeStateHash throws: execution is blocked fail-closed (OxDeAIAuthorizationError)", async () => {
+  const state = makeBaseState();
+  const auth = signAuth({
+    auth_id: "sb13-auth",
+    audience: "aud-test",
+    state_hash: stateSnapshotHash(state),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  // computeStateHash always throws — simulates a broken or unavailable hash implementation.
+  const guard = OxDeAIGuard(makeGuardConfig(auth, state, {
+    computeStateHash: (_s) => {
+      throw new Error("hash backend unavailable");
+    },
+  }));
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(ACTION, async () => { executed = true; }),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof OxDeAIAuthorizationError,
+        `expected OxDeAIAuthorizationError, got: ${Object.prototype.toString.call(err)}`
+      );
+      assert.ok(
+        err.message.includes("canonicalization") || err.message.includes("State"),
+        `error message must indicate state hash computation failed, got: ${err.message}`
+      );
+      return true;
+    }
+  );
+  assert.ok(!executed, "execute must not be called when computeStateHash throws");
 });

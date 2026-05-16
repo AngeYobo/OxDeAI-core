@@ -376,15 +376,22 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     // The authorization artifact commits to the execution-time state snapshot
     // that the policy engine evaluated. Verify the current state matches.
     // Fail closed on mismatch, missing hash, or canonicalization failure.
+    //
+    // Hash strategy: config.computeStateHash takes precedence over
+    // config.engine.computeStateHash. Use config.computeStateHash when the
+    // authorization was produced by a provider with a different state
+    // canonicalization algorithm (e.g., Sift adapter: siftCanonicalJsonHash).
+    // Using the wrong strategy produces a deterministic mismatch — fail-closed.
     const expectedStateHash = (authorization as AuthorizationV1).state_hash;
     if (!expectedStateHash) {
       throw new OxDeAIAuthorizationError(
         "Authorization is missing state_hash. Execution blocked."
       );
     }
+    const computeHash = config.computeStateHash ?? ((s) => config.engine.computeStateHash(s));
     let actualStateHash: string;
     try {
-      actualStateHash = config.engine.computeStateHash(state);
+      actualStateHash = computeHash(state);
     } catch (err) {
       throw new OxDeAIAuthorizationError(
         `State canonicalization failed: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`

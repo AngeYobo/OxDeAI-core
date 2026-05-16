@@ -52,8 +52,10 @@ import {
   createInMemoryReplayStore,
 } from "@oxdeai/guard";
 import type { AuthorizationV1, KeySet } from "@oxdeai/core";
+import { sha256HexFromJson } from "@oxdeai/core";
 import { startTestHarness, type TestContext } from "./harness.js";
 import { fetchSiftReceipt } from "../apps/agent/client.js";
+import { siftCanonicalJsonHash } from "../shared/canonical.js";
 
 // ─── Test setup ───────────────────────────────────────────────────────────────
 
@@ -103,7 +105,7 @@ after(async () => {
 
 // ─── Helper: run the adapter and return raw Sift auth ────────────────────────
 
-async function adaptAllow(): Promise<{ rawAuth: AuthorizationV1; intent: unknown }> {
+async function adaptAllow(): Promise<{ rawAuth: AuthorizationV1; intent: unknown; state: unknown }> {
   const envelope = await fetchSiftReceipt(ctx.mockSiftUrl, "transfer");
   const result = await ctx.adapter.adapt({
     kidAndReceipt: envelope,
@@ -117,7 +119,7 @@ async function adaptAllow(): Promise<{ rawAuth: AuthorizationV1; intent: unknown
   // Core's verifyAuthorization accepts the Sift wire format natively:
   //   alg="ed25519" (lowercase), expires_at, base64url signature.
   const rawAuth = result.authorization as unknown as AuthorizationV1;
-  return { rawAuth, intent: result.intent };
+  return { rawAuth, intent: result.intent, state: result.state };
 }
 
 // ─── 1. ALLOW — raw Sift auth passes guard without any bridge ─────────────────
@@ -246,4 +248,79 @@ test("GUARD/BAD_ALG: unsupported alg 'EdDSA' is rejected (AUTH_ALG_UNSUPPORTED)"
     `Expected AUTH_ALG_UNSUPPORTED, got: ${result.body.reason}`
   );
   assert.equal(result.upstreamCalled, false, "Upstream must not be called on unsupported alg");
+});
+
+// ─── 7. STATE_HASH — documents the Sift adapter's state hash strategy ─────────
+//
+// The authorization artifact cryptographically binds state_hash via the Ed25519
+// signature (signature integrity — tested in GUARD/STATE_TAMPER above).
+//
+// In addition, the state_hash value is computed by a specific algorithm:
+//   Sift adapter: state_hash = siftCanonicalJsonHash(normalizedState)
+//
+// This section proves the algorithm contract and documents the requirement
+// for OxDeAIGuard integration: configure computeStateHash: siftCanonicalJsonHash
+// so that live-state semantic verification uses the same algorithm as the adapter.
+
+test("GUARD/STATE_HASH/CONTRACT: adapter computes state_hash using siftCanonicalJsonHash", async () => {
+  const { rawAuth, state } = await adaptAllow();
+
+  // The adapter commits state_hash = siftCanonicalJsonHash(normalizedState).
+  // Verify this is the exact algorithm.
+  const expected = siftCanonicalJsonHash(state);
+  assert.equal(
+    rawAuth.state_hash,
+    expected,
+    "adapter must use siftCanonicalJsonHash for state_hash binding"
+  );
+});
+
+test("GUARD/STATE_HASH/DETERMINISM: same state always produces the same state_hash", async () => {
+  const { rawAuth: auth1, state: state1 } = await adaptAllow();
+  const { rawAuth: auth2, state: state2 } = await adaptAllow();
+
+  // Both calls use the same TRANSFER_STATE → same normalized state → same hash.
+  assert.equal(
+    auth1.state_hash,
+    auth2.state_hash,
+    "state_hash must be deterministic for the same input state"
+  );
+  assert.equal(
+    siftCanonicalJsonHash(state1),
+    siftCanonicalJsonHash(state2),
+    "siftCanonicalJsonHash must be stable across calls with the same state"
+  );
+});
+
+test("GUARD/STATE_HASH/STRATEGY: correct strategy (siftCanonicalJsonHash) produces hash matching the auth commitment", async () => {
+  const { rawAuth, state } = await adaptAllow();
+
+  // Demonstrates that configuring computeStateHash: siftCanonicalJsonHash in
+  // OxDeAIGuard would produce the correct hash for state_hash verification.
+  const computedWithCorrectStrategy = siftCanonicalJsonHash(state);
+  assert.equal(
+    computedWithCorrectStrategy,
+    rawAuth.state_hash,
+    "computeStateHash: siftCanonicalJsonHash produces the hash that matches the authorization's state_hash"
+  );
+});
+
+test("GUARD/STATE_HASH/SIGNATURE_ONLY: createPepGatewayExecutor relies on signature integrity, not live-state re-verification", async () => {
+  // createPepGatewayExecutor verifies state_hash integrity via Ed25519 signature:
+  // tampering state_hash without re-signing produces AUTH_SIGNATURE_INVALID (proven in GUARD/STATE_TAMPER).
+  // It does NOT re-verify state_hash against live state (no state accessor at the gateway layer).
+  //
+  // For live-state semantic verification (re-computing hash against current state):
+  // use OxDeAIGuard with computeStateHash: siftCanonicalJsonHash configured.
+  // Without this option, OxDeAIGuard would use engine.computeStateHash (Core algorithm),
+  // which produces a different value than siftCanonicalJsonHash — execution would be blocked.
+  //
+  // This test documents the boundary: signature integrity ≠ live-state semantic verification.
+  const { rawAuth, intent } = await adaptAllow();
+  const result = await executeThroughPep({ action: intent, authorization: rawAuth });
+
+  assert.equal(result.status, 200,
+    "createPepGatewayExecutor accepts Sift auth when signature is valid — state_hash integrity is signature-protected"
+  );
+  assert.ok(result.upstreamCalled, "upstream must be called when auth passes all gateway checks");
 });
