@@ -5,106 +5,55 @@
  * Proves that the Sift adapter's receipt verification, intent normalization,
  * state normalization, and authorization construction produce output that is
  * accepted and rejected correctly by the real @oxdeai/guard enforcement path
- * (createPepGatewayExecutor).
+ * (createPepGatewayExecutor) WITHOUT any bridge re-signing.
  *
- * ── Format bridge (documented mismatches) ─────────────────────────────────────
+ * ── Wire format compatibility (documented, no bridge required) ────────────────
  *
  * The Sift adapter's AuthorizationV1Payload and packages/guard's AuthorizationV1
- * have the following structural differences that require an explicit bridge:
+ * have structural differences that packages/core's verifyAuthorization accepts
+ * natively as of the Sift wire format compatibility update:
  *
  *   1. Algorithm casing:
  *        Sift produces: signature.alg = "ed25519" (lowercase, Sift protocol)
- *        Core expects:  signature.alg = "Ed25519" (capitalized)
- *        Impact: Core's verifyAuthorization rejects "ed25519" as AUTH_ALG_UNSUPPORTED.
- *        Bridge: re-sign with Core's signEd25519 (domain-prefixed, "Ed25519" alg).
- *        This bridge is required until the Sift protocol and Core converge on casing.
+ *        Core accepts:  "Ed25519" or "ed25519" — both route to Ed25519 verification.
  *
  *   2. Expiry field name:
  *        Sift produces: expires_at: number
- *        Core expects:  expiry: number
- *        Bridge: add expiry = expires_at; keep expires_at for audit continuity.
+ *        Core accepts:  expiry (primary) or expires_at (fallback)
  *
- *   3. Intent hash computation:
- *        Sift adapter: siftCanonicalJsonHash(siftIntent) over {type, tool, params}
- *        Core default: sha256HexFromJson(action) over the same object
- *        For ASCII-only content: both produce identical SHA-256 digests.
- *        No custom hashAction is required for the reference example's ASCII params.
+ *   3. Signature encoding:
+ *        Sift produces: base64url-encoded signature bytes
+ *        Core accepts:  base64 or base64url (detected by presence of '-' or '_')
  *
- *   4. State hash binding:
+ *   4. Signing preimage:
+ *        Sift adapter: siftCanonicalJsonBytes(signingPayload) — sorted-keys JSON, ASCII
+ *        Core fallback: verifyEd25519Raw uses canonicalJson(payload) — same bytes for ASCII
+ *        For ASCII-only content both produce identical SHA-256 digests.
+ *
+ *   5. State hash binding:
  *        createPepGatewayExecutor does not re-verify state_hash against a live
  *        state snapshot; it is protected by the Ed25519 signature on the
- *        authorization (tampering the hash breaks the signature). This is by design:
- *        state_hash re-verification against live state is the responsibility of
- *        OxDeAIGuard (the guard function), which requires a full PolicyEngine setup.
+ *        authorization (tampering the hash breaks the signature). This is by design.
  *
  * ── Test matrix ──────────────────────────────────────────────────────────────
- *   ALLOW            — ALLOW receipt → adapter → bridge → guard → execution
+ *   ALLOW            — ALLOW receipt → adapter → guard → execution (no bridge)
  *   DENY             — DENY receipt → adapter blocks; guard never called
  *   INTENT_MISMATCH  — valid auth, tampered action → INTENT_HASH_MISMATCH
  *   STATE_TAMPER     — valid auth with state_hash tampered → AUTH_SIGNATURE_INVALID
  *   REPLAY           — same auth used twice → AUTH_REPLAY on second call
+ *   BAD_ALG          — unsupported alg "EdDSA" is rejected (AUTH_ALG_UNSUPPORTED)
  */
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createPublicKey } from "node:crypto";
-import type { KeyObject } from "node:crypto";
 import {
   createPepGatewayExecutor,
   createInMemoryReplayStore,
 } from "@oxdeai/guard";
-import {
-  signEd25519,
-  SIGNING_DOMAINS,
-} from "@oxdeai/core";
 import type { AuthorizationV1, KeySet } from "@oxdeai/core";
 import { startTestHarness, type TestContext } from "./harness.js";
 import { fetchSiftReceipt } from "../apps/agent/client.js";
-import type { AuthorizationV1Payload } from "../shared/types.js";
-
-// ─── Format bridge ────────────────────────────────────────────────────────────
-
-/**
- * Converts a Sift adapter AuthorizationV1Payload to a Core AuthorizationV1.
- *
- * This bridge is required because:
- *   - Sift uses alg "ed25519" (lowercase); Core requires "Ed25519" (capitalized).
- *   - Changing the alg string changes the signing payload bytes, so the
- *     original Sift signature becomes invalid for Core's verifier.
- *   - Resolution: re-sign with Core's signEd25519 using the same adapter key.
- *
- * The resulting authorization retains all semantic bindings from the Sift
- * adapter (same auth_id, intent_hash, state_hash, policy_id, audience, issuer,
- * expiry) but uses Core's signing convention.
- */
-function siftAuthToCoreAuth(
-  siftAuth: AuthorizationV1Payload,
-  adapterPrivateKey: KeyObject
-): AuthorizationV1 {
-  const privateKeyPem = adapterPrivateKey
-    .export({ type: "pkcs8", format: "pem" })
-    .toString();
-
-  // Build the unsigned core-format auth. Uses flat alg/kid (no nested sig object).
-  // Core's AuthorizationV1 uses 'expiry', not 'expires_at'.
-  const unsigned: Omit<AuthorizationV1, "signature"> = {
-    auth_id: siftAuth.auth_id,
-    issuer: siftAuth.issuer,
-    audience: siftAuth.audience,
-    decision: "ALLOW",
-    intent_hash: siftAuth.intent_hash,
-    state_hash: siftAuth.state_hash,
-    policy_id: siftAuth.policy_id,
-    issued_at: siftAuth.issued_at,
-    expiry: siftAuth.expires_at,  // bridge: Core uses 'expiry', Sift uses 'expires_at'
-    alg: "Ed25519",               // bridge: Core requires capitalized 'Ed25519'
-    kid: siftAuth.signature.kid,
-  };
-
-  // Re-sign using Core's domain-prefixed Ed25519 (OXDEAI_AUTH_V1\n + payload).
-  const signature = signEd25519(SIGNING_DOMAINS.AUTH_V1, unsigned, privateKeyPem);
-  return { ...unsigned, signature };
-}
 
 // ─── Test setup ───────────────────────────────────────────────────────────────
 
@@ -152,9 +101,9 @@ after(async () => {
   await ctx.close();
 });
 
-// ─── Helper: run the adapter ──────────────────────────────────────────────────
+// ─── Helper: run the adapter and return raw Sift auth ────────────────────────
 
-async function adaptAllow(): Promise<{ siftAuth: AuthorizationV1Payload; coreAuth: AuthorizationV1; intent: unknown }> {
+async function adaptAllow(): Promise<{ rawAuth: AuthorizationV1; intent: unknown }> {
   const envelope = await fetchSiftReceipt(ctx.mockSiftUrl, "transfer");
   const result = await ctx.adapter.adapt({
     kidAndReceipt: envelope,
@@ -164,16 +113,19 @@ async function adaptAllow(): Promise<{ siftAuth: AuthorizationV1Payload; coreAut
   assert.ok(result.ok, `Adapter must succeed: ${!result.ok ? `${result.code}: ${result.message}` : ""}`);
   if (!result.ok) throw new Error("adapter failed");
 
-  const coreAuth = siftAuthToCoreAuth(result.authorization, ctx.adapterPrivateKey);
-  return { siftAuth: result.authorization, coreAuth, intent: result.intent };
+  // Cast raw Sift adapter output directly to AuthorizationV1 — no bridge re-signing.
+  // Core's verifyAuthorization accepts the Sift wire format natively:
+  //   alg="ed25519" (lowercase), expires_at, base64url signature.
+  const rawAuth = result.authorization as unknown as AuthorizationV1;
+  return { rawAuth, intent: result.intent };
 }
 
-// ─── 1. ALLOW — full Sift → adapter → bridge → guard path ────────────────────
+// ─── 1. ALLOW — raw Sift auth passes guard without any bridge ─────────────────
 
-test("GUARD/ALLOW: Sift receipt → adapter → bridge → guard → execution succeeds", async () => {
-  const { coreAuth, intent } = await adaptAllow();
+test("GUARD/ALLOW: Sift receipt → adapter → guard → execution succeeds (no bridge)", async () => {
+  const { rawAuth, intent } = await adaptAllow();
 
-  const result = await executeThroughPep({ action: intent, authorization: coreAuth });
+  const result = await executeThroughPep({ action: intent, authorization: rawAuth });
 
   assert.equal(result.status, 200, `Guard must allow valid authorization — got ${result.status}: ${result.body.reason ?? ""}`);
   assert.ok(result.body.ok, "Response body must have ok: true");
@@ -200,13 +152,13 @@ test("GUARD/DENY: Sift DENY receipt is rejected by the adapter; guard is never r
 // ─── 3. INTENT_MISMATCH — tampered action produces hash mismatch ──────────────
 
 test("GUARD/INTENT_MISMATCH: tampered action is rejected (intent_hash does not match)", async () => {
-  const { coreAuth } = await adaptAllow();
+  const { rawAuth } = await adaptAllow();
 
   // Provide a different action — the authorization's intent_hash was computed
   // over the original intent; this tampered version produces a different hash.
   const tamperedAction = { type: "EXECUTE", tool: "transfer", params: { amount: 999_999, destination: "attacker_account" } };
 
-  const result = await executeThroughPep({ action: tamperedAction, authorization: coreAuth });
+  const result = await executeThroughPep({ action: tamperedAction, authorization: rawAuth });
 
   assert.equal(result.status, 403, `Tampered action must return 403 — got ${result.status}`);
   assert.ok(
@@ -219,13 +171,13 @@ test("GUARD/INTENT_MISMATCH: tampered action is rejected (intent_hash does not m
 // ─── 4. STATE_TAMPER — modified state_hash breaks the signature ───────────────
 
 test("GUARD/STATE_TAMPER: tampered state_hash invalidates signature (AUTH_SIGNATURE_INVALID)", async () => {
-  const { coreAuth, intent } = await adaptAllow();
+  const { rawAuth, intent } = await adaptAllow();
 
   // Tamper the state_hash field without re-signing.
   // The signature was computed over the original state_hash; modifying it
   // produces a mismatch that Core's signature verifier catches.
   const tamperedAuth: AuthorizationV1 = {
-    ...coreAuth,
+    ...rawAuth,
     state_hash: "a".repeat(64),  // forged hash — same length, different value
   };
 
@@ -253,14 +205,14 @@ test("GUARD/REPLAY: same authorization is rejected on second use (AUTH_REPLAY)",
     executeUpstream: async () => ({ status: 200, body: { ok: true, executed: true } }),
   });
 
-  const { coreAuth, intent } = await adaptAllow();
+  const { rawAuth, intent } = await adaptAllow();
 
   // First use — must succeed.
-  const first = await freshExecutor({ action: intent, authorization: coreAuth });
+  const first = await freshExecutor({ action: intent, authorization: rawAuth });
   assert.equal(first.status, 200, `First use must succeed — got ${first.status}`);
 
   // Second use with the SAME authorization — must be rejected.
-  const second = await freshExecutor({ action: intent, authorization: coreAuth });
+  const second = await freshExecutor({ action: intent, authorization: rawAuth });
   assert.equal(second.status, 403, `Replay must return 403 — got ${second.status}`);
   assert.ok(
     second.body.reason?.includes("AUTH_REPLAY"),
@@ -269,27 +221,29 @@ test("GUARD/REPLAY: same authorization is rejected on second use (AUTH_REPLAY)",
   assert.equal(second.upstreamCalled, false, "Upstream must not be called on replay");
 });
 
-// ─── 6. Raw Sift auth rejected — documents the alg casing mismatch ───────────
+// ─── 6. BAD_ALG — genuinely unsupported algorithm is still rejected ───────────
 
-test("GUARD/FORMAT: raw Sift adapter output fails Core verification (AUTH_ALG_UNSUPPORTED)", async () => {
-  const envelope = await fetchSiftReceipt(ctx.mockSiftUrl, "transfer");
-  const result = await ctx.adapter.adapt({
-    kidAndReceipt: envelope,
-    params: TRANSFER_PARAMS,
-    state: TRANSFER_STATE,
-  });
-  assert.ok(result.ok, "Adapter must succeed");
-  if (!result.ok) return;
+test("GUARD/BAD_ALG: unsupported alg 'EdDSA' is rejected (AUTH_ALG_UNSUPPORTED)", async () => {
+  const { rawAuth, intent } = await adaptAllow();
 
-  // Pass the raw Sift auth WITHOUT the bridge. Core's verifyAuthorization
-  // receives alg="ed25519" (lowercase) and rejects it as AUTH_ALG_UNSUPPORTED
-  // because it expects "Ed25519" (capitalized).
-  const rawSiftAuth = result.authorization as unknown as AuthorizationV1;
-  const pepResult = await executeThroughPep({ action: result.intent, authorization: rawSiftAuth });
+  // Inject an unsupported alg into the nested signature object.
+  // This documents that the acceptance of "ed25519" is specific and deliberate —
+  // arbitrary unknown alg strings are still rejected.
+  // Cast through unknown: "EdDSA" is intentionally outside AuthorizationV1's alg union.
+  const badAlgAuth = {
+    ...(rawAuth as unknown as Record<string, unknown>),
+    signature: {
+      ...(rawAuth.signature as unknown as Record<string, unknown>),
+      alg: "EdDSA",
+    },
+  } as unknown as AuthorizationV1;
 
-  assert.equal(pepResult.status, 403, `Raw Sift auth must be rejected — got ${pepResult.status}`);
+  const result = await executeThroughPep({ action: intent, authorization: badAlgAuth });
+
+  assert.equal(result.status, 403, `Unsupported alg must return 403 — got ${result.status}`);
   assert.ok(
-    pepResult.body.reason?.includes("AUTH_ALG_UNSUPPORTED"),
-    `Expected AUTH_ALG_UNSUPPORTED (alg casing mismatch), got: ${pepResult.body.reason}`
+    result.body.reason?.includes("AUTH_ALG_UNSUPPORTED"),
+    `Expected AUTH_ALG_UNSUPPORTED, got: ${result.body.reason}`
   );
+  assert.equal(result.upstreamCalled, false, "Upstream must not be called on unsupported alg");
 });
