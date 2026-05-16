@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "vectors": [
     {
       "id": "authorization-verify-001",
@@ -229,6 +229,59 @@
           {
             "code": "AUTH_POLICY_ID_MISMATCH",
             "message": "policy_id does not match expectedPolicyId"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authorization-verify-009",
+      "description": "Sift-compatible encoding: expires_at accepted as expiry fallback (structural check, no signature)",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expires_at": 160
+        },
+        "opts": {
+          "now": 120
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "authorization-verify-010",
+      "description": "Sift-compatible encoding: expires_at expiry boundary enforced",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 100,
+          "expires_at": 120
+        },
+        "opts": {
+          "now": 120
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_EXPIRED",
+            "message": "authorization has expired"
           }
         ]
       }
