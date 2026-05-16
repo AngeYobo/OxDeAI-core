@@ -229,6 +229,12 @@ importers:
 
   examples/reference-sift-oxdeai:
     dependencies:
+      '@oxdeai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@oxdeai/guard':
+        specifier: workspace:*
+        version: link:../../packages/guard
       '@oxdeai/sift':
         specifier: workspace:*
         version: link:../../packages/sift
