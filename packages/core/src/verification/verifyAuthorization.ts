@@ -56,13 +56,22 @@ function signatureParts(auth: AuthorizationV1): { alg?: string; kid?: string; si
   };
 }
 
+function decodeSignatureBytes(encoded: string): Buffer {
+  // Accept base64url (RFC 4648 §5) alongside standard base64.
+  // Buffer.from(str, "base64") silently ignores '-' and '_', producing wrong bytes.
+  if (encoded.includes("-") || encoded.includes("_")) {
+    return Buffer.from(encoded, "base64url");
+  }
+  return Buffer.from(encoded, "base64");
+}
+
 function verifyEd25519Raw(payload: unknown, signatureBase64: string, publicKeyPem: string): boolean {
   try {
     return nodeVerify(
       null,
       Buffer.from(canonicalJson(payload), "utf8"),
       publicKeyPem,
-      Buffer.from(signatureBase64, "base64")
+      decodeSignatureBytes(signatureBase64)
     );
   } catch {
     return false;
@@ -170,9 +179,15 @@ export function verifyAuthorization(
     violations.push({ code: "AUTH_MISSING_FIELD", message: "signature is required" });
   }
 
-  if (!Number.isInteger(auth.expiry)) {
+  // Accept 'expires_at' (Sift wire format) as a fallback when 'expiry' is absent.
+  const effectiveExpiry = Number.isInteger(auth.expiry)
+    ? auth.expiry
+    : Number.isInteger((auth as Record<string, unknown>)["expires_at"] as number)
+    ? (auth as Record<string, unknown>)["expires_at"] as number
+    : undefined;
+  if (!Number.isInteger(effectiveExpiry)) {
     violations.push({ code: "AUTH_MISSING_FIELD", message: "expiry must be integer unix seconds" });
-  } else if (now >= auth.expiry) {
+  } else if (now >= (effectiveExpiry as number)) {
     violations.push({ code: "AUTH_EXPIRED", message: "authorization has expired" });
   }
 
@@ -211,7 +226,7 @@ export function verifyAuthorization(
     const sigAlg = sig.alg as string;
     const sigKid = sig.kid as string;
     const sigValue = sig.sig as string;
-    if (sigAlg === "Ed25519") {
+    if (sigAlg === "Ed25519" || sigAlg === "ed25519") {
       if (trusted.length === 0) {
         if (requireSig) {
           violations.push({ code: "AUTH_TRUST_MISSING", message: "trustedKeySets required for Ed25519 verification" });
