@@ -1138,6 +1138,175 @@ function validateAuditVerificationVectors(ctx: CheckCtx, adapter: ConformanceAda
   }
 }
 
+// ── Profile C: Semantic State Verification ────────────────────────────────────
+//
+// Tests the guard's step 10 behavior: computeStateHash(liveState) must equal
+// authorization.state_hash. Two hash strategies are modelled:
+//   "core"     — sha256HexFromJson (standard OxDeAI; matches stateSnapshotHash for flat objects)
+//   "provider" — SHA-256 of "PROVIDER:" + canonicalJson (simulates an external provider
+//                algorithm such as siftCanonicalJsonHash; distinct from "core")
+//   "throws"   — always throws (models a broken or unavailable hash implementation)
+//
+// Encoding B vectors additionally exercise full Profile C: Sift-compatible wire format
+// (alg="ed25519", expires_at, base64url sig) + live-state semantic verification.
+
+function profileCCoreHash(state: unknown): string {
+  return sha256HexFromJson(state as Record<string, unknown>);
+}
+
+function profileCProviderHash(state: unknown): string {
+  // Deterministic but distinct from coreHash — simulates an external provider algorithm.
+  return createHash("sha256")
+    .update("PROVIDER:" + canonicalJson(state), "utf8")
+    .digest("hex");
+}
+
+function profileCGetHashFn(strategy: string): (s: unknown) => string {
+  if (strategy === "core")     return profileCCoreHash;
+  if (strategy === "provider") return profileCProviderHash;
+  if (strategy === "throws")   return (_s: unknown) => { throw new Error("hash backend unavailable"); };
+  throw new Error(`unknown hash_strategy: ${strategy}`);
+}
+
+function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
+  const file = loadJson<VectorFile>("profile-c-state-verification.json");
+  const now = 1_730_000_000;
+
+  for (const v of file.vectors) {
+    const id    = String(v.id);
+    const mode  = String(v.mode);
+    const expected = asRecord(v.expected);
+    const expectedStatus = String(expected.status);
+
+    // ── Pure state-hash comparison modes ─────────────────────────────────────
+    // These modes test the semantic comparison (step 10) in isolation.
+    // They do not involve a real AuthorizationV1 artifact — they model the
+    // guard's computeStateHash(liveState) == authorization.state_hash logic.
+    if (mode === "live-state-match"    ||
+        mode === "live-state-mismatch" ||
+        mode === "hash-strategy-mismatch" ||
+        mode === "toctou-stale-state") {
+
+      const stateInput     = v.state_input;
+      const liveStateInput = (v.live_state_input ?? v.state_input);
+      const signingStrategy = String((v.signing_strategy ?? v.hash_strategy) ?? "core");
+      const verifyStrategy  = String((v.verify_strategy  ?? v.hash_strategy) ?? "core");
+
+      const signingHashFn = profileCGetHashFn(signingStrategy);
+      const committedHash  = signingHashFn(stateInput);
+
+      let liveHash: string | undefined;
+      let threw = false;
+      try {
+        liveHash = profileCGetHashFn(verifyStrategy)(liveStateInput);
+      } catch {
+        threw = true;
+      }
+
+      if (threw) {
+        eq(ctx, `${id} outcome`, "compute-error", expectedStatus);
+      } else if (liveHash === committedHash) {
+        eq(ctx, `${id} outcome`, "ok",                expectedStatus);
+      } else {
+        eq(ctx, `${id} outcome`, "state-hash-mismatch", expectedStatus);
+      }
+      continue;
+    }
+
+    // ── compute-throws mode ───────────────────────────────────────────────────
+    if (mode === "compute-throws") {
+      let threw = false;
+      try {
+        profileCGetHashFn("throws")(null);
+      } catch {
+        threw = true;
+      }
+      eq(ctx, `${id} throws`, threw, true);
+      eq(ctx, `${id} outcome`, threw ? "compute-error" : "ok", expectedStatus);
+      continue;
+    }
+
+    // ── Encoding B modes ──────────────────────────────────────────────────────
+    // These build a real Sift-compatible (Encoding B) AuthorizationV1 artifact
+    // with state_hash = signingHashFn(state_input), verify the signature
+    // (exercising the ed25519/expires_at/base64url path), then simulate
+    // Profile C step 10: computeStateHash(live_state_input) == authorization.state_hash.
+    if (mode === "encoding-b-live-state-match"    ||
+        mode === "encoding-b-live-state-mismatch" ||
+        mode === "encoding-b-hash-strategy-mismatch") {
+
+      const stateInput      = v.state_input;
+      const liveStateInput  = (v.live_state_input ?? v.state_input);
+      const signingStrategy = String((v.signing_strategy ?? v.hash_strategy) ?? "provider");
+      const verifyStrategy  = String((v.verify_strategy  ?? v.hash_strategy) ?? "provider");
+
+      const committedHash = profileCGetHashFn(signingStrategy)(stateInput);
+
+      // Build a real Encoding B authorization with the computed state_hash.
+      const unsigned: Record<string, unknown> = {
+        auth_id:     "c".repeat(64),
+        issuer:      "oxdeai.policy-engine",
+        audience:    "merchant-gateway",
+        intent_hash: "a".repeat(64),
+        state_hash:  committedHash,
+        policy_id:   "c".repeat(64),
+        decision:    "ALLOW",
+        issued_at:   now,
+        expires_at:  now + 60,
+        signature:   { alg: "ed25519", kid: "2026-01" },
+      };
+      const preimage = Buffer.from(canonicalJson(unsigned), "utf8");
+      const sigBytes = nodeSign(
+        null,
+        preimage,
+        TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION
+      );
+      const auth = {
+        ...unsigned,
+        signature: { alg: "ed25519", kid: "2026-01", sig: sigBytes.toString("base64url") },
+      } as unknown as AuthorizationV1;
+
+      // Step 1: signature + audience + expiry (Profile B checks via verifyAuthorization).
+      const sigResult = adapter.verifyAuthorization(auth, {
+        now:                          now + 10,
+        expectedIssuer:               "oxdeai.policy-engine",
+        expectedAudience:             "merchant-gateway",
+        trustedKeySets:               TEST_KEYSET,
+        requireSignatureVerification: true,
+        consumedAuthIds:              [],
+      });
+
+      if (sigResult.status !== "ok") {
+        fail(ctx, `${id} signature: expected ok, got ${sigResult.status} — ${JSON.stringify(sigResult.violations)}`);
+        continue;
+      }
+      pass(ctx, `${id} signature`);
+
+      // Step 2: semantic state verification (Profile C step 10).
+      let liveHash: string | undefined;
+      let threw = false;
+      try {
+        liveHash = profileCGetHashFn(verifyStrategy)(liveStateInput);
+      } catch {
+        threw = true;
+      }
+
+      let outcome: string;
+      if (threw) {
+        outcome = "compute-error";
+      } else if (liveHash === committedHash) {
+        outcome = "ok";
+      } else {
+        outcome = "state-hash-mismatch";
+      }
+      eq(ctx, `${id} outcome`, outcome, expectedStatus);
+      continue;
+    }
+
+    fail(ctx, `${id}: unknown mode "${mode}"`);
+  }
+}
+
 function main(): void {
   const ctx: CheckCtx = { failures: [], passed: 0 };
   const adapter = coreAdapter;
@@ -1157,6 +1326,7 @@ function main(): void {
   validateDelegationVerificationVectors(ctx);
   validateDelegationChainVectors(ctx);
   validateDelegationSignatureVectors(ctx);
+  validateProfileCStateVerificationVectors(ctx, adapter);
 
   if (ctx.failures.length > 0) {
     console.error(`\nConformance failed: ${ctx.failures.length} assertion(s)`);
