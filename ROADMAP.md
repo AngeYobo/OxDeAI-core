@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** 2026-04-07
+**Last updated:** 2026-05-17
 
 ---
 
@@ -11,6 +11,22 @@ OxDeAI is an **execution authorization boundary** for autonomous systems.
 Core invariant:
 
 > **No valid authorization → no execution path**
+
+---
+
+## Protocol Maturity
+
+```
+implementation → interoperable protocol → executable interoperability
+```
+
+OxDeAI now specifies:
+
+* accepted wire encodings for external provider interoperability (Encoding A, Encoding B)
+* an interoperability profile (Profile A / B / C) with executable conformance coverage
+* formal threat model, key lifecycle, and replay-store TTL alignment documentation
+
+This reflects maturity at the **interoperable protocol** layer - not standard adoption.
 
 ---
 
@@ -43,7 +59,7 @@ Core invariant:
 
 * build: pass
 * tests: pass
-* conformance: pass (`139 assertions`)
+* conformance: pass (`161 assertions`)
 * adapters: pass (`6/6`)
 * vectors: pass (TS / Go / Python)
 
@@ -182,13 +198,29 @@ Turn OxDeAI into a **deployable infra boundary**, not just a protocol.
 * cross-language determinism
 * non-bypassable execution demo
 
+#### Interoperability Hardening (completed)
+
+* external provider wire encoding specification
+  * Encoding A - Core-native (`"Ed25519"`, `expiry`, domain-prefixed preimage)
+  * Encoding B - external provider-compatible (`"ed25519"`, `expires_at`, base64url signature)
+* durable replay semantics with formal TTL alignment rules (`computeTtl = max(1, expiry − now)`)
+* pluggable `computeStateHash` in `OxDeAIGuard` (fail-closed on exception)
+* external provider interoperability profile
+  * Profile A - Core-native `AuthorizationV1`
+  * Profile B - external provider wire-compatible
+  * Profile C - full semantic state verification
+* Profile C executable conformance vectors (12 assertions; 161 total)
+* external provider threat model (12 threat scenarios, T-1 through T-12)
+* key custody and rotation guide (8 compromise scenarios, KC-1 through KC-8)
+* replay-store TTL alignment guide (10 failure scenarios, RT-1 through RT-10)
+
 ---
 
 ### In Progress
 
-* failure playbooks (real-world scenarios)
 * infra-native enforcement patterns
 * external-builder quickstarts (<10 min)
+* failure playbooks (real-world scenarios)
 * adapter stress testing
 * structured decision events
 
@@ -261,6 +293,10 @@ POST /payments/charge
 * adapters + ecosystem
 * delegated authorization
 * conformance + proof
+* external provider interoperability hardening
+  * wire encoding specification (Encoding A, Encoding B)
+  * interoperability profiles (A / B / C) with executable conformance (161 assertions)
+  * threat model, key lifecycle, replay-store TTL alignment
 
 ## In Progress
 
@@ -273,6 +309,22 @@ POST /payments/charge
 
 * HTTP integrations
 * verifiable execution infrastructure
+
+---
+
+---
+
+# Architecture Documentation
+
+## Specification
+
+* [External Provider Interoperability Profile](docs/spec/interoperability/external-provider-profile.md) - Profile A / B / C, accepted wire encodings, interoperability matrix, fail-closed rules
+
+## Architecture Guides
+
+* [Threat Model: External Authorization Providers](docs/architecture/threat-model-external-providers.md) - trust boundaries, T-1 through T-12 threat scenarios
+* [Key Custody and Rotation](docs/architecture/key-custody-and-rotation.md) - key lifecycle, KC-1 through KC-8 compromise scenarios, operational checklist
+* [Replay-Store TTL Alignment](docs/architecture/replay-store-ttl-alignment.md) - formal TTL rules, RT-1 through RT-10 failure scenarios, store implementation guidance
 
 ---
 
