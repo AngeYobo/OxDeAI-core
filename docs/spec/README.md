@@ -37,6 +37,10 @@ Execution is only reachable if authorization is verified.
 - conformance-v1
 - test-vectors-v1
 
+### Interoperability
+
+- external-provider-profile
+
 ---
 
 ## Guarantees
