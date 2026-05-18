@@ -75,7 +75,23 @@ Ten vectors covering:
 | `key-lifecycle-009` | `key-revoked-valid-window` | `AUTH_KEY_INACTIVE` — revocation overrides valid time window |
 | `key-lifecycle-010` | `wrong-kid-known-issuer` | `AUTH_KID_UNKNOWN` — correct issuer, unknown kid |
 
-Current validator assertion count: `181`.
+### Clock Semantics (v1.5+)
+
+- `clock-semantics-verification.json` — exercises strict zero-tolerance expiry enforcement (`now < expiry`) and `issued_at` informational-only semantics for both wire encodings.
+
+Five vectors covering:
+
+| Vector | Mode | Expected outcome |
+|--------|------|-----------------|
+| `clock-001` | `last-valid-second` | `ok` — `now = expiry - 1`, last valid second |
+| `clock-002` | `one-past-expiry` | `AUTH_EXPIRED` — `now = expiry + 1`, no grace period |
+| `clock-003` | `verifier-clock-behind` | `ok` — `now < issued_at`, `issued_at` not enforced as lower bound |
+| `clock-004` | `encoding-b-last-valid-second` | `ok` — Encoding B (`expires_at`), `now = expires_at - 1` |
+| `clock-005` | `encoding-b-verifier-clock-behind` | `ok` — Encoding B, `now < issued_at` |
+
+Clock model: **strict zero tolerance**. Valid iff `now < expiry`. No skew parameter, no grace period. Issuers must build delivery latency into the expiry window. See `authorization-v1.md §17`.
+
+Current validator assertion count: `191`.
 
 ### Adapter ops required for DelegationV1
 
@@ -104,6 +120,7 @@ compatibility but not used by the harness runners.
 | `delegation-chain-verification.json` | Chain structural checks (hash binding, delegator, expiry ceiling, policy) | Yes - independently recomputed |
 | `delegation-signature-verification.json` | Ed25519 verification path | Yes - independently verified |
 | `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes — portable across any `verifyAuthorization` implementation |
+| `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | Yes — portable; no crypto required |
 | `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (requires `computeStateHash` integration) |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
 | `guard.delegation.property.test.ts` (G-D1–G-D3) | Guard PEP delegation path | TypeScript only |
@@ -164,6 +181,8 @@ OxDeAI defines three interoperability profiles. Conformance coverage maps direct
 Profile C now has **executable conformance coverage** via `profile-c-state-verification.json` (12 assertions).
 
 Key lifecycle enforcement (Profile A/B/C) is covered by `key-lifecycle-verification.json` (20 assertions): active, revoked, retired (within/past window), `not_before`/`not_after` time windows, and wrong-kid rejection.
+
+Clock semantics (all profiles) are covered by `clock-semantics-verification.json` (10 assertions): strict zero-tolerance expiry, `issued_at` informational-only, Encoding A and Encoding B boundary pins.
 
 See [External Provider Interoperability Profile](../../docs/spec/interoperability/external-provider-profile.md) for the full profile specification, wire encoding reference, and fail-closed rules.
 

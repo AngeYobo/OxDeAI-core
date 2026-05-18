@@ -1,0 +1,136 @@
+{
+  "version": "1.0.0",
+  "description": "Clock semantics conformance vectors for AuthorizationV1. Exercises strict zero-tolerance expiry enforcement (now < expiry) and issued_at informational-only behavior. CS_ISSUED_AT = 1730000000, CS_EXPIRY = 1730000300 (5-minute validity window).",
+  "vectors": [
+    {
+      "id": "clock-001",
+      "description": "Last valid second: now = expiry - 1. Authorization valid while now < expiry. Expected: ok.",
+      "mode": "last-valid-second",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 1730000000,
+          "expiry": 1730000300
+        },
+        "opts": {
+          "now": 1730000299
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "clock-002",
+      "description": "One second past expiry: now = expiry + 1. Strict zero-tolerance — no grace period. Expected: AUTH_EXPIRED.",
+      "mode": "one-past-expiry",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 1730000000,
+          "expiry": 1730000300
+        },
+        "opts": {
+          "now": 1730000301
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_EXPIRED",
+            "message": "authorization has expired"
+          }
+        ]
+      }
+    },
+    {
+      "id": "clock-003",
+      "description": "Verifier clock behind issuer: now < issued_at. issued_at is informational — the verifier does NOT enforce it as a lower bound on now. Expected: ok.",
+      "mode": "verifier-clock-behind",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 1730000000,
+          "expiry": 1730000300
+        },
+        "opts": {
+          "now": 1729999990
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "clock-004",
+      "description": "Encoding B (expires_at): last valid second. now = expires_at - 1. Strict zero-tolerance applies equally to both expiry field names. Expected: ok.",
+      "mode": "encoding-b-last-valid-second",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 1730000000,
+          "expires_at": 1730000300
+        },
+        "opts": {
+          "now": 1730000299
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "clock-005",
+      "description": "Encoding B (expires_at): verifier clock behind issuer. now < issued_at. issued_at is informational in both encodings. Expected: ok.",
+      "mode": "encoding-b-verifier-clock-behind",
+      "input": {
+        "auth": {
+          "auth_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "issuer": "oxdeai.policy-engine",
+          "audience": "merchant-gateway",
+          "intent_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "state_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "policy_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "decision": "ALLOW",
+          "issued_at": 1730000000,
+          "expires_at": 1730000300
+        },
+        "opts": {
+          "now": 1729999990
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    }
+  ]
+}
