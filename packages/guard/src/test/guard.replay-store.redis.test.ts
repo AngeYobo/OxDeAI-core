@@ -331,7 +331,7 @@ test("RS-R7 Redis error in consumeDelegationId: throws OxDeAIAuthorizationError 
 
   let executed = false;
   await assert.rejects(
-    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /[Rr]eplay store unavailable/);

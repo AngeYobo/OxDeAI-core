@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Authorization, AuthorizationV1, Intent, KeySet } from "@oxdeai/core";
+import type { Authorization, AuthorizationV1, DelegationScope, Intent, KeySet } from "@oxdeai/core";
 import { verifyDelegationChain, verifyAuthorization as strictVerifyAuthorization, intentHash } from "@oxdeai/core";
 import type { OxDeAIGuardConfig, ProposedAction, GuardDecisionRecord, GuardCallOptions } from "./types.js";
 import { defaultNormalizeAction } from "./normalizeAction.js";
@@ -15,6 +15,18 @@ import {
 } from "./errors.js";
 
 // ── validation ────────────────────────────────────────────────────────────────
+
+function isValidDelegationScope(scope: unknown): scope is DelegationScope {
+  if (scope === null || scope === undefined || typeof scope !== "object" || Array.isArray(scope)) {
+    return false;
+  }
+  const s = scope as Record<string, unknown>;
+  if (s.tools !== undefined && !Array.isArray(s.tools)) return false;
+  if (s.max_amount !== undefined && typeof s.max_amount !== "bigint") return false;
+  if (s.max_actions !== undefined && typeof s.max_actions !== "number") return false;
+  if (s.max_depth !== undefined && typeof s.max_depth !== "number") return false;
+  return true;
+}
 
 function validateConfig(config: OxDeAIGuardConfig): void {
   if (!config || typeof config !== "object") {
@@ -179,11 +191,11 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       //   - delegation signature (if trustedKeySets provided)
       //   - scope narrowing against parent (enforced via parentScope)
       //
-      // Derive parentScope from parentAuth; if not present, fail closed.
-      const parentScope = (parentAuth as any).scope;
-      if (!parentScope) {
+      // Validate parentScope before chain verification. Fail closed on missing or malformed scope.
+      const { parentScope } = opts.delegation;
+      if (!isValidDelegationScope(parentScope)) {
         throw new OxDeAIAuthorizationError(
-          "Parent authorization scope is required for delegation narrowing but was not provided. Execution blocked."
+          "Parent authorization scope is missing or malformed. Execution blocked."
         );
       }
 
