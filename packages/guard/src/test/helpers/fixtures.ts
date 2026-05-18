@@ -4,7 +4,7 @@ import {
   signAuthorizationEd25519,
   createDelegation,
 } from "@oxdeai/core";
-import type { KeySet, AuthorizationV1, DelegationV1 } from "@oxdeai/core";
+import type { KeySet, AuthorizationV1, DelegationV1, DelegationScope } from "@oxdeai/core";
 
 export const TEST_KEYPAIR = generateKeyPairSync("ed25519", {
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
@@ -19,9 +19,9 @@ export const TEST_KEYSET: KeySet = {
 
 export const nowSeconds = () => Math.floor(Date.now() / 1000);
 
-export function signAuth(overrides: Partial<AuthorizationV1 & { scope?: { tools?: string[]; max_amount?: bigint } }> = {}): AuthorizationV1 {
+export function signAuth(overrides: Partial<AuthorizationV1> = {}): AuthorizationV1 {
   const issued_at = overrides.issued_at ?? nowSeconds();
-  const auth = signAuthorizationEd25519(
+  return signAuthorizationEd25519(
     {
       auth_id: overrides.auth_id ?? `auth-${issued_at}`,
       issuer: overrides.issuer ?? TEST_KEYSET.issuer,
@@ -38,17 +38,13 @@ export function signAuth(overrides: Partial<AuthorizationV1 & { scope?: { tools?
     },
     TEST_KEYPAIR.privateKey.toString()
   );
-  if ((overrides as any).scope) (auth as any).scope = (overrides as any).scope;
-  return auth;
 }
 
 export function makeParentAuthWithScope(
-  scope: { tools?: string[]; max_amount?: bigint },
+  _scope: DelegationScope,
   overrides: Partial<AuthorizationV1> = {}
 ): AuthorizationV1 {
-  const auth = signAuth(overrides);
-  (auth as any).scope = scope;
-  return auth;
+  return signAuth(overrides);
 }
 
 export function makeDelegationWithScope(parent: AuthorizationV1, scope: DelegationV1["scope"]): DelegationV1 {

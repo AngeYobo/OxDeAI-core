@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Authorization, AuthorizationV1, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
+import type { Authorization, AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
 import type { ReplayStore } from "./replayStore.js";
 
 /**
@@ -31,6 +31,12 @@ export type GuardDelegationInput = {
   delegation: DelegationV1;
   /** The parent AuthorizationV1 that the delegation was derived from. */
   parentAuth: AuthorizationV1;
+  /**
+   * The scope granted to the parent agent — the authority ceiling for this
+   * delegation chain. Required for scope narrowing verification.
+   * Absence or structural invalidity fails closed before chain verification.
+   */
+  parentScope: DelegationScope;
 };
 
 /**

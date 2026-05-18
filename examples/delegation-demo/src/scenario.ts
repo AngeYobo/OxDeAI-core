@@ -241,7 +241,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     await guardB1(
       { name: "provision_gpu", args: { units: CHILD_ACTION_1_UNITS, tier: "a100" }, context: { agent_id: AGENT_B } },
       async () => "child-provision-receipt-1",
-      { delegation: { delegation, parentAuth } }
+      { delegation: { delegation, parentAuth, parentScope: { tools: ["provision_gpu"], max_amount: PARENT_AMOUNT } } }
     );
   } catch (err) {
     child1Decision = "DENY";
@@ -305,7 +305,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     await guardB2(
       { name: "provision_gpu", args: { units: CHILD_ACTION_2_UNITS, tier: "a100" }, context: { agent_id: AGENT_B } },
       async () => "child-provision-receipt-2",
-      { delegation: { delegation, parentAuth } }
+      { delegation: { delegation, parentAuth, parentScope: { tools: ["provision_gpu"], max_amount: PARENT_AMOUNT } } }
     );
   } catch (err) {
     child2Decision = "DENY";

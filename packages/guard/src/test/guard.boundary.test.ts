@@ -233,8 +233,6 @@ test("delegation tool widening is denied", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["read"], max_amount: 100n };
-
   const delegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -262,7 +260,7 @@ test("delegation tool widening is denied", async () => {
   await assert.rejects(
     guard(action, async () => {
       executed = true;
-    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } }),
+    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["read"], max_amount: 100n } } }),
     /DELEGATION_SCOPE_VIOLATION|execution blocked/i
   );
   assert.equal(executed, false);
@@ -286,8 +284,6 @@ test("delegation amount widening is denied", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["read"], max_amount: 100n };
-
   const delegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -315,7 +311,7 @@ test("delegation amount widening is denied", async () => {
   await assert.rejects(
     guard(action, async () => {
       executed = true;
-    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } }),
+    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["read"], max_amount: 100n } } }),
     /DELEGATION_SCOPE_VIOLATION|execution blocked/i
   );
   assert.equal(executed, false);
@@ -339,8 +335,6 @@ test("delegation narrowing is allowed", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["pay", "read", "write"], max_amount: 1000n };
-
   const delegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -367,7 +361,7 @@ test("delegation narrowing is allowed", async () => {
   let executed = false;
   await guard(action, async () => {
     executed = true;
-  }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } });
+  }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["pay", "read", "write"], max_amount: 1000n } } });
 
   assert.equal(executed, true);
 });
@@ -391,8 +385,6 @@ test("delegation replay is denied", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["pay", "read"], max_amount: 100n };
-
   const delegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -420,12 +412,12 @@ test("delegation replay is denied", async () => {
 
   await guard(action, async () => {
     executions += 1;
-  }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } });
+  }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["pay", "read"], max_amount: 100n } } });
 
   await assert.rejects(
     guard(action, async () => {
       executions += 1;
-    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } }),
+    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["pay", "read"], max_amount: 100n } } }),
     /Delegation replay detected|DELEGATION_REPLAY/i
   );
 
@@ -451,8 +443,6 @@ test("unsigned delegation is denied", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["read"], max_amount: 100n };
-
   const unsignedDelegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -480,7 +470,7 @@ test("unsigned delegation is denied", async () => {
   await assert.rejects(
     guard(action, async () => {
       /* no-op */
-    }, { delegation: { delegation: unsignedDelegation, parentAuth: parentAuth as AuthorizationV1 } }),
+    }, { delegation: { delegation: unsignedDelegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["read"], max_amount: 100n } } }),
     /DELEGATION_SIGNATURE_INVALID|signature verification failed|execution blocked/i
   );
 });
@@ -504,8 +494,6 @@ test("tampered delegation signature is denied", async () => {
     },
     privateKey.export({ type: "pkcs8", format: "pem" }).toString()
   ) as Authorization;
-  (parentAuth as any).scope = { tools: ["read"], max_amount: 100n };
-
   const delegation = createDelegation(
     parentAuth as AuthorizationV1,
     {
@@ -533,7 +521,7 @@ test("tampered delegation signature is denied", async () => {
   await assert.rejects(
     guard(action, async () => {
       /* no-op */
-    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1 } }),
+    }, { delegation: { delegation, parentAuth: parentAuth as AuthorizationV1, parentScope: { tools: ["read"], max_amount: 100n } } }),
     /DELEGATION_SIGNATURE_INVALID|signature verification failed|execution blocked/i
   );
 });

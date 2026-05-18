@@ -50,8 +50,10 @@ const T_PAR_EXP = T_NOW + 900;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+const PARENT_SCOPE = { tools: ["provision_gpu"], max_amount: 1_000_000n };
+
 function makeParent(overrides?: { expiry?: number; audience?: string }): AuthorizationV1 {
-  const auth = signAuthorizationEd25519(
+  return signAuthorizationEd25519(
     {
       auth_id:     "f".repeat(64),
       issuer:      "pdp-issuer",
@@ -66,8 +68,6 @@ function makeParent(overrides?: { expiry?: number; audience?: string }): Authori
     },
     KEYS.privateKey
   );
-  (auth as any).scope = { tools: ["provision_gpu"], max_amount: 1_000_000n };
-  return auth;
 }
 
 function makeGuard(overrides?: Partial<OxDeAIGuardConfig>) {
@@ -115,7 +115,7 @@ test("CASE-7a: valid chain with signature verification → execute runs", async 
   const result = await guard(
     action,
     async () => { executed = true; return "executed"; },
-    { delegation: { delegation, parentAuth: parent } }
+    { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }
   );
 
   assert.ok(executed, "execute must be called on valid delegation");
@@ -133,7 +133,7 @@ test("CASE-7b: unsigned delegation is rejected (fail-closed)", async () => {
 
   const guard = makeGuard();
   await assert.rejects(
-    () => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent } }),
+    () => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }),
     /signature is required|DELEGATION_SIGNATURE_INVALID|Authorization verification failed/i
   );
 });
@@ -149,7 +149,7 @@ test("CASE-7c: delegation path does not call setState", async () => {
   let setStateCalled = false;
   const guard = makeGuard({ setState: () => { setStateCalled = true; return true; } });
 
-  await guard(action, async () => {}, { delegation: { delegation, parentAuth: parent } });
+  await guard(action, async () => {}, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } });
 
   assert.ok(!setStateCalled, "setState must NOT be called on delegation path");
 });
@@ -172,7 +172,7 @@ test("CASE-7d: onDecision fires ALLOW with delegation artifact present", async (
     },
   });
 
-  await guard(action, async () => {}, { delegation: { delegation, parentAuth: parent } });
+  await guard(action, async () => {}, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } });
 
   assert.equal(capturedDecision, "ALLOW");
   assert.equal(capturedDelegationId, "d-audit-test");
@@ -191,7 +191,7 @@ test("CASE-7e: beforeExecute is called before execute on delegation path", async
     beforeExecute: () => { order.push("before"); },
   });
 
-  await guard(action, async () => { order.push("execute"); }, { delegation: { delegation, parentAuth: parent } });
+  await guard(action, async () => { order.push("execute"); }, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } });
 
   assert.deepEqual(order, ["before", "execute"]);
 });
@@ -210,7 +210,7 @@ test("CASE-8a: expired delegation → OxDeAIDelegationError, execute blocked", a
   let executed = false;
 
   await assert.rejects(
-    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: parent } }),
+    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       assert.ok(err.violations.length > 0);
@@ -233,7 +233,7 @@ test("CASE-8b: tampered delegation signature → OxDeAIDelegationError, execute 
   let executed = false;
 
   await assert.rejects(
-    () => guard(action, async () => { executed = true; }, { delegation: { delegation: tampered, parentAuth: parent } }),
+    () => guard(action, async () => { executed = true; }, { delegation: { delegation: tampered, parentAuth: parent, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       return true;
@@ -254,7 +254,7 @@ test("CASE-8c: action not in scope.tools → OxDeAIDelegationError, execute bloc
   let executed = false;
 
   await assert.rejects(
-    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: parent } }),
+    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       assert.ok(err.violations.some((v) => v.includes("provision_gpu")));
@@ -278,7 +278,7 @@ test("CASE-8d: parent hash mismatch → OxDeAIDelegationError, execute blocked",
 
   // Delegation bound to `parent` but presented with `otherParent`
   await assert.rejects(
-    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: otherParent } }),
+    () => guard(action, async () => { executed = true; }, { delegation: { delegation, parentAuth: otherParent, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       return true;
@@ -298,7 +298,7 @@ test("CASE-8e: OxDeAIDelegationError is catchable as OxDeAIAuthorizationError", 
   const guard = makeGuard();
 
   await assert.rejects(
-    () => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent } }),
+    () => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       // Existing catch blocks for OxDeAIAuthorizationError remain valid
       assert.ok(err instanceof OxDeAIAuthorizationError, "must be catchable as OxDeAIAuthorizationError");
@@ -319,7 +319,7 @@ test("CASE-8f: setState is NOT called when delegation verification fails", async
   let setStateCalled = false;
   const guard = makeGuard({ setState: () => { setStateCalled = true; return true; } });
 
-  await assert.rejects(() => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent } }));
+  await assert.rejects(() => guard(action, async () => {}, { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }));
 
   assert.ok(!setStateCalled, "setState must not be called when delegation fails");
 });

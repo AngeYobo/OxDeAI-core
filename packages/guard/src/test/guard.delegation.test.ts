@@ -2,7 +2,7 @@
 /**
  * Delegation path tests for @oxdeai/guard.
  *
- * Covers the guard(action, execute, { delegation: { delegation, parentAuth } })
+ * Covers the guard(action, execute, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } })
  * execution path introduced in v2.x.
  */
 
@@ -13,7 +13,7 @@ import {
   signAuthorizationEd25519,
   createDelegation,
 } from "@oxdeai/core";
-import type { AuthorizationV1, DelegationV1 } from "@oxdeai/core";
+import type { AuthorizationV1, DelegationScope, DelegationV1 } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 
 import { OxDeAIGuard } from "../guard.js";
@@ -28,8 +28,10 @@ import { TEST_KEYSET, TEST_KEYPAIR } from "./helpers/fixtures.js";
 
 const T_NOW = Math.floor(Date.now() / 1000);
 
+const PARENT_SCOPE = { tools: ["provision_gpu"], max_amount: 1_000_000n };
+
 function makeParentAuth(overrides?: { expiry?: number; audience?: string }): AuthorizationV1 {
-  const auth = signAuthorizationEd25519(
+  return signAuthorizationEd25519(
     {
       auth_id: "f".repeat(64),
       issuer: TEST_KEYSET.issuer,
@@ -44,8 +46,6 @@ function makeParentAuth(overrides?: { expiry?: number; audience?: string }): Aut
     },
     TEST_KEYPAIR.privateKey.toString()
   );
-  (auth as any).scope = { tools: ["provision_gpu"], max_amount: 1_000_000n };
-  return auth;
 }
 
 function makeDelegation(
@@ -119,7 +119,7 @@ test("delegation: valid delegation allows execution", async () => {
   const result = await guard(
     baseAction,
     async () => { executed = true; return "ok"; },
-    { delegation: { delegation, parentAuth } }
+    { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }
   );
 
   assert.ok(executed, "execute should be called on valid delegation");
@@ -134,7 +134,7 @@ test("delegation: does not call setState", async () => {
   const config = makeGuardConfig({ setState: () => { setStateCalled = true; return true; } });
   const guard = OxDeAIGuard(config);
 
-  await guard(baseAction, async () => {}, { delegation: { delegation, parentAuth } });
+  await guard(baseAction, async () => {}, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } });
 
   assert.ok(!setStateCalled, "setState must not be called on delegation path");
 });
@@ -154,7 +154,7 @@ test("delegation: fires onDecision ALLOW hook with delegation field", async () =
   });
   const guard = OxDeAIGuard(config);
 
-  await guard(baseAction, async () => {}, { delegation: { delegation, parentAuth } });
+  await guard(baseAction, async () => {}, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } });
 
   assert.equal(capturedDecision, "ALLOW");
   assert.ok(capturedDelegation !== undefined, "delegation should be in onDecision record");
@@ -174,7 +174,7 @@ test("delegation: calls beforeExecute hook", async () => {
   await guard(
     baseAction,
     async () => { callOrder.push("execute"); },
-    { delegation: { delegation, parentAuth } }
+    { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }
   );
 
   assert.deepEqual(callOrder, ["beforeExecute", "execute"]);
@@ -191,7 +191,7 @@ test("delegation: blocks action not in scope.tools", async () => {
   let executed = false;
 
   await assert.rejects(
-    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError, `expected OxDeAIDelegationError, got ${err}`);
       assert.ok(err.violations.some((v) => v.includes("provision_gpu")));
@@ -209,7 +209,7 @@ test("delegation: allows action in scope.tools", async () => {
   const guard = OxDeAIGuard(config);
 
   let executed = false;
-  await guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth } });
+  await guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } });
   assert.ok(executed);
 });
 
@@ -225,7 +225,7 @@ test("delegation: blocks intent amount exceeding scope.max_amount", async () => 
   const expensiveAction: ProposedAction = { ...baseAction, estimatedCost: 1.0 };
 
   await assert.rejects(
-    () => guard(expensiveAction, async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(expensiveAction, async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       assert.ok(err.violations.some((v) => v.includes("max_amount")));
@@ -246,7 +246,7 @@ test("delegation: blocks expired delegation", async () => {
   let executed = false;
 
   await assert.rejects(
-    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       assert.ok(err.violations.some((v) => v.toLowerCase().includes("expir")));
@@ -267,7 +267,7 @@ test("delegation: blocks when parent hash mismatches", async () => {
 
   // Present with the wrong parent
   await assert.rejects(
-    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth: otherAuth } }),
+    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation, parentAuth: otherAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       return true;
@@ -286,7 +286,7 @@ test("delegation: blocks invalid signature when requireDelegationSignatureVerifi
   let executed = false;
 
   await assert.rejects(
-    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation: tampered, parentAuth } }),
+    () => guard(baseAction, async () => { executed = true; }, { delegation: { delegation: tampered, parentAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDelegationError);
       return true;
@@ -301,7 +301,7 @@ test("delegation: blocks when delegation and parentAuth are missing from input",
 
   await assert.rejects(
     () => guard(baseAction, async () => {}, {
-      delegation: { delegation: null as unknown as DelegationV1, parentAuth: null as unknown as AuthorizationV1 }
+      delegation: { delegation: null as unknown as DelegationV1, parentAuth: null as unknown as AuthorizationV1, parentScope: {} }
     }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
@@ -320,7 +320,7 @@ test("OxDeAIDelegationError is instanceof OxDeAIAuthorizationError", async () =>
   const guard = OxDeAIGuard(config);
 
   await assert.rejects(
-    () => guard(baseAction, async () => {}, { delegation: { delegation, parentAuth } }),
+    () => guard(baseAction, async () => {}, { delegation: { delegation, parentAuth, parentScope: PARENT_SCOPE } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError, "OxDeAIDelegationError must be catchable as OxDeAIAuthorizationError");
       assert.ok(err instanceof OxDeAIDelegationError, "and also as OxDeAIDelegationError");
@@ -328,6 +328,93 @@ test("OxDeAIDelegationError is instanceof OxDeAIAuthorizationError", async () =>
       return true;
     }
   );
+});
+
+// ── parentScope validation ────────────────────────────────────────────────────
+
+test("delegation: missing parentScope blocks before chain verification", async () => {
+  const parentAuth = makeParentAuth();
+  const delegation = makeDelegation(parentAuth);
+  const config = makeGuardConfig();
+  const guard = OxDeAIGuard(config);
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(
+      baseAction,
+      async () => { executed = true; },
+      { delegation: { delegation, parentAuth, parentScope: undefined as unknown as DelegationScope } }
+    ),
+    (err: unknown) => {
+      assert.ok(err instanceof OxDeAIAuthorizationError);
+      assert.ok(!(err instanceof OxDeAIDelegationError), "missing parentScope must be OxDeAIAuthorizationError, not delegation error");
+      assert.match((err as Error).message, /parent authorization scope/i);
+      return true;
+    }
+  );
+  assert.ok(!executed, "execute must not be called when parentScope is missing");
+});
+
+test("delegation: malformed parentScope (non-object) blocks before chain verification", async () => {
+  const parentAuth = makeParentAuth();
+  const delegation = makeDelegation(parentAuth);
+  const config = makeGuardConfig();
+  const guard = OxDeAIGuard(config);
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(
+      baseAction,
+      async () => { executed = true; },
+      { delegation: { delegation, parentAuth, parentScope: "not-an-object" as unknown as DelegationScope } }
+    ),
+    (err: unknown) => {
+      assert.ok(err instanceof OxDeAIAuthorizationError);
+      assert.ok(!(err instanceof OxDeAIDelegationError));
+      assert.match((err as Error).message, /parent authorization scope/i);
+      return true;
+    }
+  );
+  assert.ok(!executed, "execute must not be called when parentScope is malformed");
+});
+
+test("delegation: malformed parentScope (tools not array) blocks before chain verification", async () => {
+  const parentAuth = makeParentAuth();
+  const delegation = makeDelegation(parentAuth);
+  const config = makeGuardConfig();
+  const guard = OxDeAIGuard(config);
+  let executed = false;
+
+  await assert.rejects(
+    () => guard(
+      baseAction,
+      async () => { executed = true; },
+      { delegation: { delegation, parentAuth, parentScope: { tools: "not-an-array" } as unknown as DelegationScope } }
+    ),
+    (err: unknown) => {
+      assert.ok(err instanceof OxDeAIAuthorizationError);
+      assert.ok(!(err instanceof OxDeAIDelegationError));
+      assert.match((err as Error).message, /parent authorization scope/i);
+      return true;
+    }
+  );
+  assert.ok(!executed, "execute must not be called when parentScope.tools is not an array");
+});
+
+test("delegation: valid empty parentScope ({}) is accepted", async () => {
+  const parentAuth = makeParentAuth();
+  const delegation = makeDelegation(parentAuth);
+  const config = makeGuardConfig();
+  const guard = OxDeAIGuard(config);
+  let executed = false;
+
+  // An empty scope ({}) places no restrictions — all tools and amounts allowed.
+  await guard(
+    baseAction,
+    async () => { executed = true; },
+    { delegation: { delegation, parentAuth, parentScope: {} } }
+  );
+  assert.ok(executed, "execute must be called when parentScope is a valid empty object");
 });
 
 // ── Standard path unaffected ──────────────────────────────────────────────────

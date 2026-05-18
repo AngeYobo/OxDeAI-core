@@ -134,10 +134,10 @@ test("RS-2 default store: delegation_id replay blocked on second call to same gu
   const action = makeAction();
 
   let executions = 0;
-  await guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth } });
+  await guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } });
 
   await assert.rejects(
-    () => guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth } }),
+    () => guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /[Dd]elegation replay detected/);
@@ -203,10 +203,10 @@ test("RS-4 shared store: delegation_id replay blocked across two distinct guard 
   const action = makeAction();
 
   let executions = 0;
-  await guardA(action, async () => { executions++; }, { delegation: { delegation, parentAuth } });
+  await guardA(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } });
 
   await assert.rejects(
-    () => guardB(action, async () => { executions++; }, { delegation: { delegation, parentAuth } }),
+    () => guardB(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /[Dd]elegation replay detected/);
@@ -275,7 +275,7 @@ test("RS-6 failing consumeDelegationId: execution blocked when store throws on d
 
   let executed = false;
   await assert.rejects(
-    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /[Rr]eplay store unavailable/);
@@ -319,12 +319,12 @@ test("RS-7 store without consumeDelegationId: delegation executes; parentAuth re
 
   // First call: should succeed.
   let executions = 0;
-  await guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth } });
+  await guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } });
   assert.equal(executions, 1);
 
   // Second call with same parentAuth: consumeAuthId returns false → replay blocked.
   await assert.rejects(
-    () => guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth } }),
+    () => guard(action, async () => { executions++; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /replay detected/i);
@@ -388,7 +388,7 @@ test("RS-9 store unavailable for parentAuth auth_id: execution blocked on delega
 
   let executed = false;
   await assert.rejects(
-    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth } }),
+    () => guard(makeAction(), async () => { executed = true; }, { delegation: { delegation, parentAuth, parentScope: { tools: ["pay"], max_amount: 1_000_000n } } }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIAuthorizationError);
       assert.match(err.message, /[Rr]eplay store unavailable/);

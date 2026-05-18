@@ -95,8 +95,10 @@ const TOOL_POOL = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const PARENT_SCOPE = { tools: [...TOOL_POOL], max_amount: 1_000_000n };
+
 function makeParentAuth(expiry = T_PAR_EXP): AuthorizationV1 {
-  const auth = signAuthorizationEd25519(
+  return signAuthorizationEd25519(
     {
       auth_id: "f".repeat(64),
       issuer: KEYSET.issuer,
@@ -111,8 +113,6 @@ function makeParentAuth(expiry = T_PAR_EXP): AuthorizationV1 {
     },
     KEYS.privateKey
   );
-  (auth as any).scope = { tools: [...TOOL_POOL], max_amount: 1_000_000n };
-  return auth;
 }
 
 function makeDelegation(
@@ -183,7 +183,7 @@ test("G-D1: any action matching delegation scope.tools is allowed; setState is n
     const result = await guard(
       action,
       async () => { executeCalled = true; return "executed"; },
-      { delegation: { delegation, parentAuth: parent } }
+      { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }
     );
 
     assert.ok(
@@ -276,7 +276,7 @@ test("G-D2: any invalid delegation class always blocks execution (fail-closed)",
         await guard(
           action,
           async () => { executeCalled = true; },
-          { delegation: { delegation, parentAuth: parent } }
+          { delegation: { delegation, parentAuth: parent, parentScope: PARENT_SCOPE } }
         );
       },
       (err: unknown) => err instanceof OxDeAIDelegationError,
@@ -347,7 +347,6 @@ test("G-D3: delegation presented with wrong parent authorization is rejected (DE
       KEYS.privateKey
     );
     const parentB = parentBAuth;
-    (parentB as any).scope = { tools: [scopeTool], max_amount: 1_000_000n };
 
     // Delegation is cryptographically bound to parentA via parent_auth_hash.
     const delegation = makeDelegation(parentA, [scopeTool], T_DEL_EXP);
@@ -363,7 +362,7 @@ test("G-D3: delegation presented with wrong parent authorization is rejected (DE
         await guard(
           makeAction(scopeTool, T_NOW),
           async () => { executeCalled = true; },
-          { delegation: { delegation, parentAuth: parentB } }   // ← wrong parent
+          { delegation: { delegation, parentAuth: parentB, parentScope: { tools: [scopeTool], max_amount: 1_000_000n } } }   // ← wrong parent
         );
       },
       (err: unknown) => {
