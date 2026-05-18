@@ -183,7 +183,7 @@
 | Scope narrowing | `DONE` | Tools + max_amount. Tested. Conformance vectors. |
 | Delegation scope verification in guard | `DONE` | Guard step 3: checks `scope.tools`, `scope.max_amount`. |
 | Delegation replay | `DONE` | `consumeDelegationId` + `consumeAuthId(parentAuth)`. |
-| `parentScope` requirement | `RISK` | Guard requires `(parentAuth as any).scope`. Uses `as any` cast - no TypeScript safety for this field. Could silently fail if scope absent. |
+| `parentScope` requirement | `DONE` | `parentScope` is now an explicit required field on `GuardDelegationInput`. Structurally validated by `isValidDelegationScope` before delegation chain verification. The unsafe `(parentAuth as any).scope` cast has been removed. Missing or malformed `parentScope` fails closed before execution. |
 | Multi-hop delegation | `SPECIFIED ONLY` | Spec allows single-hop only (`DELEGATION_SINGLE_HOP` violation). Not tested with a chain > 2. |
 
 ---
@@ -436,9 +436,8 @@ Resolution: `key-lifecycle-verification.json` added — 10 vectors, 20 assertion
 **P0-2: Define and specify clock skew tolerance** ✓ RESOLVED  
 Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md §17` defines: valid iff `now < expiry`, no grace period, `issued_at` informational-only (no lower-bound enforcement), NTP synchronization required, issuers must build delivery latency into expiry window. `clock-semantics-verification.json` added — 5 vectors, 10 assertions covering last-valid-second, one-past-expiry, verifier-clock-behind, and Encoding B variants. Conformance count: 181 → 191.
 
-**P0-3: Harden `parentScope` cast in `OxDeAIGuard`**  
-Reason: `const parentScope = (parentAuth as any).scope` silently allows `undefined`, with a separate guard that throws after the chain check. This is a type-safety gap that could mask bugs. `DelegationV1` scope narrowing correctness depends on this.  
-Scope: `packages/guard/src/guard.ts` - tighten cast and fail-closed earlier.
+**P0-3: Harden `parentScope` handling in `OxDeAIGuard`** ✓ RESOLVED  
+Resolution: `GuardDelegationInput` now requires `parentScope: DelegationScope` as an explicit typed field. `isValidDelegationScope` validates the structure before chain verification. The unsafe `(parentAuth as any).scope` cast has been removed from `guard.ts`. All delegation tests and the `delegation-demo` example updated to pass `parentScope` explicitly. Missing or malformed `parentScope` fails closed before execution; `OxDeAIAuthorizationError` is thrown before the delegation chain verification path is reached.
 
 ---
 
@@ -496,31 +495,32 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 49 |
+| `DONE` | 50 |
 | `PARTIAL` | 19 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 7 |
-| `RISK` | 5 |
+| `RISK` | 4 |
 
-**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2 resolved).
+**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2, P0-3 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2 resolved) · P1: 6 · P2: 4 · Total: 10 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3 resolved) · P1: 6 · P2: 4 · Total: 10 open
 
 **Critical path to external adoption:**
 
 1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved — 20 assertions added
 2. ~~Clock skew specification (P0-2)~~ ✓ resolved — strict zero-tolerance specified, 10 assertions added
-3. Intent hash mismatch portable vector (P1-1)
-4. `expiry`/`expires_at` precedence vector (P1-2)
-5. Cross-language Profile C vectors (P1-6)
-6. HMAC-SHA256 deprecation (P1-5)
+3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved — unsafe cast removed, fail-closed before chain verification
+4. Intent hash mismatch portable vector (P1-1)
+5. `expiry`/`expires_at` precedence vector (P1-2)
+6. Cross-language Profile C vectors (P1-6)
+7. HMAC-SHA256 deprecation (P1-5)
 
 **Protocol positioning:**
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle and clock skew are now resolved. State provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, and parentScope type safety are now resolved. State provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
 
 ---
 
