@@ -17,7 +17,7 @@ import {
   verifyDelegation,
   verifyDelegationChain,
 } from "@oxdeai/core";
-import type { AuthorizationV1, Intent, KeySet, State, VerificationResult, DelegationV1, DelegationScope, VerifyDelegationOptions } from "@oxdeai/core";
+import type { AuthorizationV1, Intent, KeySet, KeySetKey, State, VerificationResult, DelegationV1, DelegationScope, VerifyDelegationOptions } from "@oxdeai/core";
 import {
   TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
   TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
@@ -1168,6 +1168,97 @@ function profileCGetHashFn(strategy: string): (s: unknown) => string {
   throw new Error(`unknown hash_strategy: ${strategy}`);
 }
 
+// ── Key lifecycle constants ───────────────────────────────────────────────────
+const KL_SIGNING_NOW = 1730000000;
+const KL_VERIFY_NOW  = 1730000010;
+const KL_PAST        = KL_SIGNING_NOW - 7200;   // 2 h before signing
+const KL_FUTURE      = KL_SIGNING_NOW + 7200;   // 2 h after signing
+
+function makeKLAuth(): AuthorizationV1 {
+  return signAuthorizationEd25519(
+    {
+      auth_id:     "e".repeat(64),
+      issuer:      "kl.issuer",
+      audience:    "kl.audience",
+      intent_hash: "a".repeat(64),
+      state_hash:  "b".repeat(64),
+      policy_id:   "c".repeat(64),
+      decision:    "ALLOW",
+      issued_at:   KL_SIGNING_NOW,
+      expiry:      KL_SIGNING_NOW + 300,
+      kid:         "kl-key-001",
+    },
+    TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION
+  );
+}
+
+function makeKLKeyEntry(overrides: Partial<KeySetKey> = {}): KeySetKey {
+  return {
+    kid:        "kl-key-001",
+    alg:        "Ed25519",
+    public_key: TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
+    ...overrides,
+  };
+}
+
+function makeKLKeyset(entry: KeySetKey): KeySet {
+  return { issuer: "kl.issuer", version: "1", keys: [entry] };
+}
+
+function klVerifyOpts(keyset: KeySet): Parameters<ConformanceAdapter["verifyAuthorization"]>[1] {
+  return {
+    now:                         KL_VERIFY_NOW,
+    expectedIssuer:              "kl.issuer",
+    expectedAudience:            "kl.audience",
+    expectedPolicyId:            "c".repeat(64),
+    trustedKeySets:              keyset,
+    requireSignatureVerification: true,
+    consumedAuthIds:             [],
+  };
+}
+
+function validateKeyLifecycleVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
+  const file = loadJson<VectorFile>("key-lifecycle-verification.json");
+  const auth = makeKLAuth();
+
+  for (const v of file.vectors) {
+    const id   = String(v.id);
+    const mode = String(v.mode);
+    const expected = asRecord(v.expected);
+
+    let keyset: KeySet;
+
+    if (mode === "key-active") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "active" }));
+    } else if (mode === "key-revoked") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "revoked" }));
+    } else if (mode === "key-not-before-future") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "active", not_before: KL_FUTURE }));
+    } else if (mode === "key-not-after-past") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "active", not_after: KL_PAST }));
+    } else if (mode === "key-valid-window") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "active", not_before: KL_PAST, not_after: KL_FUTURE }));
+    } else if (mode === "key-expired-window") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "active", not_before: KL_PAST - 3600, not_after: KL_PAST }));
+    } else if (mode === "key-retired-within-window") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "retired", not_before: KL_PAST, not_after: KL_FUTURE }));
+    } else if (mode === "key-retired-past-window") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "retired", not_after: KL_PAST }));
+    } else if (mode === "key-revoked-valid-window") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ status: "revoked", not_before: KL_PAST, not_after: KL_FUTURE }));
+    } else if (mode === "wrong-kid-known-issuer") {
+      keyset = makeKLKeyset(makeKLKeyEntry({ kid: "different-key-id", status: "active" }));
+    } else {
+      fail(ctx, `${id}: unknown mode "${mode}"`);
+      continue;
+    }
+
+    const got = adapter.verifyAuthorization(auth, klVerifyOpts(keyset));
+    eq(ctx, `${id} status`,     got.status,     String(expected.status));
+    eq(ctx, `${id} violations`, got.violations, expected.violations ?? []);
+  }
+}
+
 function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
   const file = loadJson<VectorFile>("profile-c-state-verification.json");
   const now = 1_730_000_000;
@@ -1326,6 +1417,7 @@ function main(): void {
   validateDelegationVerificationVectors(ctx);
   validateDelegationChainVectors(ctx);
   validateDelegationSignatureVectors(ctx);
+  validateKeyLifecycleVectors(ctx, adapter);
   validateProfileCStateVerificationVectors(ctx, adapter);
 
   if (ctx.failures.length > 0) {

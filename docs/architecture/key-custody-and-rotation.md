@@ -51,7 +51,7 @@ type KeySet = {
 |---|---|---|
 | **Active** | `"active"` or absent | Accepted if `now` is within `[not_before, not_after]` |
 | **Transitional** | `"active"` | Two keys both active during a dual-sign overlap window |
-| **Retired** | `"retired"` | Rejected — `keyIsActiveAt` returns `false` for `"retired"` |
+| **Retired** | `"retired"` | Accepted for verification within `not_before`/`not_after` window; no longer used for new signings |
 | **Revoked** | `"revoked"` | Rejected immediately — treated as untrusted regardless of time bounds |
 
 `keyIsActiveAt(key, now)` enforces all three constraints in order:
@@ -85,7 +85,7 @@ explicitly retired or revoked in the `trustedKeySets` config.
                           [status: retired]             active key]
                                  │
                                  ▼
-                            RETIRED (verifier rejects)
+                      RETIRED (verifier accepts until not_after)
                                  │
                                  ▼ (on compromise or scheduled destruction)
                             REVOKED (verifier rejects immediately)
@@ -121,12 +121,14 @@ See §4 for full rotation procedures.
 
 ### 2.5 Retirement
 
-Set `not_after` on the old key to the end of the dual-sign window, or set `status: "retired"`.
-Once retired, the verifier rejects all authorizations signed with that key.
+Set `not_after` on the old key to the end of the dual-sign window and set `status: "retired"`.
+A retired key is still accepted for verification within its `not_before`/`not_after` window —
+this is intentional: the overlap period lets in-flight authorizations signed just before
+rotation complete normally. The verifier rejects the key only once `not_after` has passed.
 
-Retired keys **should** remain in `trustedKeySets` for the duration of the maximum authorization
-expiry window, to allow in-flight authorizations issued just before retirement to complete.
-After that window, retired key entries may be removed from the config entirely.
+Retired keys **must** remain in `trustedKeySets` until `not_after` has elapsed so that
+in-flight authorizations can still be verified. After `not_after`, retired key entries may
+be removed from the config entirely.
 
 ### 2.6 Revocation
 
@@ -166,9 +168,9 @@ If any condition fails, the authorization is rejected. There is no fallback or p
 |---|---|
 | `issuer` not found in any `KeySet` | `AUTH_ISSUER_MISMATCH` → DENY |
 | `kid` not found in issuer's keyset | `AUTH_KID_UNKNOWN` → DENY |
-| Key found but `status: "revoked"` | `AUTH_KID_UNKNOWN` → DENY |
-| Key found but `now < not_before` | `AUTH_KID_UNKNOWN` → DENY |
-| Key found but `now > not_after` | `AUTH_KID_UNKNOWN` → DENY |
+| Key found but `status: "revoked"` | `AUTH_KEY_INACTIVE` → DENY |
+| Key found but `now < not_before` | `AUTH_KEY_INACTIVE` → DENY |
+| Key found but `now > not_after` | `AUTH_KEY_INACTIVE` → DENY |
 | Key active but signature invalid | `AUTH_SIGNATURE_INVALID` → DENY |
 | `trustedKeySets` is empty | Hard failure at guard construction |
 
