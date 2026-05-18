@@ -1,0 +1,131 @@
+{
+  "version": "1.0.0",
+  "description": "Key lifecycle conformance vectors for AuthorizationV1. Exercises keyIsActiveAt, findKeyInKeySets, and AUTH_KEY_INACTIVE / AUTH_KID_UNKNOWN enforcement. Verification time is KL_VERIFY_NOW = 1730000010. Key windows use KL_PAST = 1729992800 (2h before) and KL_FUTURE = 1730007200 (2h after).",
+  "vectors": [
+    {
+      "id": "key-lifecycle-001",
+      "description": "Active key, no time constraints. Key found, keyIsActiveAt returns true. Signature verifies. Expected: ok.",
+      "mode": "key-active",
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "key-lifecycle-002",
+      "description": "Revoked key. status=revoked causes keyIsActiveAt to return false immediately, regardless of time window. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-revoked",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-003",
+      "description": "Key not yet active: not_before is in the future (KL_FUTURE > KL_VERIFY_NOW). keyIsActiveAt returns false. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-not-before-future",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-004",
+      "description": "Key validity window expired: not_after is in the past (KL_PAST < KL_VERIFY_NOW). keyIsActiveAt returns false. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-not-after-past",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-005",
+      "description": "Key within valid time window: not_before=KL_PAST, not_after=KL_FUTURE. Both bounds satisfied at KL_VERIFY_NOW. keyIsActiveAt returns true. Expected: ok.",
+      "mode": "key-valid-window",
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "key-lifecycle-006",
+      "description": "Key window fully expired: not_before=KL_PAST-3600, not_after=KL_PAST. not_after < KL_VERIFY_NOW. keyIsActiveAt returns false. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-expired-window",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-007",
+      "description": "Retired key within validity window: status=retired, not_before=KL_PAST, not_after=KL_FUTURE. Retired keys are accepted during dual-sign overlap window. keyIsActiveAt returns true. Expected: ok.",
+      "mode": "key-retired-within-window",
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "key-lifecycle-008",
+      "description": "Retired key past validity window: status=retired, not_after=KL_PAST. Retirement window has closed. keyIsActiveAt returns false. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-retired-past-window",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-009",
+      "description": "Revoked key with otherwise-valid time window: status=revoked, not_before=KL_PAST, not_after=KL_FUTURE. Revocation takes precedence over time bounds. keyIsActiveAt returns false immediately. Expected: AUTH_KEY_INACTIVE.",
+      "mode": "key-revoked-valid-window",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KEY_INACTIVE",
+            "message": "key is not active at verification time"
+          }
+        ]
+      }
+    },
+    {
+      "id": "key-lifecycle-010",
+      "description": "Known issuer, wrong kid: trustedKeySets contains the correct issuer but a different kid. findKeyInKeySets returns undefined. Expected: AUTH_KID_UNKNOWN.",
+      "mode": "wrong-kid-known-issuer",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          {
+            "code": "AUTH_KID_UNKNOWN",
+            "message": "kid not found for issuer/alg"
+          }
+        ]
+      }
+    }
+  ]
+}

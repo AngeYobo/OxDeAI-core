@@ -84,10 +84,10 @@
 | Area | Status | Notes |
 |------|--------|-------|
 | `KeyStatus = "active" \| "retired" \| "revoked"` | `DONE` | Implemented in `keyset.ts`. `keyIsActiveAt` checks `status`, `not_before`, `not_after`. |
-| `status = "revoked"` → `AUTH_KEY_INACTIVE` | `SPECIFIED ONLY` | Implemented in `keyIsActiveAt`. **No conformance vector**. Guard tests do not exercise revoked key path. |
-| `not_before` enforcement | `SPECIFIED ONLY` | Implemented. **No conformance vector** for key not yet active. |
-| `not_after` enforcement | `SPECIFIED ONLY` | Implemented. **No conformance vector** for key window expiry (distinct from auth expiry). |
-| Key rotation (dual-sign) | `DOCUMENTED ONLY` | Rotation procedure documented in `key-custody-and-rotation.md`. No automated rotation machinery. No conformance vector for dual-sign overlap verification. |
+| `status = "revoked"` → `AUTH_KEY_INACTIVE` | `DONE` | Implemented in `keyIsActiveAt`. Conformance vector `key-lifecycle-002` (revoked key rejected). Vector `key-lifecycle-009` confirms revocation overrides valid time window. |
+| `not_before` enforcement | `DONE` | Implemented. Conformance vector `key-lifecycle-003` (future `not_before` → inactive). |
+| `not_after` enforcement | `DONE` | Implemented. Conformance vectors `key-lifecycle-004`, `key-lifecycle-006`, `key-lifecycle-008` (expired windows). |
+| Key rotation (dual-sign) | `PARTIAL` | Rotation procedure documented in `key-custody-and-rotation.md`. Dual-sign overlap verified by `key-lifecycle-007` (retired key within window → ok). No automated rotation machinery. |
 | Sift KRL (Key Revocation List) | `PARTIAL` | `SiftHttpKeyStore` checks `revoked_kids`. KRL payload is **not cryptographically signature-verified** - transport security (HTTPS) only. Known risk, documented in `packages/sift/README.md`. |
 
 ---
@@ -215,15 +215,15 @@
 | Hash strategy ambiguity → DENY | Yes | Yes (SB-12, PC-003) | Yes (Profile C spec) | Yes | **No** (TypeScript-only) |
 | Replay-store unavailability → DENY | Yes | Yes (guard test) | Yes (ReplayStore JSDoc) | Yes | **No** (no cross-language conformance vector) |
 | Provider ambiguity → DENY | Yes | Partial | Yes (Profile C spec) | Yes (threat model) | **No** (TypeScript-only) |
-| Revoked key → DENY | Yes (`keyIsActiveAt`) | No conformance test | Implied in key spec | Yes (key-custody doc) | **No** (no portable vector) |
-| Key `not_before` → DENY | Yes | No conformance test | Implied in key spec | Yes (key-custody doc) | **No** (no portable vector) |
-| Key `not_after` → DENY | Yes | No conformance test | Implied in key spec | Yes (key-custody doc) | **No** (no portable vector) |
+| Revoked key → DENY | Yes (`keyIsActiveAt`) | Yes (`key-lifecycle-002`, `key-lifecycle-009`) | Yes (key-lifecycle vectors) | Yes (key-custody doc) | Yes (portable vector) |
+| Key `not_before` → DENY | Yes | Yes (`key-lifecycle-003`) | Yes | Yes (key-custody doc) | Yes (portable vector) |
+| Key `not_after` → DENY | Yes | Yes (`key-lifecycle-004`, `key-lifecycle-006`, `key-lifecycle-008`) | Yes | Yes (key-custody doc) | Yes (portable vector) |
 
 ---
 
 ## 4. Conformance Coverage Audit
 
-**Current total:** 161 assertions across 14 vector files.
+**Current total:** 181 assertions across 15 vector files.
 
 ### 4.1 Covered Areas
 
@@ -242,17 +242,15 @@
 | `delegation-verification.json` | 18 | Delegation field checks, scope, replay, trust |
 | `delegation-chain-verification.json` | 14 | Chain hash binding, delegator, expiry, policy |
 | `delegation-signature-verification.json` | 10 | Delegation Ed25519 path |
+| `key-lifecycle-verification.json` | 20 | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection |
 | `profile-c-state-verification.json` | 12 | Semantic state verification, strategies, TOCTOU, Encoding B |
 
 ### 4.2 Missing or Weak Coverage
 
-The following areas have **no portable conformance vector**:
+The following areas still have **no portable conformance vector**:
 
 | Gap | Risk Level | Notes |
 |-----|-----------|-------|
-| Revoked key (`status = "revoked"`) → `AUTH_KEY_INACTIVE` | **High** | Implemented; no cross-language vector. External implementers cannot verify revocation behavior. |
-| Key `not_before` enforcement | **High** | Implemented; no vector. Same risk. |
-| Key `not_after` enforcement | **High** | Implemented; no vector. Same risk. |
 | `decision != "ALLOW"` portable vector | **Medium** | Only checked structurally; no dedicated cross-language vector. |
 | Both `expiry` and `expires_at` present simultaneously | **Medium** | Precedence rule (`expiry` wins) has no test vector. |
 | Intent hash mismatch → DENY (cross-language) | **Medium** | TypeScript guard test only. External implementers cannot verify intent binding. |
@@ -359,11 +357,11 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 **Status: PARTIAL**
 
-161 assertions across 14 vector sets is a solid baseline. Coverage gaps that prevent declaring the conformance suite "complete":
+181 assertions across 15 vector sets. Key lifecycle coverage resolved. Remaining gaps:
 
-1. Key lifecycle vectors (revoked, not_before, not_after) - **blockers for external adoption**
-2. Intent hash mismatch portable vector - important for verifier correctness
-3. Cross-language Profile C vectors - important for Profile C adoption
+1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved — `key-lifecycle-verification.json`
+2. Intent hash mismatch portable vector — important for verifier correctness
+3. Cross-language Profile C vectors — important for Profile C adoption
 4. `expiry`/`expires_at` simultaneous presence precedence vector
 
 ### 7.4 Interoperability Profile Readiness
@@ -432,9 +430,8 @@ Structured events / metrics  ░░░░░░░░░░░░░░░░░
 
 ### P0 - Must resolve before external adoption
 
-**P0-1: Add portable conformance vectors for key lifecycle**  
-Reason: `AUTH_KEY_INACTIVE` (revoked, not_before, not_after) has no cross-language conformance vector. External implementers cannot verify key lifecycle enforcement. This is the single most critical gap for adoption.  
-Scope: `authorization-signature-verification.json` - add vectors: revoked key, not-yet-active key, expired key window.
+**P0-1: Add portable conformance vectors for key lifecycle** ✓ RESOLVED  
+Resolution: `key-lifecycle-verification.json` added — 10 vectors, 20 assertions covering active, revoked, retired (within/past window), `not_before`/`not_after` time windows, revocation-overrides-window, and wrong-kid-known-issuer. Conformance count: 161 → 181.
 
 **P0-2: Define and specify clock skew tolerance**  
 Reason: No `skew` parameter in `verifyAuthorization`. Distributed deployments with imprecise clocks have undefined boundary behavior. Define a spec value (e.g., ±30s) or explicitly state zero tolerance with NTP requirement.  
@@ -507,13 +504,13 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 | `MISSING` | 8 |
 | `RISK` | 7 |
 
-**Conformance:** 161 assertions. 10 identified gaps.
+**Conformance:** 181 assertions. 7 remaining gaps (P0-1 resolved).
 
-**Follow-up issue counts:** P0: 3 · P1: 6 · P2: 4 · Total: 13
+**Follow-up issue counts:** P0: 2 open (P0-1 resolved) · P1: 6 · P2: 4 · Total: 12 open
 
 **Critical path to external adoption:**
 
-1. Key lifecycle portable vectors (P0-1)
+1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved — 20 assertions added
 2. Clock skew specification (P0-2)
 3. Intent hash mismatch portable vector (P1-1)
 4. `expiry`/`expires_at` precedence vector (P1-2)

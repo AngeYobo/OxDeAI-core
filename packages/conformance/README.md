@@ -56,7 +56,26 @@ Two hash strategies modelled:
 
 Encoding B vectors (`profile-c-006` through `profile-c-008`) exercise the Sift-compatible wire format (`alg="ed25519"`, `expires_at`, base64url signature) combined with live-state semantic verification.
 
-Current validator assertion count: `161`.
+### Key Lifecycle (v1.5+)
+
+- `key-lifecycle-verification.json` — exercises `keyIsActiveAt`, `findKeyInKeySets`, and `AUTH_KEY_INACTIVE` / `AUTH_KID_UNKNOWN` enforcement across all key status and time-window states.
+
+Ten vectors covering:
+
+| Vector | Mode | Expected outcome |
+|--------|------|-----------------|
+| `key-lifecycle-001` | `key-active` | `ok` — active key, no time constraints |
+| `key-lifecycle-002` | `key-revoked` | `AUTH_KEY_INACTIVE` — revoked key rejected |
+| `key-lifecycle-003` | `key-not-before-future` | `AUTH_KEY_INACTIVE` — key not yet active |
+| `key-lifecycle-004` | `key-not-after-past` | `AUTH_KEY_INACTIVE` — validity window expired |
+| `key-lifecycle-005` | `key-valid-window` | `ok` — explicit `not_before`/`not_after` window active |
+| `key-lifecycle-006` | `key-expired-window` | `AUTH_KEY_INACTIVE` — `not_after` in the past |
+| `key-lifecycle-007` | `key-retired-within-window` | `ok` — retired key accepted during dual-sign overlap window |
+| `key-lifecycle-008` | `key-retired-past-window` | `AUTH_KEY_INACTIVE` — retired key, window closed |
+| `key-lifecycle-009` | `key-revoked-valid-window` | `AUTH_KEY_INACTIVE` — revocation overrides valid time window |
+| `key-lifecycle-010` | `wrong-kid-known-issuer` | `AUTH_KID_UNKNOWN` — correct issuer, unknown kid |
+
+Current validator assertion count: `181`.
 
 ### Adapter ops required for DelegationV1
 
@@ -84,6 +103,7 @@ compatibility but not used by the harness runners.
 | `delegation-verification.json` | Field checks, expiry, scope, replay, trust-missing | Yes - no crypto required |
 | `delegation-chain-verification.json` | Chain structural checks (hash binding, delegator, expiry ceiling, policy) | Yes - independently recomputed |
 | `delegation-signature-verification.json` | Ed25519 verification path | Yes - independently verified |
+| `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes — portable across any `verifyAuthorization` implementation |
 | `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (requires `computeStateHash` integration) |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
 | `guard.delegation.property.test.ts` (G-D1–G-D3) | Guard PEP delegation path | TypeScript only |
@@ -100,7 +120,7 @@ pnpm -C packages/conformance validate
 Expected success output includes:
 
 ```text
-Conformance passed: 161 assertions
+Conformance passed: 181 assertions
 ```
 
 ## Adapter Contract
@@ -142,6 +162,8 @@ OxDeAI defines three interoperability profiles. Conformance coverage maps direct
 | C | Full semantic state verification via `computeStateHash` | Core + DelegationV1 + Profile C state vectors |
 
 Profile C now has **executable conformance coverage** via `profile-c-state-verification.json` (12 assertions).
+
+Key lifecycle enforcement (Profile A/B/C) is covered by `key-lifecycle-verification.json` (20 assertions): active, revoked, retired (within/past window), `not_before`/`not_after` time windows, and wrong-kid rejection.
 
 See [External Provider Interoperability Profile](../../docs/spec/interoperability/external-provider-profile.md) for the full profile specification, wire encoding reference, and fail-closed rules.
 
