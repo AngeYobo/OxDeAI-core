@@ -425,6 +425,27 @@ function validateAuthorizationVerificationVectors(ctx: CheckCtx, adapter: Confor
   }
 }
 
+function validateClockSemanticsVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
+  const file = loadJson<VectorFile>("clock-semantics-verification.json");
+
+  for (const v of file.vectors) {
+    const id = String(v.id);
+    const input = asRecord(v.input);
+    const auth = {
+      alg: "HMAC-SHA256",
+      kid: "legacy",
+      signature: "legacy-placeholder",
+      ...(asRecord(input.auth) as Record<string, unknown>)
+    } as AuthorizationV1;
+    const opts = (input.opts ? asRecord(input.opts) : {}) as { now?: number };
+    const expected = asRecord(v.expected);
+    const got = adapter.verifyAuthorization(auth, opts);
+
+    eq(ctx, `${id} status`, got.status, String(expected.status));
+    eq(ctx, `${id} violations`, got.violations, expected.violations ?? []);
+  }
+}
+
 // ── Delegation conformance helpers ────────────────────────────────────────────
 
 const DELEGATION_T_ISSUED  = 1_000_000;
@@ -1418,6 +1439,7 @@ function main(): void {
   validateDelegationChainVectors(ctx);
   validateDelegationSignatureVectors(ctx);
   validateKeyLifecycleVectors(ctx, adapter);
+  validateClockSemanticsVectors(ctx, adapter);
   validateProfileCStateVerificationVectors(ctx, adapter);
 
   if (ctx.failures.length > 0) {

@@ -44,7 +44,7 @@ Verifiers **MUST** operate on explicit, injected inputs:
 2. Algorithm support (`alg` == `Ed25519`).
 3. Key resolution via `issuer`, `kid`, `alg` in `trustedKeySets` (strict mode).
 4. Signature check over canonicalized payload excluding `signature` (canonicalization-v1).
-5. Expiry: `now < expiry`.
+5. Expiry: `now < expiry` (**strict zero tolerance** — `now >= expiry` → `AUTH_EXPIRED`, no grace period; see `authorization-v1.md §17`).
 6. Audience match.
 7. Intent hash match to the proposed action (`intent_hash`).
 8. Replay check on `auth_id` (if replay store present).

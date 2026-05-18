@@ -258,15 +258,19 @@ The canonicalized preimage includes whichever expiry field name (`expiry` or `ex
 
 ### issued_at
 
-* Unix timestamp (seconds)
+* Unix timestamp (seconds) recording when the authorization was issued
+* **Informational only** — the verifier validates that this field is an integer but does NOT enforce `now >= issued_at`. A verifier whose clock is slightly behind the issuer will still accept a valid-window authorization.
+* No "not yet valid" semantics exist in this protocol version
 
 ---
 
 ### expiry / expires_at
 
-* Unix timestamp (seconds)
-* **MUST** be strictly enforced — `now >= expiry` is rejected
+* Unix timestamp (seconds) recording when the authorization expires
+* **MUST** be strictly enforced: valid iff `now < expiry`; `now >= expiry` → `AUTH_EXPIRED`
+* **No clock skew tolerance** — the protocol uses strict zero tolerance. There is no `skew` parameter and no grace period.
 * Wire-format field name depends on encoding (see §5)
+* Issuers operating in distributed environments should build delivery latency estimates into the expiry window; the verifier does not compensate for transport delays.
 
 ---
 
@@ -495,3 +499,66 @@ No valid AuthorizationV1
 ```
 
 Unknown encoding → DENY → no execution.
+
+---
+
+## 17. Clock Model
+
+### 17.1 Selected Model: Strict Zero Tolerance
+
+The protocol uses **strict zero-tolerance** expiry enforcement. There is no `skew` parameter and no grace period.
+
+**Validity rule:**
+
+```text
+valid iff now < expiry
+```
+
+| `now` vs `expiry` | Result |
+|---|---|
+| `now < expiry` | Valid — accepted |
+| `now == expiry` | Expired — `AUTH_EXPIRED` |
+| `now > expiry` | Expired — `AUTH_EXPIRED` |
+
+**Rationale:** Clock ambiguity at the expiry boundary represents a time window during which authorization validity is uncertain. The fail-closed doctrine requires `DENY` under uncertainty. Introducing a skew allowance would widen this window deliberately and require agreeing on an exact tolerance value across all implementations and deployments — a fragile distributed constraint. Strict zero tolerance eliminates the ambiguity entirely.
+
+### 17.2 issued_at Semantics
+
+`issued_at` is **informational**. The verifier:
+
+- Validates that `issued_at` is an integer (required field)
+- Does **NOT** enforce `now >= issued_at`
+
+There is no "not yet valid" (nbf) concept in this protocol version. An authorization whose `now` is slightly behind `issued_at` (e.g., verifier clock drift of a few seconds) is still accepted, provided `now < expiry`.
+
+### 17.3 Distributed Deployment Requirements
+
+| Requirement | Detail |
+|---|---|
+| Clock synchronization | All verifiers **MUST** use synchronized clocks (NTP or equivalent). The protocol does not compensate for unsynchronized clocks. |
+| Delivery latency | Issuers operating across queues, regions, or transport layers with measurable latency **MUST** incorporate that latency into the expiry window at issuance time. |
+| Verifier `now` | Verifiers **MUST** inject `now` explicitly. Ambient wall-clock inside verification logic is not permitted (see `verification-v1.md §4`). |
+
+### 17.4 Boundary Conditions
+
+| Scenario | `now` vs fields | Result |
+|---|---|---|
+| Well within window | `issued_at < now < expiry` | ok |
+| Last valid second | `now = expiry - 1` | ok |
+| Exact expiry | `now = expiry` | `AUTH_EXPIRED` |
+| One past expiry | `now = expiry + 1` | `AUTH_EXPIRED` |
+| Verifier behind issuer | `now < issued_at`, `now < expiry` | ok — `issued_at` not enforced as lower bound |
+| Delayed delivery | `now = issued_at + large_offset`, `now < expiry` | ok — still within validity window |
+| Stale authorization | `now >= expiry` | `AUTH_EXPIRED` |
+
+### 17.5 Conformance Vectors
+
+Clock semantics are covered by `clock-semantics-verification.json` (10 assertions):
+
+| Vector | Mode | `now` relationship | Expected |
+|---|---|---|---|
+| `clock-001` | `last-valid-second` | `now = expiry - 1` | `ok` |
+| `clock-002` | `one-past-expiry` | `now = expiry + 1` | `AUTH_EXPIRED` |
+| `clock-003` | `verifier-clock-behind` | `now < issued_at` | `ok` |
+| `clock-004` | `encoding-b-last-valid-second` | `now = expires_at - 1` | `ok` |
+| `clock-005` | `encoding-b-verifier-clock-behind` | `now < issued_at` | `ok` |

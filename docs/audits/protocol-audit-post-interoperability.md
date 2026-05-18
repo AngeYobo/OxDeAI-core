@@ -116,7 +116,7 @@
 | `expiry` boundary enforcement | `DONE` | Implemented + conformance vector `authorization-sig-007` (AUTH_EXPIRED). |
 | `expires_at` fallback | `DONE` | Implemented. Conformance vectors `authorization-verify-009`, `authorization-verify-010`. |
 | Clock injection via `opts.now` | `DONE` | Implemented. All tests use deterministic timestamps. |
-| Clock skew tolerance | `MISSING` | No specification for clock skew allowance. No skew parameter in `verifyAuthorization`. Production deployments with imprecise clocks have no defined tolerance window. **Risk for distributed deployments.** |
+| Clock skew tolerance | `DONE` | Strict zero-tolerance specified in `authorization-v1.md §17`. Valid iff `now < expiry`. No grace period. `issued_at` informational only. NTP required. 10 conformance vectors added (`clock-semantics-verification.json`). |
 
 ---
 
@@ -196,7 +196,7 @@
 | Key custody and rotation guide | `DOCUMENTED ONLY` | `key-custody-and-rotation.md`. KC-1–KC-8 scenarios. No executable test coverage for lifecycle scenarios. |
 | Replay-store TTL alignment guide | `DOCUMENTED ONLY` | `replay-store-ttl-alignment.md`. RT-1–RT-10 scenarios. No conformance vectors. |
 | Failure playbooks | `PARTIAL` | Threat model covers 12 attack scenarios. Operator-facing failure playbooks (runbooks) are not yet written. |
-| Deployment guide | `PARTIAL` | `pep-production-guide.md` exists. Gaps: clock skew spec, network isolation requirements. |
+| Deployment guide | `PARTIAL` | `pep-production-guide.md` exists. Gap: network isolation requirements. Clock skew spec resolved (`authorization-v1.md §17`). |
 
 ---
 
@@ -258,7 +258,7 @@ The following areas still have **no portable conformance vector**:
 | Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
 | Replay TTL failure scenarios | **Low** | RT-1–RT-10 documented; none executable as portable conformance vectors. |
 | Malformed canonicalization (float, duplicate key) cross-language | **Low** | TypeScript unit tests exist. No cross-language conformance vectors for error cases. |
-| Clock skew behavior | **Low** | No spec; no vector. |
+| Clock skew behavior | ~~**Low**~~ | ✓ Resolved: strict zero-tolerance specified (`authorization-v1.md §17`) + 10 conformance vectors added. |
 
 ---
 
@@ -320,7 +320,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 | Multi-process / horizontal scaling | `RISK` | Requires durable replay store (Redis available). **No enforcement or detection** when in-memory store is accidentally used in a scaled deployment. |
 | Process restart durability | `RISK` | In-memory replay store loses state on restart. Window for replayed authorizations until store repopulates. |
 | Redis replay store | `DONE` | Implemented, tested (`guard.replay-store.redis.test.ts`). |
-| Clock skew | `RISK` | No clock skew tolerance is specified. `opts.now` allows injection. Production deployments with unsynchronized clocks have undefined behavior at expiry boundaries. NTP synchronization assumed but not enforced. |
+| Clock skew | `DONE` | Strict zero-tolerance specified (`authorization-v1.md §17`). `opts.now` injection required. NTP synchronization required; issuers build latency into expiry. Undefined behavior eliminated. |
 | Key rotation automation | `PARTIAL` | Manual procedures documented (dual-sign + TTL overlap). No automated rotation tooling. |
 | State-source integrity | `RISK` | See RT-TRUST-1. Protocol layer cannot verify state provider integrity. |
 | Monitoring / observability | `PARTIAL` | `onDecision` hook provides per-decision events. No structured event schema, no metrics contract, no alerting spec. |
@@ -389,11 +389,11 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 Prerequisites before external standard positioning:
 
-1. Close key lifecycle conformance vector gap (revoked, not_before, not_after)
-2. Close intent hash mismatch portable vector gap
-3. Resolve or formally mitigate state provider trust risk
-4. Resolve or formally mitigate KRL transport integrity risk
-5. Define clock skew tolerance specification
+1. ~~Close key lifecycle conformance vector gap~~ ✓ resolved
+2. ~~Define clock skew tolerance specification~~ ✓ resolved
+3. Close intent hash mismatch portable vector gap
+4. Resolve or formally mitigate state provider trust risk
+5. Resolve or formally mitigate KRL transport integrity risk
 6. Independent security review
 7. Establish external feedback or co-author channel
 
@@ -411,7 +411,7 @@ Wire encodings (A + B)       █████████████████
 Audience / expiry / replay   ████████████████████  DONE
 State binding (guard)        ████████████████████  DONE
 Intent binding (guard)       ██████████████████░░  PARTIAL (no cross-lang vector)
-Key lifecycle (lifecycle)    ████████████░░░░░░░░  PARTIAL (no portable vectors)
+Key lifecycle (lifecycle)    ████████████████████  DONE (20 portable vectors)
 DelegationV1                 ████████████████████  DONE
 Profile A interop            ████████████████████  DONE
 Profile B interop            ████████████████░░░░  PARTIAL (trust sep. gap)
@@ -419,7 +419,7 @@ Profile C interop            █████████████████
 Replay durability            ████████████████░░░░  PARTIAL (in-memory default risk)
 Key rotation                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
-Clock skew spec              ░░░░░░░░░░░░░░░░░░░░  MISSING
+Clock skew spec              ████████████████████  DONE (strict zero-tolerance + 10 vectors)
 HTTP PEP                     ░░░░░░░░░░░░░░░░░░░░  MISSING (planned v2.6)
 Structured events / metrics  ░░░░░░░░░░░░░░░░░░░░  MISSING
 ```
@@ -433,9 +433,8 @@ Structured events / metrics  ░░░░░░░░░░░░░░░░░
 **P0-1: Add portable conformance vectors for key lifecycle** ✓ RESOLVED  
 Resolution: `key-lifecycle-verification.json` added — 10 vectors, 20 assertions covering active, revoked, retired (within/past window), `not_before`/`not_after` time windows, revocation-overrides-window, and wrong-kid-known-issuer. Conformance count: 161 → 181.
 
-**P0-2: Define and specify clock skew tolerance**  
-Reason: No `skew` parameter in `verifyAuthorization`. Distributed deployments with imprecise clocks have undefined boundary behavior. Define a spec value (e.g., ±30s) or explicitly state zero tolerance with NTP requirement.  
-Scope: `authorization-v1.md §6 Verification Algorithm` + `verifyAuthorization` options.
+**P0-2: Define and specify clock skew tolerance** ✓ RESOLVED  
+Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md §17` defines: valid iff `now < expiry`, no grace period, `issued_at` informational-only (no lower-bound enforcement), NTP synchronization required, issuers must build delivery latency into expiry window. `clock-semantics-verification.json` added — 5 vectors, 10 assertions covering last-valid-second, one-past-expiry, verifier-clock-behind, and Encoding B variants. Conformance count: 181 → 191.
 
 **P0-3: Harden `parentScope` cast in `OxDeAIGuard`**  
 Reason: `const parentScope = (parentAuth as any).scope` silently allows `undefined`, with a separate guard that throws after the chain check. This is a type-safety gap that could mask bugs. `DelegationV1` scope narrowing correctness depends on this.  
@@ -493,25 +492,25 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 ## 10. Audit Summary
 
-**Total areas audited:** 23 protocol areas, 14 invariants, 14 conformance vector sets, 9 trust components.
+**Total areas audited:** 23 protocol areas, 14 invariants, 15 conformance vector sets, 9 trust components.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 47 |
+| `DONE` | 49 |
 | `PARTIAL` | 19 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
-| `MISSING` | 8 |
-| `RISK` | 7 |
+| `MISSING` | 7 |
+| `RISK` | 5 |
 
-**Conformance:** 181 assertions. 7 remaining gaps (P0-1 resolved).
+**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2 resolved).
 
-**Follow-up issue counts:** P0: 2 open (P0-1 resolved) · P1: 6 · P2: 4 · Total: 12 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2 resolved) · P1: 6 · P2: 4 · Total: 10 open
 
 **Critical path to external adoption:**
 
 1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved — 20 assertions added
-2. Clock skew specification (P0-2)
+2. ~~Clock skew specification (P0-2)~~ ✓ resolved — strict zero-tolerance specified, 10 assertions added
 3. Intent hash mismatch portable vector (P1-1)
 4. `expiry`/`expires_at` precedence vector (P1-2)
 5. Cross-language Profile C vectors (P1-6)
@@ -521,7 +520,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle conformance, clock skew tolerance, and state provider trust are open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle and clock skew are now resolved. State provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
 
 ---
 
