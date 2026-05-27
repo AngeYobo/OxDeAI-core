@@ -15,7 +15,7 @@
  * The PEP is deliberately thin. It enforces, never decides.
  */
 
-import type { Authorization, State } from "@oxdeai/core";
+import type { AuthorizationV1, State } from "@oxdeai/core";
 import { engine, buildProvisionIntent, gpuCost } from "./policy.js";
 
 // ── Mocked tool ───────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ function provision_gpu(asset: string, region: string): string {
 // ── Result types ──────────────────────────────────────────────────────────────
 
 export type GuardedResult =
-  | { allowed: true;  instanceId: string; authorization: Authorization; nextState: State }
+  | { allowed: true;  instanceId: string; authorization: AuthorizationV1; nextState: State }
   | { allowed: false; reasons: string[] };
 
 // ── PEP: guarded tool call ────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export function guardedProvision(
 
   // ── Step 4: Execute tool (only after Authorization confirmed) ────────────
   const instanceId = provision_gpu(asset, region);
-  log(`   provision_gpu(${asset}, ${region})  cost=${cost}  nonce=${intent.nonce}  → ALLOW  auth=${authorization.authorization_id.slice(0, 12)}...  instance=${instanceId}`);
+  log(`   provision_gpu(${asset}, ${region})  cost=${cost}  nonce=${intent.nonce}  → ALLOW  auth=${authorization.auth_id.slice(0, 12)}...  instance=${instanceId}`);
 
   // nextState from PDP must be used for the next evaluation.
   // Never mutate state directly - always use result.nextState.

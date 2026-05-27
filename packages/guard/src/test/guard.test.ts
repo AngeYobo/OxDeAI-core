@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PolicyEngine } from "@oxdeai/core";
-import type { Authorization, State } from "@oxdeai/core";
+import type { Authorization, AuthorizationV1, State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 import { TEST_KEYSET, TEST_KEYPAIR, signAuth } from "./helpers/fixtures.js";
 
@@ -309,7 +309,7 @@ test("guard: ALLOW executes and returns the result", async () => {
 
 test("guard: ALLOW fires onDecision hook with ALLOW decision", async () => {
   let capturedDecision: string | undefined;
-  let capturedAuth: Authorization | undefined;
+  let capturedAuth: AuthorizationV1 | undefined;
 
   const config = makeGuardConfig({
     onDecision({ decision, authorization }) {

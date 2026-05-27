@@ -126,7 +126,9 @@ test("audience tampering is denied by strict verifier", async () => {
   engine.evaluatePure = ((intent: Intent, st: State) => {
     const out = originalEval(intent, st);
     if (out.decision === "ALLOW") {
-      const tampered: Authorization = { ...out.authorization, audience: "attacker" };
+      // Cast as Authorization: spread of AuthorizationV1 + tampered field; internal
+      // engine fields are present at runtime even though TypeScript type was narrowed.
+      const tampered = { ...out.authorization, audience: "attacker" } as Authorization;
       return { ...out, authorization: tampered };
     }
     return out;

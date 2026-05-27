@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Intent, PolicyEngine, State, Authorization } from "@oxdeai/core";
+import type { Intent, PolicyEngine, State, Authorization, AuthorizationV1 } from "@oxdeai/core";
 import type { AuditAdapter, ClockAdapter, MaybePromise, StateAdapter, IntentBuilderInput } from "./types.js";
 import { buildIntent } from "./builders.js";
 
 export type GuardDecision =
-  | { decision: "ALLOW"; reasons: []; authorization: Authorization }
+  | { decision: "ALLOW"; reasons: []; authorization: AuthorizationV1 }
   | { decision: "DENY"; reasons: string[] };
 
 export type GuardAllowResult<T> = {
-  output: GuardDecision & { decision: "ALLOW"; reasons: []; authorization: Authorization };
+  output: GuardDecision & { decision: "ALLOW"; reasons: []; authorization: AuthorizationV1 };
   intent: Intent;
   state: State;
   auditEvents: unknown[];
@@ -45,7 +45,7 @@ export type GuardOptions = {
 
 type GuardExecuteContext = {
   intent: Intent;
-  authorization: Authorization;
+  authorization: AuthorizationV1;
   state: State;
 };
 
@@ -122,7 +122,9 @@ export function createGuard(opts: GuardOptions): GuardFn {
     }
 
     if (opts.verifyAuthorization !== false) {
-      const authCheck = opts.engine.verifyAuthorization(intent, out.authorization, out.nextState, intent.timestamp);
+      // Cast as Authorization: runtime object retains internal engine fields even
+      // though the TypeScript type was narrowed to AuthorizationV1 at the evaluatePure boundary.
+      const authCheck = opts.engine.verifyAuthorization(intent, out.authorization as Authorization, out.nextState, intent.timestamp);
       if (!authCheck.valid) {
         return {
           output: { decision: "DENY", reasons: [`AUTH_INVALID:${authCheck.reason ?? "unknown"}`] },

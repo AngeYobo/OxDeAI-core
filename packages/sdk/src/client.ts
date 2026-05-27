@@ -7,7 +7,7 @@ import {
   verifyEnvelope,
   verifySnapshot
 } from "@oxdeai/core";
-import type { Authorization, Intent } from "@oxdeai/core";
+import type { Authorization, AuthorizationV1, Intent } from "@oxdeai/core";
 
 import type {
   AuditAdapter,
@@ -80,9 +80,12 @@ export class OxDeAIClient {
     return { output, state, auditEvents: emitted.events };
   }
 
-  async verifyAuthorization(intent: Intent, authorization: Authorization): Promise<{ valid: boolean; reason?: string }> {
+  async verifyAuthorization(intent: Intent, authorization: AuthorizationV1): Promise<{ valid: boolean; reason?: string }> {
     const state = await this.stateAdapter.load();
-    const result = this.engine.verifyAuthorization(intent, authorization, state, intent.timestamp);
+    // Cast as Authorization: internal engine.verifyAuthorization() uses legacy fields
+    // (engine_signature, state_snapshot_hash) for HMAC binding verification.
+    // Authorization objects returned by evaluatePure() retain these at runtime.
+    const result = this.engine.verifyAuthorization(intent, authorization as Authorization, state, intent.timestamp);
     return result.valid ? { valid: true } : { valid: false, reason: result.reason };
   }
 

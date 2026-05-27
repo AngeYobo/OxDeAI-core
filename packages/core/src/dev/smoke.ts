@@ -186,7 +186,7 @@ async function main() {
 
     // RELEASE with real auth -> ALLOW (free one slot)
     const rel = engine.evaluatePure(
-      intentBase({ nonce: 204n, type: "RELEASE", authorization_id: r2.authorization.authorization_id }),
+      intentBase({ nonce: 204n, type: "RELEASE", authorization_id: r2.authorization.auth_id }),
       r2.nextState,
       { mode: "fail-fast" }
     );

@@ -307,7 +307,10 @@ const coreAdapter: ConformanceAdapter = {
     if (out.decision !== "ALLOW") {
       throw new Error(`expected ALLOW, got DENY: ${out.reasons.join(",")}`);
     }
-    return { authorization: out.authorization, policyId: engine.computePolicyId() };
+    // Cast to AuthorizationLike: runtime object retains internal engine fields
+    // (state_snapshot_hash, expires_at, engine_signature) even though the
+    // TypeScript type was narrowed to AuthorizationV1 at the evaluatePure boundary.
+    return { authorization: out.authorization as unknown as AuthorizationLike, policyId: engine.computePolicyId() };
   },
   encodeSnapshot(state: State) {
     const engine = makeEngine();

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Authorization, AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
+import type { AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
 import type { ReplayStore } from "./replayStore.js";
 
 /**
@@ -57,7 +57,7 @@ export type GuardCallOptions = {
 export type GuardDecisionRecord = {
   action: ProposedAction;
   decision: "ALLOW" | "DENY";
-  authorization?: Authorization;
+  authorization?: AuthorizationV1;
   /** Present when the decision was made via the delegation verification path. */
   delegation?: DelegationV1;
   reasons?: string[];
@@ -111,7 +111,7 @@ export type OxDeAIGuardConfig = {
    */
   beforeExecute?: (
     action: ProposedAction,
-    authorization: Authorization
+    authorization: AuthorizationV1
   ) => void | Promise<void>;
 
   /**

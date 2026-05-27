@@ -11,6 +11,7 @@ import {
   verifyEd25519,
 } from "../crypto/signatures.js";
 import { canonicalJson } from "../crypto/hashes.js";
+import { toPublicAuthorizationV1 } from "./verifyAuthorization.js";
 
 // ── Options ───────────────────────────────────────────────────────────────────
 
@@ -54,9 +55,18 @@ function sortViolations(violations: VerificationViolation[]): VerificationViolat
   });
 }
 
-/** @public */
+/**
+ * Compute the canonical hash of a parent `AuthorizationV1` for use in
+ * `DelegationV1.parent_auth_hash`.
+ *
+ * Only normative `AuthorizationV1` fields are included in the hash so
+ * independent implementations can reproduce the same value without access
+ * to engine-internal state (e.g. `engine_signature`, `state_snapshot_hash`).
+ *
+ * @public
+ */
 export function delegationParentHash(parent: AuthorizationV1): string {
-  return createHash("sha256").update(canonicalJson(parent), "utf8").digest("hex");
+  return createHash("sha256").update(canonicalJson(toPublicAuthorizationV1(parent)), "utf8").digest("hex");
 }
 
 /** @public */

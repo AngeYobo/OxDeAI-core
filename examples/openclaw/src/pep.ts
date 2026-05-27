@@ -6,7 +6,7 @@
  * universal guard. No evaluatePure / verifyAuthorization calls here.
  */
 
-import type { Authorization, State } from "@oxdeai/core";
+import type { AuthorizationV1, State } from "@oxdeai/core";
 import { createOpenClawGuard, OxDeAIDenyError } from "@oxdeai/openclaw";
 import type { OpenClawAction } from "@oxdeai/openclaw";
 import { buildProvisionIntent, engine, gpuCost, AGENT_ID } from "./policy.js";
@@ -37,7 +37,7 @@ function provision_gpu(asset: string, region: string): string {
 }
 
 export type GuardedResult =
-  | { allowed: true; instanceId: string; authorization: Authorization; nextState: State }
+  | { allowed: true; instanceId: string; authorization: AuthorizationV1; nextState: State }
   | { allowed: false; reasons: string[] };
 
 export async function guardedProvision(
@@ -59,7 +59,7 @@ export async function guardedProvision(
   log(`${c(C.dim, "│")}  ${c(C.dim, `cost=${c(C.yellow, String(cost))} minor units  nonce=${intent.nonce}  intent_id=${intent.intent_id}`)}`);
 
   let nextState = state;
-  let capturedAuth: Authorization | undefined;
+  let capturedAuth: AuthorizationV1 | undefined;
 
   const action: OpenClawAction = {
     name: "provision_gpu",
@@ -76,10 +76,10 @@ export async function guardedProvision(
     trustedKeySets: [DEMO_KEYSET],
     // Return the pre-built intent so nonce/intent_id are stable.
     mapActionToIntent: () => intent,
-    beforeExecute(_action: unknown, authorization: Authorization) {
+    beforeExecute(_action: unknown, authorization: AuthorizationV1) {
       capturedAuth = authorization;
-      log(`${c(C.dim, "│")}  ${c(C.bGreen, "ALLOW")}  ${c(C.dim, "auth_id=")}${c(C.blue, authorization.authorization_id.slice(0, 16) + "...")}`);
-      log(`${c(C.dim, "│")}         ${c(C.dim, "expires=")}${authorization.expires_at}  ${c(C.dim, "state_hash=")}${c(C.blue, authorization.state_snapshot_hash.slice(0, 16) + "...")}`);
+      log(`${c(C.dim, "│")}  ${c(C.bGreen, "ALLOW")}  ${c(C.dim, "auth_id=")}${c(C.blue, authorization.auth_id.slice(0, 16) + "...")}`);
+      log(`${c(C.dim, "│")}         ${c(C.dim, "expires=")}${authorization.expiry}  ${c(C.dim, "state_hash=")}${c(C.blue, authorization.state_hash.slice(0, 16) + "...")}`);
     },
   });
 

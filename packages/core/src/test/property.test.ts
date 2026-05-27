@@ -345,7 +345,7 @@ function runIntentOps(engine: PolicyEngine, initial: State, ops: IntentOp[], see
       state = out.nextState;
       if (intent.type !== "RELEASE") {
         const queue = authsByAgent[intent.agent_id] ?? [];
-        queue.push(out.authorization.authorization_id);
+        queue.push(out.authorization.auth_id);
         authsByAgent[intent.agent_id] = queue;
       }
     }

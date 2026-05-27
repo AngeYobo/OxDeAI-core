@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import type { Intent } from "../types/intent.js";
 import type { State, CanonicalState } from "../types/state.js";
-import type { Authorization } from "../types/authorization.js";
+import type { Authorization, AuthorizationV1 } from "../types/authorization.js";
 import type { ReasonCode, PolicyModule } from "../types/policy.js";
 
 import { canonicalJson, intentHash, sha256HexFromJson } from "../crypto/hashes.js";
@@ -35,12 +35,12 @@ export type EngineEvalOptions = {
 
 /** @public */
 export type EvaluateOutput =
-  | { decision: "ALLOW"; reasons: []; authorization: Authorization }
+  | { decision: "ALLOW"; reasons: []; authorization: AuthorizationV1 }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
 /** @public */
 export type EvaluatePureOutput =
-  | { decision: "ALLOW"; reasons: []; authorization: Authorization; nextState: State }
+  | { decision: "ALLOW"; reasons: []; authorization: AuthorizationV1; nextState: State }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
 /** @public */
@@ -497,7 +497,7 @@ export class PolicyEngine {
               ...working.concurrency.active_auths,
               [agent]: {
                 ...current,
-                [authorization.authorization_id]: { expires_at: authorization.expires_at }
+                [authorization.auth_id]: { expires_at: authorization.expiry }
               }
             }
           }

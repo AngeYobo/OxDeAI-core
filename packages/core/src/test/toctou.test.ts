@@ -25,6 +25,7 @@ import { createDelegation } from "../delegation/createDelegation.js";
 import { verifyDelegation, verifyDelegationChain } from "../verification/verifyDelegation.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
+import type { Authorization } from "../types/authorization.js";
 import type { KeySet } from "../types/keyset.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -102,7 +103,9 @@ test("T-1 state_snapshot_hash tamper → AUTH_SIGNATURE_INVALID", () => {
   const { authorization } = issueAuth(engine, state, intent);
 
   // Mutate the embedded state snapshot hash — the HMAC must no longer verify.
-  const tampered = { ...authorization, state_snapshot_hash: "f".repeat(64) };
+  // Cast as Authorization: runtime object has all legacy fields even though the
+  // TypeScript type was narrowed to AuthorizationV1 at the evaluatePure boundary.
+  const tampered = { ...authorization, state_snapshot_hash: "f".repeat(64) } as Authorization;
 
   const result = engine.verifyAuthorization(intent, tampered, state, T0);
   assert.equal(result.valid, false, "tampered state_snapshot_hash must fail verification");
@@ -122,7 +125,7 @@ test("T-2 policy_version mismatch → POLICY_VERSION_MISMATCH", () => {
   // Present the auth against a state whose policy_version is different.
   const altState: State = { ...state, policy_version: "v-other" };
 
-  const result = engine.verifyAuthorization(intent, authorization, altState, T0);
+  const result = engine.verifyAuthorization(intent, authorization as Authorization, altState, T0);
   assert.equal(result.valid, false, "policy_version mismatch must fail verification");
   assert.equal(result.reason, "POLICY_VERSION_MISMATCH",
     `expected POLICY_VERSION_MISMATCH, got ${result.reason}`);
@@ -139,7 +142,7 @@ test("T-3 explicit now past expiry → AUTH_EXPIRED", () => {
   // authorization.expiry = T0 + 60
 
   // Verify one second after expiry.
-  const result = engine.verifyAuthorization(intent, authorization, state, T0 + TTL + 1);
+  const result = engine.verifyAuthorization(intent, authorization as Authorization, state, T0 + TTL + 1);
   assert.equal(result.valid, false, "expired authorization must be rejected");
   assert.equal(result.reason, "AUTH_EXPIRED",
     `expected AUTH_EXPIRED, got ${result.reason}`);
@@ -157,7 +160,7 @@ test("T-4 intent field mutation → AUTH_INTENT_MISMATCH", () => {
   // Alter a binding field — a different amount changes the intent hash.
   const mutated = { ...intent, amount: 999n };
 
-  const result = engine.verifyAuthorization(mutated, authorization, state, T0);
+  const result = engine.verifyAuthorization(mutated, authorization as Authorization, state, T0);
   assert.equal(result.valid, false, "mutated intent must not verify against issued auth");
   assert.equal(result.reason, "AUTH_INTENT_MISMATCH",
     `expected AUTH_INTENT_MISMATCH, got ${result.reason}`);
@@ -232,11 +235,11 @@ test("T-6 RELEASE with unknown authorization_id → CONCURRENCY_RELEASE_INVALID"
   const engine = makeEngine();
   const state  = makeState();
 
-  // Step 1: EXECUTE → ALLOW → record the authorization_id and advance state.
+  // Step 1: EXECUTE → ALLOW → record the auth_id and advance state.
   const execIntent = makeIntent({ nonce: 6n, type: "EXECUTE" });
   const execOut    = engine.evaluatePure(execIntent, state);
   assert.equal(execOut.decision, "ALLOW", "EXECUTE precondition: must ALLOW");
-  const { authorization_id } = execOut.authorization;
+  const authorization_id = execOut.authorization.auth_id;
   const stateAfterExec = execOut.nextState;
 
   // The slot is recorded in active_auths.
@@ -300,7 +303,7 @@ test("T-7 cross-engine artifact: wrong engine secret → AUTH_SIGNATURE_INVALID"
   assert.equal(out.decision, "ALLOW", "engine A precondition");
 
   // Verified by engine B (different secret) → HMAC mismatch.
-  const result = engineB.verifyAuthorization(intent, out.authorization, state, T0);
+  const result = engineB.verifyAuthorization(intent, out.authorization as Authorization, state, T0);
   assert.equal(result.valid, false,
     "auth issued by engine A must not verify against engine B");
   assert.equal(result.reason, "AUTH_SIGNATURE_INVALID",

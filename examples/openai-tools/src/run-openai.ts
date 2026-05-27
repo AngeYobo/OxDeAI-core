@@ -182,7 +182,7 @@ export async function runOpenAIDemo(
         toolContent = JSON.stringify({
           status: "provisioned",
           instance_id: result.instanceId,
-          authorization_id: result.authorization.authorization_id.slice(0, 16),
+          authorization_id: result.authorization.auth_id.slice(0, 16),
         });
         log(`      ${c(C.bgGreen, " ALLOW ")}  ${c(C.dim, "instance =")} ${c(C.green, result.instanceId)}`);
         log(`               ${c(C.dim, "budget  =")} ${c(C.yellow, `${spent} / ${limit}`)} minor units`);

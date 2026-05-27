@@ -83,18 +83,70 @@ function nowOrThrow(now: number | undefined): number {
   return Math.floor(Date.now() / 1000);
 }
 
+/**
+ * Strip an authorization object down to only the normative `AuthorizationV1`
+ * fields, excluding internal engine fields (`authorization_id`,
+ * `policy_version`, `state_snapshot_hash`, `engine_signature`, `expires_at`).
+ *
+ * Use this before computing `delegationParentHash` or any public signing
+ * payload so that independent implementations can reproduce the same hash
+ * without access to internal engine state.
+ *
+ * @public
+ */
+export function toPublicAuthorizationV1(auth: AuthorizationV1): AuthorizationV1 {
+  const out: AuthorizationV1 = {
+    auth_id:      auth.auth_id,
+    issuer:       auth.issuer,
+    audience:     auth.audience,
+    intent_hash:  auth.intent_hash,
+    state_hash:   auth.state_hash,
+    policy_id:    auth.policy_id,
+    decision:     auth.decision,
+    issued_at:    auth.issued_at,
+    expiry:       auth.expiry,
+    alg:          auth.alg,
+    kid:          auth.kid,
+    signature:    auth.signature,
+  };
+  if (auth.version    !== undefined) out.version    = auth.version;
+  if (auth.nonce      !== undefined) out.nonce      = auth.nonce;
+  if (auth.capability !== undefined) out.capability = auth.capability;
+  return out;
+}
+
 /** @public */
 export function authorizationSigningPayload(auth: AuthorizationV1): Omit<AuthorizationV1, "signature"> | Record<string, unknown> {
   const sig = signatureParts(auth);
   const hasFlatAlgKid = hasText(auth.alg) && hasText(auth.kid);
 
   if (sig.nested) {
+    // Use only normative AuthorizationV1 fields so legacy engine-internal fields
+    // (engine_signature, state_snapshot_hash, etc.) are never included in the
+    // Encoding B signing payload — independent implementations must be able to
+    // reproduce this payload without access to engine-internal state.
+    //
+    // canonicalJson throws on undefined values; only include fields that are
+    // actually present. Sift wire format omits `expiry` and uses `expires_at`
+    // instead — both are normalised here so either wire format verifies correctly.
+    const pub = toPublicAuthorizationV1(auth);
     const payload: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(auth as Record<string, unknown>)) {
-      if (value === undefined) continue;
-      if (key === "signature") continue;
-      payload[key] = value;
-    }
+    payload.auth_id     = pub.auth_id;
+    payload.issuer      = pub.issuer;
+    payload.audience    = pub.audience;
+    payload.intent_hash = pub.intent_hash;
+    payload.state_hash  = pub.state_hash;
+    payload.policy_id   = pub.policy_id;
+    payload.decision    = pub.decision;
+    payload.issued_at   = pub.issued_at;
+    if (pub.expiry      !== undefined) payload.expiry      = pub.expiry;
+    if (pub.version     !== undefined) payload.version     = pub.version;
+    if (pub.nonce       !== undefined) payload.nonce       = pub.nonce;
+    if (pub.capability  !== undefined) payload.capability  = pub.capability;
+    // Sift wire format uses expires_at instead of expiry; preserve it when present
+    // so Sift-issued tokens remain verifiable without re-signing.
+    const raw = auth as Record<string, unknown>;
+    if (typeof raw["expires_at"] === "number") payload["expires_at"] = raw["expires_at"];
     if (!hasFlatAlgKid) {
       payload.signature = { alg: sig.alg, kid: sig.kid };
     }
