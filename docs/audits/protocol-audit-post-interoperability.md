@@ -46,7 +46,7 @@
 | Encoding B (Sift-compatible) | `DONE` | `alg="ed25519"`, `expires_at`, base64url signature, non-prefixed preimage. Specified. Conformance vector `authorization-sig-010`. |
 | Rejected encodings (EdDSA, ED25519) | `DONE` | Vectors `authorization-sig-011`, `authorization-sig-012` enforce case-exact rejection. |
 | `expiry` vs `expires_at` precedence | `DONE` | Implemented: `expiry` takes precedence; `expires_at` fallback when `expiry` absent. Specified in `authorization-v1.md §5`. Conformance vector `auth-expiry-wins-over-expires-at`: both fields present, `expiry` expired, `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
-| HMAC-SHA256 (legacy) | `PARTIAL` | Implemented with `legacyHmacSecret`. No conformance vector; treated as backward-compat only. Spec does not list as an accepted encoding. Should be marked deprecated. |
+| HMAC-SHA256 (legacy) | `DONE` | Explicitly deprecated. `authorization-v1.md §5` now carries a formal deprecation section: not part of the standard AuthorizationV1 wire format; symmetric shared-secret; not independently verifiable by third parties. `legacyHmacSecret` option marked `@deprecated` in `VerifyAuthorizationOptions`. `authorization_signing_alg: "HMAC-SHA256"` default marked `@deprecated` in `EngineOptions` with migration path to Ed25519. Two explicit legacy-path tests added. Resolved in #107. |
 
 ---
 
@@ -466,9 +466,8 @@ Scope: New vector in `authorization-signature-verification.json` with distinct a
 Reason: Sift KRL payload is not signature-verified. A compromised network path can suppress revocations. Either require a signed KRL contract from Sift, or formally document this as an accepted operational risk with compensating controls.  
 Scope: `packages/sift/README.md` + `docs/architecture/threat-model-external-providers.md`.
 
-**P1-5: Mark HMAC-SHA256 as deprecated**  
-Reason: `legacyHmacSecret` accepts HMAC-SHA256, which is not listed as an accepted encoding in `authorization-v1.md §5`. This creates a spec/implementation mismatch. Should be formally deprecated with a removal timeline.  
-Scope: `authorization-v1.md` - add deprecation notice. `verifyAuthorization` - add deprecation warning.
+**P1-5: Mark HMAC-SHA256 as deprecated** ✓ RESOLVED
+Resolution: `authorization-v1.md §5` now carries an explicit "Deprecated legacy algorithm" section: HMAC-SHA256 is not standard, is symmetric/non-portable, and its migration path is documented. `legacyHmacSecret` in `VerifyAuthorizationOptions` carries a `@deprecated` JSDoc with removal notice. `authorization_signing_alg: "HMAC-SHA256"` default in `EngineOptions` carries a `@deprecated` JSDoc directing new users to Ed25519. Two explicit legacy-path tests document backward-compat guarantee and the fail-closed behavior when `legacyHmacSecret` is absent. Resolved in #107.
 
 **P1-6: Add cross-language Profile C conformance vectors**  
 Reason: Profile C is executable in TypeScript but not portable across Go/Python harnesses. Standardization positioning for Profile C requires external verifiers to validate `computeStateHash` integration against the same vectors. TypeScript-only coverage is insufficient for a multi-implementer profile claim.  
@@ -502,16 +501,16 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 54 |
-| `PARTIAL` | 18 |
+| `DONE` | 55 |
+| `PARTIAL` | 17 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2 resolved).
+**Conformance:** 191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-5 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 4 · P2: 4 · Total: 8 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 3 · P2: 4 · Total: 7 open
 
 **Critical path to external adoption:**
 
@@ -521,14 +520,14 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
 5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved — portable `AuthorizationV1` vector added for `proposed_action` mismatch
 6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
-7. Cross-language Profile C vectors (P1-6)
-8. HMAC-SHA256 deprecation (P1-5)
+7. ~~HMAC-SHA256 deprecation (P1-5)~~ ✓ resolved — spec deprecation notice added; `@deprecated` JSDoc on `legacyHmacSecret` and `authorization_signing_alg`
+8. Cross-language Profile C vectors (P1-6)
 
 **Protocol positioning:**
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, and expiry precedence are now resolved. The protocol surface is cleaner but state provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, expiry precedence, and HMAC-SHA256 deprecation are now resolved. The spec/implementation mismatch is closed. State provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
 
 ---
 

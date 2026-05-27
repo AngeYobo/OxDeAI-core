@@ -56,6 +56,16 @@ export type EngineOptions = {
   authorization_ttl_seconds?: number;
   authorization_issuer?: string;
   authorization_audience?: string;
+  /**
+   * Algorithm used to sign emitted `AuthorizationV1` artifacts.
+   *
+   * Defaults to `"HMAC-SHA256"` for backward compatibility. **This default is
+   * deprecated.** New deployments SHOULD set this to `"Ed25519"` and provide
+   * `authorization_private_key_pem`. `"HMAC-SHA256"` will be removed as a valid
+   * default in a future major release.
+   *
+   * @deprecated Pass `"Ed25519"` explicitly for all new integrations.
+   */
   authorization_signing_alg?: "Ed25519" | "HMAC-SHA256";
   authorization_signing_kid?: string;
   authorization_private_key_pem?: string;
@@ -130,6 +140,8 @@ export class PolicyEngine {
   }
 
   private authorizationSigningAlg(): "Ed25519" | "HMAC-SHA256" {
+    // Default is "HMAC-SHA256" for backward compatibility only.
+    // New configurations should pass authorization_signing_alg: "Ed25519".
     return this.opts.authorization_signing_alg ?? "HMAC-SHA256";
   }
 

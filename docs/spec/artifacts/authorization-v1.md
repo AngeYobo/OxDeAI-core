@@ -175,6 +175,26 @@ No other values are accepted. Matching is **exact and case-sensitive**. The foll
 
 ---
 
+### Deprecated legacy algorithm: `"HMAC-SHA256"`
+
+> **DEPRECATED.** `"HMAC-SHA256"` is not a standard AuthorizationV1 verification algorithm. It is retained solely as a legacy compatibility path for deployments that pre-date the Ed25519 migration and **MUST NOT** be used in new integrations.
+
+**Why it is not standard:**
+
+HMAC-SHA256 is a symmetric shared-secret algorithm. It cannot be independently verified by a third party without access to the shared secret. This violates the AuthorizationV1 portability requirement: any compliant verifier **MUST** be able to verify an `AuthorizationV1` artifact using only publicly distributed key material (`trustedKeySets`).
+
+**Current behavior (backward-compat only):**
+
+The OxDeAI reference implementation accepts `alg: "HMAC-SHA256"` artifacts only when the caller explicitly provides `legacyHmacSecret` in `VerifyAuthorizationOptions`. It is not accepted under strict mode without explicit configuration. This behavior is preserved for backward compatibility only.
+
+**Migration path:**
+
+* All new `PolicyEngine` instances **SHOULD** be configured with `authorization_signing_alg: "Ed25519"` and a corresponding `authorization_private_key_pem`.
+* All new PEP deployments **SHOULD** use `trustedKeySets` for verification.
+* The `legacyHmacSecret` option will be formally removed in a future major release.
+
+---
+
 ### Signature encoding
 
 | Encoding | `signature.sig` format | Decoding |

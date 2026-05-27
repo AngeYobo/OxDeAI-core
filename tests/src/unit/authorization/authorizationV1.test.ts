@@ -199,6 +199,43 @@ test("unknown kid => invalid", () => {
   assert.ok(result.violations.some((v) => v.code === "AUTH_KID_UNKNOWN"));
 });
 
+test("legacy HMAC-SHA256 path: verifyAuthorization accepts HMAC artifact via legacyHmacSecret (deprecated)", () => {
+  // HMAC-SHA256 is the deprecated legacy verification path.
+  // Ed25519 with trustedKeySets is the standard path for all new integrations.
+  // This test exists to guarantee backward compatibility only; do not model new code after it.
+  const { out } = allowOutput(); // engine defaults to HMAC-SHA256 signing
+  const auth = out.authorization;
+  if (auth.alg !== "HMAC-SHA256") {
+    // Engine has been reconfigured to Ed25519; HMAC legacy test not applicable.
+    return;
+  }
+  const result = verifyAuthorization(auth, {
+    now: 1010,
+    legacyHmacSecret: "test-secret-must-be-at-least-32-chars!!",
+    requireSignatureVerification: true,
+  });
+  assert.equal(result.status, "ok",
+    "legacy HMAC-SHA256 path must still verify for backward compatibility");
+  assert.deepEqual(result.violations, []);
+});
+
+test("legacy HMAC-SHA256 path: HMAC verification fails when legacyHmacSecret is absent (deprecated)", () => {
+  // Without legacyHmacSecret the HMAC path cannot verify. This is intentional:
+  // the legacy path must never activate silently — it requires explicit configuration.
+  const { out } = allowOutput();
+  const auth = out.authorization;
+  if (auth.alg !== "HMAC-SHA256") {
+    return;
+  }
+  const result = verifyAuthorization(auth, {
+    now: 1010,
+    requireSignatureVerification: true,
+  });
+  assert.equal(result.status, "invalid");
+  assert.ok(result.violations.some((v) => v.code === "AUTH_TRUST_MISSING"),
+    "missing legacyHmacSecret must produce AUTH_TRUST_MISSING");
+});
+
 test("unknown alg => invalid", () => {
   const auth = signAuthorizationEd25519(
     {
