@@ -67,7 +67,10 @@ function main() {
   let failed = 0;
 
   for (const v of vectors) {
-    const result = verifyAuth(v.artifact, keys, baseIntentHash, v.state_snapshot);
+    const expectedIntentHash = v.proposed_action
+      ? sha256Hex(canonicalize(v.proposed_action))
+      : baseIntentHash;
+    const result = verifyAuth(v.artifact, keys, expectedIntentHash, v.state_snapshot);
     const pass =
       result.decision === v.expected.decision &&
       ((result.error === null && v.expected.error === null) || result.error === v.expected.error);

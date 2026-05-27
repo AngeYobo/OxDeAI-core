@@ -9,6 +9,11 @@
       "kid": "sb-key-1",
       "alg": "Ed25519",
       "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAEpLwEc8AC3nZVxl/gO8ibomzrH3FVO9dzugk/ku9ack=\n-----END PUBLIC KEY-----\n"
+    },
+    {
+      "kid": "portable-key-1",
+      "alg": "Ed25519",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----\n"
     }
   ],
   "vectors": [
@@ -68,7 +73,12 @@
     },
     {
       "id": "auth-intent-mismatch",
-      "description": "intent hash mismatch",
+      "description": "intent hash mismatch: proposed_action hashes to 8fbb30c... but artifact intent_hash is aaaa...",
+      "proposed_action": {
+        "tool": "payments.charge",
+        "type": "EXECUTE",
+        "params": { "amount": "500", "currency": "USD", "user_id": "user_123" }
+      },
       "artifact": {
         "version": "AuthorizationV1",
         "auth_id": "auth-intent-1",
@@ -91,6 +101,38 @@
       "expected": {
         "decision": "DENY",
         "error": "INTENT_HASH_MISMATCH"
+      }
+    },
+    {
+      "id": "auth-intent-action-match-1",
+      "description": "proposed_action hash matches authorization intent_hash: ALLOW path with portable key",
+      "proposed_action": {
+        "tool": "payments.charge",
+        "type": "EXECUTE",
+        "params": { "amount": "250", "currency": "USD", "user_id": "user_456" }
+      },
+      "artifact": {
+        "version": "AuthorizationV1",
+        "auth_id": "auth-intent-action-match-1",
+        "issuer": "issuer-1",
+        "audience": "pep-gateway.local",
+        "decision": "ALLOW",
+        "intent_hash": "307883ced02463b4b15c76f188ad1da6df401238c420c1359e838cc4f86ebed1",
+        "state_hash": "89d739f4d161ed9c8de4319bd2ab140d4d2f7de0d0ae172133cb79cd70187823",
+        "policy_id": "policy-1",
+        "issued_at": 1712448000,
+        "expiry": 1712448600,
+        "alg": "Ed25519",
+        "kid": "portable-key-1",
+        "signature": {
+          "alg": "Ed25519",
+          "kid": "portable-key-1",
+          "sig": "dOdPWhWrher1lKQqF2Aa9lXX5blqo7GAqxSvEDqWLJSxIgSDhG0g+CwQxIPZioKQhBVYdLhIAmzpw/rDmYc6Ag=="
+        }
+      },
+      "expected": {
+        "decision": "ALLOW",
+        "error": null
       }
     },
     {
