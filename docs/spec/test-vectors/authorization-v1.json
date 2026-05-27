@@ -136,6 +136,34 @@
       }
     },
     {
+      "id": "auth-expiry-wins-over-expires-at",
+      "description": "expiry precedence: expiry is expired (1712447100 < now=1712448050), expires_at is valid (9999999999); verifier MUST use expiry, not expires_at",
+      "artifact": {
+        "version": "AuthorizationV1",
+        "auth_id": "auth-expiry-precedence-1",
+        "issuer": "issuer-1",
+        "audience": "pep-gateway.local",
+        "decision": "ALLOW",
+        "intent_hash": "8fbb30c8419a1c88a7799b39d77c77ef19dbdcdf82476bfb6c3d08b644683fa7",
+        "state_hash": "89d739f4d161ed9c8de4319bd2ab140d4d2f7de0d0ae172133cb79cd70187823",
+        "policy_id": "policy-1",
+        "issued_at": 1712448000,
+        "expiry": 1712447100,
+        "expires_at": 9999999999,
+        "alg": "Ed25519",
+        "kid": "portable-key-1",
+        "signature": {
+          "alg": "Ed25519",
+          "kid": "portable-key-1",
+          "sig": "HpvWICtMB/dieClCnUFIi+g3XXlOUwTP2O9GhaKmuwISpCHLYEOF2BBnvjvjbYMrwXeoGFy3849/nK2jHEHGCw=="
+        }
+      },
+      "expected": {
+        "decision": "DENY",
+        "error": "EXPIRED"
+      }
+    },
+    {
       "id": "auth-invalid-signature",
       "description": "tampered payload invalidates signature",
       "artifact": {

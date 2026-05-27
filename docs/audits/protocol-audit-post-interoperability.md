@@ -45,7 +45,7 @@
 | Encoding A (Core-native) | `DONE` | `alg="Ed25519"`, `expiry`, base64 signature, domain-prefixed preimage. Specified in `authorization-v1.md §5`. Conformance vector `authorization-sig-001`. |
 | Encoding B (Sift-compatible) | `DONE` | `alg="ed25519"`, `expires_at`, base64url signature, non-prefixed preimage. Specified. Conformance vector `authorization-sig-010`. |
 | Rejected encodings (EdDSA, ED25519) | `DONE` | Vectors `authorization-sig-011`, `authorization-sig-012` enforce case-exact rejection. |
-| `expiry` vs `expires_at` precedence | `PARTIAL` | Implemented: `expiry` takes precedence; `expires_at` fallback when `expiry` absent. Specified in `authorization-v1.md §5`. No conformance vector testing the precedence when **both** fields are present simultaneously. |
+| `expiry` vs `expires_at` precedence | `DONE` | Implemented: `expiry` takes precedence; `expires_at` fallback when `expiry` absent. Specified in `authorization-v1.md §5`. Conformance vector `auth-expiry-wins-over-expires-at`: both fields present, `expiry` expired, `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
 | HMAC-SHA256 (legacy) | `PARTIAL` | Implemented with `legacyHmacSecret`. No conformance vector; treated as backward-compat only. Spec does not list as an accepted encoding. Should be marked deprecated. |
 
 ---
@@ -254,7 +254,7 @@ The following areas still have **no portable conformance vector**:
 | Gap | Risk Level | Notes |
 |-----|-----------|-------|
 | `decision != "ALLOW"` portable vector | **Medium** | Only checked structurally; no dedicated cross-language vector. |
-| Both `expiry` and `expires_at` present simultaneously | **Medium** | Precedence rule (`expiry` wins) has no test vector. |
+| Both `expiry` and `expires_at` present simultaneously | ~~**Medium**~~ | ✓ Resolved: vector `auth-expiry-wins-over-expires-at` locks the precedence rule — `expiry` expired + `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
 | Intent hash mismatch → DENY (cross-language) | ~~**Medium**~~ | ✓ Resolved: `authorization-v1.json` now includes `proposed_action` field enabling independent hash derivation. Portable ALLOW case `auth-intent-action-match-1` and `portable-key-1` fixture key added. Go/Python authorization harness integration remains a future item. Resolved in #105. |
 | Profile B trust separation vector | **Medium** | No vector where Sift receipt key ≠ AuthorizationV1 signing key for same `kid`. |
 | Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
@@ -353,19 +353,19 @@ New deployments start with an empty replay store. Authorization artifacts issued
 `verifyAuthorization` is stateless and fully portable. An independent verifier can reproduce all signature checks and field validation with the existing conformance vectors. However:
 
 - No vector for `AUTH_KEY_INACTIVE` (revoked or window-expired key).
-- No vector for simultaneous `expiry`/`expires_at` precedence.
+- ~~No vector for simultaneous `expiry`/`expires_at` precedence.~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector added (P1-2).
 - Strict-mode behavior (no `trustedKeySets` provided) is not covered by a portable vector.
 
 ### 7.3 Conformance Suite Readiness
 
 **Status: PARTIAL**
 
-191 assertions across 15 vector files + 9 portable `authorization-v1.json` vectors. Key lifecycle and intent hash mismatch coverage resolved. Remaining gaps:
+191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Key lifecycle, intent hash mismatch, and expiry precedence coverage resolved. Remaining gaps:
 
 1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved — `key-lifecycle-verification.json`
 2. ~~Intent hash mismatch portable vector~~ ✓ resolved — `authorization-v1.json` vectors include `proposed_action` mismatch case and portable ALLOW case; Go/Python auth harness integration is a future item
-3. Cross-language Profile C vectors — important for Profile C adoption
-4. `expiry`/`expires_at` simultaneous presence precedence vector
+3. ~~`expiry`/`expires_at` simultaneous presence precedence vector~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
+4. Cross-language Profile C vectors — important for Profile C adoption
 
 ### 7.4 Interoperability Profile Readiness
 
@@ -396,10 +396,11 @@ Prerequisites before external standard positioning:
 2. ~~Define clock skew tolerance specification~~ ✓ resolved
 3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
 4. ~~Close intent hash mismatch portable vector gap~~ ✓ resolved — portable `AuthorizationV1` vector added with `proposed_action`
-5. Resolve or formally mitigate state provider trust risk
-6. Resolve or formally mitigate KRL transport integrity risk
-7. Independent security review
-8. Establish external feedback or co-author channel
+5. ~~Close `expiry`/`expires_at` precedence vector gap~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
+6. Resolve or formally mitigate state provider trust risk
+7. Resolve or formally mitigate KRL transport integrity risk
+8. Independent security review
+9. Establish external feedback or co-author channel
 
 ---
 
@@ -454,9 +455,8 @@ Resolution: `EvaluatePureOutput.authorization` narrowed from `Authorization` (wh
 **P1-1: Add intent hash mismatch portable conformance vector** ✓ RESOLVED
 Resolution: `authorization-v1.json` now includes `proposed_action` on the existing `auth-intent-mismatch` vector and a new `auth-intent-action-match-1` portable ALLOW case signed with `portable-key-1` (conformance fixture key). The vector runner derives `expectedIntentHash = sha256(canonicalize(proposed_action))`, proving the intent binding invariant without TypeScript guard internals. Authorization vector count: 8 → 9. Resolved in #105.
 
-**P1-2: Add `expiry`/`expires_at` simultaneous presence precedence vector**  
-Reason: Precedence rule (`expiry` wins over `expires_at`) is implemented and specified but untested by a vector. An implementer who gets this backwards will silently accept expired authorizations.  
-Scope: `authorization-verification.json` or `authorization-signature-verification.json`.
+**P1-2: Add `expiry`/`expires_at` simultaneous presence precedence vector** ✓ RESOLVED
+Resolution: `authorization-v1.json` vector `auth-expiry-wins-over-expires-at` added: both `expiry` (expired: 1712447100) and `expires_at` (valid: 9999999999) present; expected DENY/EXPIRED. An implementer that incorrectly prefers `expires_at` would return ALLOW, failing the test. Authorization vector count: 9 → 10. Resolved in #106.
 
 **P1-3: Add Profile B trust separation conformance vector**  
 Reason: Profile B correctness depends on the trust bridge between Sift receipt key and OxDeAI signing key. No vector exercises the separate trust root for Profile B.  
@@ -502,16 +502,16 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 53 |
-| `PARTIAL` | 19 |
+| `DONE` | 54 |
+| `PARTIAL` | 18 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions across 15 vector files + 9 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1 resolved).
+**Conformance:** 191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 5 · P2: 4 · Total: 9 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 4 · P2: 4 · Total: 8 open
 
 **Critical path to external adoption:**
 
@@ -520,7 +520,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved — unsafe cast removed, fail-closed before chain verification
 4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
 5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved — portable `AuthorizationV1` vector added for `proposed_action` mismatch
-6. `expiry`/`expires_at` precedence vector (P1-2)
+6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
 7. Cross-language Profile C vectors (P1-6)
 8. HMAC-SHA256 deprecation (P1-5)
 
@@ -528,7 +528,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, and intent hash mismatch portability are now resolved. The protocol surface is cleaner but state provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, and expiry precedence are now resolved. The protocol surface is cleaner but state provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
 
 ---
 
