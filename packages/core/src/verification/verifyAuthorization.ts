@@ -23,6 +23,15 @@ export type VerifyAuthorizationOptions = {
   consumedAuthIds?: readonly string[];
   trustedKeySets?: KeySet | readonly KeySet[];
   requireSignatureVerification?: boolean;
+  /**
+   * Shared secret for verifying HMAC-SHA256 signed authorization artifacts.
+   *
+   * @deprecated HMAC-SHA256 is a legacy compatibility path and is NOT part of the
+   * standard AuthorizationV1 wire format. It cannot be independently verified by
+   * third-party verifiers without sharing the secret. Use `trustedKeySets` with
+   * Ed25519-signed artifacts for all new integrations. `legacyHmacSecret` will be
+   * removed in a future major release.
+   */
   legacyHmacSecret?: string;
 };
 
