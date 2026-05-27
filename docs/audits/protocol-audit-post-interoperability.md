@@ -130,7 +130,7 @@
 | State binding (`state_hash`) | `DONE` | Guard step 6c: computes `computeStateHash(liveState)` and compares. Tested SB-1–SB-13. Profile C vectors provide conformance coverage. |
 | Policy binding (`policy_id`) | `DONE` | Guard enforces `expectedPolicyId`. Conformance vector `auth-policy-id-mismatch` present in sig vectors. |
 | Issuer binding | `DONE` | `verifyAuthorization` checks `AUTH_ISSUER_MISMATCH`. Conformance vector `authorization-sig-004`. |
-| Intent hash portable vector | `MISSING` | No cross-language conformance vector for intent hash mismatch rejection (only TypeScript guard test). |
+| Intent hash portable vector | `DONE` | Portable `auth-intent-mismatch` vector includes `proposed_action`; runner derives `expectedIntentHash = sha256(canonicalize(proposed_action))`. Portable ALLOW case `auth-intent-action-match-1` signed with `portable-key-1` (conformance fixture key). Go/Python authorization harness integration not yet implemented. Resolved in #105. |
 
 ---
 
@@ -212,7 +212,7 @@
 | Wrong audience → DENY | Yes | Yes | Yes | Yes | Yes (conformance vector AUTH_AUDIENCE_MISMATCH) |
 | Expired authorization → DENY | Yes | Yes | Yes | Yes | Yes (conformance vector AUTH_EXPIRED) |
 | Replay → DENY | Yes | Yes | Yes | Yes | **Partial** (conformance vector AUTH_REPLAY; durable store semantics not cross-language verified) |
-| Intent mismatch → DENY | Yes | Yes | No conformance vector | Partial | **No** (TypeScript guard test only; no cross-language vector) |
+| Intent mismatch → DENY | Yes | Yes | Yes (portable `authorization-v1.json` vector with `proposed_action`) | Yes | **Partial** (portable vector with independent hash derivation; Go/Python auth harness not yet integrated) |
 | State mismatch → DENY | Yes | Yes | Profile C spec | Yes | **No** (Profile C vectors TypeScript-only) |
 | Hash strategy ambiguity → DENY | Yes | Yes (SB-12, PC-003) | Yes (Profile C spec) | Yes | **No** (TypeScript-only) |
 | Replay-store unavailability → DENY | Yes | Yes (guard test) | Yes (ReplayStore JSDoc) | Yes | **No** (no cross-language conformance vector) |
@@ -255,7 +255,7 @@ The following areas still have **no portable conformance vector**:
 |-----|-----------|-------|
 | `decision != "ALLOW"` portable vector | **Medium** | Only checked structurally; no dedicated cross-language vector. |
 | Both `expiry` and `expires_at` present simultaneously | **Medium** | Precedence rule (`expiry` wins) has no test vector. |
-| Intent hash mismatch → DENY (cross-language) | **Medium** | TypeScript guard test only. External implementers cannot verify intent binding. |
+| Intent hash mismatch → DENY (cross-language) | ~~**Medium**~~ | ✓ Resolved: `authorization-v1.json` now includes `proposed_action` field enabling independent hash derivation. Portable ALLOW case `auth-intent-action-match-1` and `portable-key-1` fixture key added. Go/Python authorization harness integration remains a future item. Resolved in #105. |
 | Profile B trust separation vector | **Medium** | No vector where Sift receipt key ≠ AuthorizationV1 signing key for same `kid`. |
 | Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
 | Replay TTL failure scenarios | **Low** | RT-1–RT-10 documented; none executable as portable conformance vectors. |
@@ -341,8 +341,9 @@ New deployments start with an empty replay store. Authorization artifacts issued
 - `AuthorizationV1` is well-specified and has cross-language conformance vectors (Go harness).
 - Canonicalization-v1 is fully specified with cross-language vectors.
 - `DelegationV1` has cross-language vectors.
-- **Gap:** Key lifecycle (`revoked`, `not_before`, `not_after`) has no portable conformance vectors. An external implementer cannot validate key status handling.
-- **Gap:** Intent hash mismatch and state hash mismatch have no cross-language vectors.
+- ~~**Gap:** Key lifecycle (`revoked`, `not_before`, `not_after`) has no portable conformance vectors.~~ ✓ resolved — `key-lifecycle-verification.json` added (P0-1).
+- ~~**Gap:** Intent hash mismatch has no cross-language vector.~~ ✓ resolved — portable `authorization-v1.json` vector with `proposed_action` added (P1-1).
+- **Gap:** State hash mismatch has no cross-language vector.
 - **Gap:** Profile C is TypeScript-only; `computeStateHash` integration requires external harness work.
 
 ### 7.2 Independent Verifier Readiness
@@ -359,10 +360,10 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 **Status: PARTIAL**
 
-181 assertions across 15 vector sets. Key lifecycle coverage resolved. Remaining gaps:
+191 assertions across 15 vector files + 9 portable `authorization-v1.json` vectors. Key lifecycle and intent hash mismatch coverage resolved. Remaining gaps:
 
 1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved — `key-lifecycle-verification.json`
-2. Intent hash mismatch portable vector — important for verifier correctness
+2. ~~Intent hash mismatch portable vector~~ ✓ resolved — `authorization-v1.json` vectors include `proposed_action` mismatch case and portable ALLOW case; Go/Python auth harness integration is a future item
 3. Cross-language Profile C vectors — important for Profile C adoption
 4. `expiry`/`expires_at` simultaneous presence precedence vector
 
@@ -394,7 +395,7 @@ Prerequisites before external standard positioning:
 1. ~~Close key lifecycle conformance vector gap~~ ✓ resolved
 2. ~~Define clock skew tolerance specification~~ ✓ resolved
 3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
-4. Close intent hash mismatch portable vector gap
+4. ~~Close intent hash mismatch portable vector gap~~ ✓ resolved — portable `AuthorizationV1` vector added with `proposed_action`
 5. Resolve or formally mitigate state provider trust risk
 6. Resolve or formally mitigate KRL transport integrity risk
 7. Independent security review
@@ -413,7 +414,7 @@ Signature verification       █████████████████
 Wire encodings (A + B)       ████████████████████  DONE
 Audience / expiry / replay   ████████████████████  DONE
 State binding (guard)        ████████████████████  DONE
-Intent binding (guard)       ██████████████████░░  PARTIAL (no cross-lang vector)
+Intent binding (guard)       ████████████████████  DONE (portable vector; Go/Python auth harness pending)
 Key lifecycle (lifecycle)    ████████████████████  DONE (20 portable vectors)
 DelegationV1                 ████████████████████  DONE
 Profile A interop            ████████████████████  DONE
@@ -450,9 +451,8 @@ Resolution: `EvaluatePureOutput.authorization` narrowed from `Authorization` (wh
 
 ### P1 - Should resolve before standardization positioning
 
-**P1-1: Add intent hash mismatch portable conformance vector**  
-Reason: Intent binding enforced in guard, tested in TypeScript only. External implementers cannot confirm their verifier correctly rejects intent mismatches.  
-Scope: New vector in `authorization-verification.json` or a new `intent-binding-verification.json`.
+**P1-1: Add intent hash mismatch portable conformance vector** ✓ RESOLVED
+Resolution: `authorization-v1.json` now includes `proposed_action` on the existing `auth-intent-mismatch` vector and a new `auth-intent-action-match-1` portable ALLOW case signed with `portable-key-1` (conformance fixture key). The vector runner derives `expectedIntentHash = sha256(canonicalize(proposed_action))`, proving the intent binding invariant without TypeScript guard internals. Authorization vector count: 8 → 9. Resolved in #105.
 
 **P1-2: Add `expiry`/`expires_at` simultaneous presence precedence vector**  
 Reason: Precedence rule (`expiry` wins over `expires_at`) is implemented and specified but untested by a vector. An implementer who gets this backwards will silently accept expired authorizations.  
@@ -502,16 +502,16 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 52 |
+| `DONE` | 53 |
 | `PARTIAL` | 19 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
-| `MISSING` | 7 |
+| `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2, P0-3, P0-4 resolved).
+**Conformance:** 191 assertions across 15 vector files + 9 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 6 · P2: 4 · Total: 10 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 5 · P2: 4 · Total: 9 open
 
 **Critical path to external adoption:**
 
@@ -519,7 +519,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 2. ~~Clock skew specification (P0-2)~~ ✓ resolved — strict zero-tolerance specified, 10 assertions added
 3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved — unsafe cast removed, fail-closed before chain verification
 4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
-5. Intent hash mismatch portable vector (P1-1)
+5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved — portable `AuthorizationV1` vector added for `proposed_action` mismatch
 6. `expiry`/`expires_at` precedence vector (P1-2)
 7. Cross-language Profile C vectors (P1-6)
 8. HMAC-SHA256 deprecation (P1-5)
@@ -528,7 +528,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, and public artifact boundary separation are now resolved. This removes one additional P0 standardization blocker; the protocol surface is cleaner but state provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, and intent hash mismatch portability are now resolved. The protocol surface is cleaner but state provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
 
 ---
 
