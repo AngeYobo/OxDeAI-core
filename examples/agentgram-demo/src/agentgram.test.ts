@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import type { Authorization } from "@oxdeai/core";
 import { InMemoryAuditAdapter, InMemoryStateAdapter, buildIntent } from "@oxdeai/sdk";
 
 import { createAgentgramGuard, toTarget, toIntentInput } from "./adapter.js";
@@ -329,9 +330,11 @@ test("decision can be verified independently", async () => {
   assert.ok(result.authorization, "expected authorization on ALLOW");
   assert.ok(result.nextState, "expected nextState on ALLOW");
 
+  // Cast as Authorization: runtime object retains internal engine fields even
+  // though the TypeScript type was narrowed to AuthorizationV1 at evaluatePure boundary.
   const verification = engine.verifyAuthorization(
     intent,
-    result.authorization!,
+    result.authorization! as Authorization,
     result.nextState!,
     intent.timestamp
   );
@@ -371,9 +374,10 @@ test("tampered intent fails verification", async () => {
     target: "agentgram:/posts/evil/like"
   };
 
+  // Cast as Authorization: same rationale as above — internal HMAC verification.
   const verification = engine.verifyAuthorization(
     tamperedIntent,
-    result.authorization!,
+    result.authorization! as Authorization,
     result.nextState!,
     intent.timestamp
   );
