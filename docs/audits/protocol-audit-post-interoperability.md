@@ -34,6 +34,7 @@
 | `auth_id` uniqueness | `DONE` | Specified. Replay prevention via `ReplayStore.consumeAuthId`. Conformance vector `authorization-sig-008` (AUTH_REPLAY). |
 | `issued_at` required | `DONE` | Verified in `verifyAuthorization`. Conformance vectors include missing-field cases. |
 | `nonce` field | `PARTIAL` | Field exists in type. Not actively verified beyond auth_id. No conformance vector covering nonce uniqueness. |
+| Public `AuthorizationV1` artifact boundary | `DONE` | Public engine authorization output narrowed to clean `AuthorizationV1`. `toPublicAuthorizationV1()` strips legacy/internal fields (`authorization_id`, `engine_signature`, `state_snapshot_hash`, `policy_version`, `expires_at`) before public signing/hash surfaces. Encoding B / Sift compatibility preserved. Resolved in #102 / #103. |
 
 ---
 
@@ -185,6 +186,7 @@
 | Delegation replay | `DONE` | `consumeDelegationId` + `consumeAuthId(parentAuth)`. |
 | `parentScope` requirement | `DONE` | `parentScope` is now an explicit required field on `GuardDelegationInput`. Structurally validated by `isValidDelegationScope` before delegation chain verification. The unsafe `(parentAuth as any).scope` cast has been removed. Missing or malformed `parentScope` fails closed before execution. |
 | Multi-hop delegation | `SPECIFIED ONLY` | Spec allows single-hop only (`DELEGATION_SINGLE_HOP` violation). Not tested with a chain > 2. |
+| `parent_auth_hash` portability | `DONE` | `delegationParentHash()` now hashes `canonicalJson(toPublicAuthorizationV1(parent))`, so `DelegationV1` parent binding no longer depends on TypeScript-specific legacy fields. Independent implementations can reproduce the parent hash from normative `AuthorizationV1` fields alone. Resolved in #102 / #103. |
 
 ---
 
@@ -391,11 +393,12 @@ Prerequisites before external standard positioning:
 
 1. ~~Close key lifecycle conformance vector gap~~ ✓ resolved
 2. ~~Define clock skew tolerance specification~~ ✓ resolved
-3. Close intent hash mismatch portable vector gap
-4. Resolve or formally mitigate state provider trust risk
-5. Resolve or formally mitigate KRL transport integrity risk
-6. Independent security review
-7. Establish external feedback or co-author channel
+3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
+4. Close intent hash mismatch portable vector gap
+5. Resolve or formally mitigate state provider trust risk
+6. Resolve or formally mitigate KRL transport integrity risk
+7. Independent security review
+8. Establish external feedback or co-author channel
 
 ---
 
@@ -420,6 +423,7 @@ Replay durability            ████████████████░
 Key rotation                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Clock skew spec              ████████████████████  DONE (strict zero-tolerance + 10 vectors)
+Public artifact boundary     ████████████████████  DONE (#103: toPublicAuthorizationV1, delegationParentHash)
 HTTP PEP                     ░░░░░░░░░░░░░░░░░░░░  MISSING (planned v2.6)
 Structured events / metrics  ░░░░░░░░░░░░░░░░░░░░  MISSING
 ```
@@ -438,6 +442,9 @@ Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md �
 
 **P0-3: Harden `parentScope` handling in `OxDeAIGuard`** ✓ RESOLVED  
 Resolution: `GuardDelegationInput` now requires `parentScope: DelegationScope` as an explicit typed field. `isValidDelegationScope` validates the structure before chain verification. The unsafe `(parentAuth as any).scope` cast has been removed from `guard.ts`. All delegation tests and the `delegation-demo` example updated to pass `parentScope` explicitly. Missing or malformed `parentScope` fails closed before execution; `OxDeAIAuthorizationError` is thrown before the delegation chain verification path is reached.
+
+**P0-4: Separate public `AuthorizationV1` artifact boundary from internal legacy authorization shape** ✓ RESOLVED
+Resolution: `EvaluatePureOutput.authorization` narrowed from `Authorization` (which leaked `authorization_id`, `engine_signature`, `state_snapshot_hash`, `policy_version`, `expires_at`) to clean `AuthorizationV1`. `toPublicAuthorizationV1()` added as the single explicit projection boundary: strips all legacy/internal fields before any public signing, hashing, or delegation parent computation. `delegationParentHash()` updated to hash `canonicalJson(toPublicAuthorizationV1(parent))` so `DelegationV1` parent binding is reproducible by any independent implementation without access to engine internals. Encoding B / Sift compatibility preserved (existing tokens remain verifiable without re-signing). Seven new `public-artifact-boundary.test.ts` assertions prove the boundary holds under legacy field injection. This removes one P0 standardization blocker; it does not claim standardization readiness. Resolved in #102 / #103.
 
 ---
 
@@ -495,32 +502,33 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 50 |
+| `DONE` | 52 |
 | `PARTIAL` | 19 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 7 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2, P0-3 resolved).
+**Conformance:** 191 assertions. 6 remaining gaps (P0-1, P0-2, P0-3, P0-4 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3 resolved) · P1: 6 · P2: 4 · Total: 10 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 6 · P2: 4 · Total: 10 open
 
 **Critical path to external adoption:**
 
 1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved — 20 assertions added
 2. ~~Clock skew specification (P0-2)~~ ✓ resolved — strict zero-tolerance specified, 10 assertions added
 3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved — unsafe cast removed, fail-closed before chain verification
-4. Intent hash mismatch portable vector (P1-1)
-5. `expiry`/`expires_at` precedence vector (P1-2)
-6. Cross-language Profile C vectors (P1-6)
-7. HMAC-SHA256 deprecation (P1-5)
+4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
+5. Intent hash mismatch portable vector (P1-1)
+6. `expiry`/`expires_at` precedence vector (P1-2)
+7. Cross-language Profile C vectors (P1-6)
+8. HMAC-SHA256 deprecation (P1-5)
 
 **Protocol positioning:**
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, and parentScope type safety are now resolved. State provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, and public artifact boundary separation are now resolved. This removes one additional P0 standardization blocker; the protocol surface is cleaner but state provider trust, intent hash mismatch portability, and independent security review remain open before that claim can be made honestly.
 
 ---
 
