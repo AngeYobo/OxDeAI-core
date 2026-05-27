@@ -164,6 +164,60 @@
       }
     },
     {
+      "id": "pb-trust-oxdeai-key-allow",
+      "description": "Profile B trust separation: artifact signed by OxDeAI key (portable-key-1, present in trustedKeySets) MUST verify and ALLOW",
+      "artifact": {
+        "version": "AuthorizationV1",
+        "auth_id": "pb-trust-allow-1",
+        "issuer": "issuer-1",
+        "audience": "pep-gateway.local",
+        "decision": "ALLOW",
+        "intent_hash": "8fbb30c8419a1c88a7799b39d77c77ef19dbdcdf82476bfb6c3d08b644683fa7",
+        "state_hash": "89d739f4d161ed9c8de4319bd2ab140d4d2f7de0d0ae172133cb79cd70187823",
+        "policy_id": "policy-1",
+        "issued_at": 1712448000,
+        "expiry": 1712448600,
+        "alg": "Ed25519",
+        "kid": "portable-key-1",
+        "signature": {
+          "alg": "Ed25519",
+          "kid": "portable-key-1",
+          "sig": "IFUjndKq1bMwNRZordKUPZpfdKenul9XkrgLq5xQXQabTxudV11nrSdWBWi07cA+GChfwzkuokpVawbKJoo2AA=="
+        }
+      },
+      "expected": {
+        "decision": "ALLOW",
+        "error": null
+      }
+    },
+    {
+      "id": "pb-trust-provider-key-rejected",
+      "description": "Profile B trust separation: artifact claiming signature by provider receipt key (provider-receipt-key-1, NOT in OxDeAI trustedKeySets) MUST be rejected with UNKNOWN_KID",
+      "artifact": {
+        "version": "AuthorizationV1",
+        "auth_id": "pb-trust-allow-1",
+        "issuer": "issuer-1",
+        "audience": "pep-gateway.local",
+        "decision": "ALLOW",
+        "intent_hash": "8fbb30c8419a1c88a7799b39d77c77ef19dbdcdf82476bfb6c3d08b644683fa7",
+        "state_hash": "89d739f4d161ed9c8de4319bd2ab140d4d2f7de0d0ae172133cb79cd70187823",
+        "policy_id": "policy-1",
+        "issued_at": 1712448000,
+        "expiry": 1712448600,
+        "alg": "Ed25519",
+        "kid": "provider-receipt-key-1",
+        "signature": {
+          "alg": "Ed25519",
+          "kid": "provider-receipt-key-1",
+          "sig": "IFUjndKq1bMwNRZordKUPZpfdKenul9XkrgLq5xQXQabTxudV11nrSdWBWi07cA+GChfwzkuokpVawbKJoo2AA=="
+        }
+      },
+      "expected": {
+        "decision": "DENY",
+        "error": "UNKNOWN_KID"
+      }
+    },
+    {
       "id": "auth-invalid-signature",
       "description": "tampered payload invalidates signature",
       "artifact": {

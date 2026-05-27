@@ -151,7 +151,7 @@
 | Area | Status | Notes |
 |------|--------|-------|
 | Profile A (Core-native) | `DONE` | Defined, implemented, conformance covered by existing auth-sig and auth-verify vectors. |
-| Profile B (External wire-compatible) | `PARTIAL` | Defined. Encoding B accepted in verifyAuthorization. Conformance vector `authorization-sig-010`. **No vector for Profile B trust separation** (Sift receipt trust root ≠ AuthorizationV1 signing key). |
+| Profile B (External wire-compatible) | `DONE` | Defined. Encoding B accepted in verifyAuthorization. Conformance vector `authorization-sig-010`. Trust separation proven: `pb-trust-oxdeai-key-allow` (OxDeAI key in trustedKeySets → ALLOW) and `pb-trust-provider-key-rejected` (provider receipt key absent from trustedKeySets → DENY/UNKNOWN_KID). Resolved in #108. |
 | Profile C (Full semantic state verification) | `DONE` | Defined. Implemented via pluggable `computeStateHash`. 12 executable conformance assertions across 8 vectors. Encoding B path tested. |
 | Profile C cross-language | `MISSING` | No Go/Python harness integration for Profile C vectors. |
 | Interoperability matrix | `DOCUMENTED ONLY` | Matrix in `external-provider-profile.md`. Not backed by conformance automation. |
@@ -256,7 +256,7 @@ The following areas still have **no portable conformance vector**:
 | `decision != "ALLOW"` portable vector | **Medium** | Only checked structurally; no dedicated cross-language vector. |
 | Both `expiry` and `expires_at` present simultaneously | ~~**Medium**~~ | ✓ Resolved: vector `auth-expiry-wins-over-expires-at` locks the precedence rule — `expiry` expired + `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
 | Intent hash mismatch → DENY (cross-language) | ~~**Medium**~~ | ✓ Resolved: `authorization-v1.json` now includes `proposed_action` field enabling independent hash derivation. Portable ALLOW case `auth-intent-action-match-1` and `portable-key-1` fixture key added. Go/Python authorization harness integration remains a future item. Resolved in #105. |
-| Profile B trust separation vector | **Medium** | No vector where Sift receipt key ≠ AuthorizationV1 signing key for same `kid`. |
+| Profile B trust separation vector | ~~**Medium**~~ | ✓ Resolved: `pb-trust-oxdeai-key-allow` proves OxDeAI key (in trustedKeySets) verifies correctly; `pb-trust-provider-key-rejected` proves provider receipt key absent from trustedKeySets returns DENY/UNKNOWN_KID. Resolved in #108. |
 | Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
 | Replay TTL failure scenarios | **Low** | RT-1–RT-10 documented; none executable as portable conformance vectors. |
 | Malformed canonicalization (float, duplicate key) cross-language | **Low** | TypeScript unit tests exist. No cross-language conformance vectors for error cases. |
@@ -372,7 +372,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 **Status: READY (Profile A/B), PARTIAL (Profile C)**
 
 - Profile A: fully specified, conformance covered.
-- Profile B: specified, Encoding B conformance covered. Profile B trust separation not explicitly vectorized.
+- Profile B: specified, Encoding B conformance covered, trust separation vectorized (`pb-trust-oxdeai-key-allow`, `pb-trust-provider-key-rejected`). Resolved in #108.
 - Profile C: specified, 12 executable assertions. Cross-language portability requires additional harness work.
 
 ### 7.5 Security Review Readiness
@@ -458,9 +458,8 @@ Resolution: `authorization-v1.json` now includes `proposed_action` on the existi
 **P1-2: Add `expiry`/`expires_at` simultaneous presence precedence vector** ✓ RESOLVED
 Resolution: `authorization-v1.json` vector `auth-expiry-wins-over-expires-at` added: both `expiry` (expired: 1712447100) and `expires_at` (valid: 9999999999) present; expected DENY/EXPIRED. An implementer that incorrectly prefers `expires_at` would return ALLOW, failing the test. Authorization vector count: 9 → 10. Resolved in #106.
 
-**P1-3: Add Profile B trust separation conformance vector**  
-Reason: Profile B correctness depends on the trust bridge between Sift receipt key and OxDeAI signing key. No vector exercises the separate trust root for Profile B.  
-Scope: New vector in `authorization-signature-verification.json` with distinct adapter-issued key.
+**P1-3: Add Profile B trust separation conformance vector** ✓ RESOLVED
+Resolution: Two vectors added to `authorization-v1.json`: `pb-trust-oxdeai-key-allow` (artifact signed by `portable-key-1`, an OxDeAI key present in the runner's `keys` array → ALLOW) and `pb-trust-provider-key-rejected` (identical artifact with `signature.kid = "provider-receipt-key-1"`, a provider receipt key absent from the `keys` array → DENY/UNKNOWN_KID). Proves that the PEP must verify AuthorizationV1 artifacts against OxDeAI trustedKeySets, not the provider's receipt-signing key. Authorization vector count: 10 → 12. Resolved in #108.
 
 **P1-4: Resolve or formally mitigate KRL transport integrity risk**  
 Reason: Sift KRL payload is not signature-verified. A compromised network path can suppress revocations. Either require a signed KRL contract from Sift, or formally document this as an accepted operational risk with compensating controls.  
@@ -501,16 +500,16 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 55 |
-| `PARTIAL` | 17 |
+| `DONE` | 56 |
+| `PARTIAL` | 16 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-5 resolved).
+**Conformance:** 191 assertions across 15 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-5 resolved).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 3 · P2: 4 · Total: 7 open
+**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 2 · P2: 4 · Total: 6 open
 
 **Critical path to external adoption:**
 
