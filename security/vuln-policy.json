@@ -7,12 +7,12 @@
   },
   "exceptions": [
     {
-      "id": 1116970,
+      "id": 1119441,
       "package": "uuid",
       "severity": "moderate",
       "scope": "examples/langgraph",
-      "reason": "Transitive via langsmith/langgraph; no effective upstream fix available in current dependency graph",
-      "expires_on": "2026-06-01"
+      "reason": "Resolved via pnpm.overrides uuid@14.0.0; exception retained as guard against lockfile drift re-introducing uuid@10.x via @langchain/langgraph-checkpoint@^1.0.2",
+      "expires_on": "2026-09-01"
     }
   ]
 }
