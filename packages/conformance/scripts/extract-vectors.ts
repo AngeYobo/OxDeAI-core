@@ -212,9 +212,13 @@ async function extractAuthorizationPayload(): Promise<void> {
 
   const r1 = engine.evaluatePure(makeIntent(100n, 1730000000), state);
   if (r1.decision !== "ALLOW") throw new Error("expected ALLOW for auth vector 1");
+  // Cast to Authorization to access engine-internal fields needed for vector extraction.
+  // The runtime object still carries these fields; only the TypeScript type was narrowed.
+  const r1auth = r1.authorization as Authorization;
 
   const r2 = engine.evaluatePure(makeIntent(101n, 0), makeState());
   if (r2.decision !== "ALLOW") throw new Error("expected ALLOW for auth vector 2");
+  const r2auth = r2.authorization as Authorization;
 
   writeVector("authorization-payload.json", {
     version: "1.0.0",
@@ -225,23 +229,23 @@ async function extractAuthorizationPayload(): Promise<void> {
         id: "auth-payload-001",
         input: makeIntent(100n, 1730000000),
         expected: {
-          intent_hash: r1.authorization.intent_hash,
+          intent_hash: r1auth.intent_hash,
           policy_id: policyId,
-          state_hash: r1.authorization.state_snapshot_hash,
-          expires_at: r1.authorization.expires_at,
-          canonical_signing_payload: canonicalJson(authSigningPayload(r1.authorization, policyId)),
-          signature: r1.authorization.engine_signature
+          state_hash: r1auth.state_snapshot_hash,
+          expires_at: r1auth.expires_at,
+          canonical_signing_payload: canonicalJson(authSigningPayload(r1auth, policyId)),
+          signature: r1auth.engine_signature
         }
       },
       {
         id: "auth-payload-002",
         input: makeIntent(101n, 0),
         expected: {
-          intent_hash: r2.authorization.intent_hash,
-          expires_at: r2.authorization.expires_at,
+          intent_hash: r2auth.intent_hash,
+          expires_at: r2auth.expires_at,
           expires_at_derivation: "intent.timestamp(0) + ttl_seconds(60) = 60",
-          canonical_signing_payload: canonicalJson(authSigningPayload(r2.authorization, policyId)),
-          signature: r2.authorization.engine_signature
+          canonical_signing_payload: canonicalJson(authSigningPayload(r2auth, policyId)),
+          signature: r2auth.engine_signature
         }
       }
     ]

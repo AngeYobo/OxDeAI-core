@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PolicyEngine } from "@oxdeai/core";
+import type { Authorization } from "@oxdeai/core";
 import { makeIntent } from "../helpers/intent.js";
 import { makeState } from "../helpers/state.js";
 
@@ -32,6 +33,6 @@ test("authorization signature verifies", () => {
 
   if (out.decision !== "ALLOW") throw new Error("expected ALLOW");
 
-  const v = engine.verifyAuthorization(intent, out.authorization, out.nextState, 1000);
+  const v = engine.verifyAuthorization(intent, out.authorization as Authorization, out.nextState, 1000);
   assert.equal(v.valid, true);
 });

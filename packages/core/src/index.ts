@@ -25,7 +25,7 @@ export { encodeEnvelope, decodeEnvelope, signEnvelopeEd25519, envelopeSigningPay
 export { verifySnapshot } from "./verification/verifySnapshot.js";
 export { verifyAuditEvents } from "./verification/verifyAuditEvents.js";
 export { verifyEnvelope } from "./verification/verifyEnvelope.js";
-export { verifyAuthorization, signAuthorizationEd25519, authorizationSigningPayload } from "./verification/verifyAuthorization.js";
+export { verifyAuthorization, signAuthorizationEd25519, authorizationSigningPayload, toPublicAuthorizationV1 } from "./verification/verifyAuthorization.js";
 export { createVerifier } from "./verification/createVerifier.js";
 export type { VerifierConfig, BoundVerifier } from "./verification/createVerifier.js";
 export {

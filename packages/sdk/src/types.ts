@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Authorization, Intent, State, VerificationResult } from "@oxdeai/core";
+import type { AuthorizationV1, Intent, State, VerificationResult } from "@oxdeai/core";
 
 export type MaybePromise<T> = T | Promise<T>;
 
 export type EvaluateDecision =
-  | { decision: "ALLOW"; reasons: []; authorization: Authorization }
+  | { decision: "ALLOW"; reasons: []; authorization: AuthorizationV1 }
   | { decision: "DENY"; reasons: string[] };
 
 export type EvaluateAndCommitResult = {

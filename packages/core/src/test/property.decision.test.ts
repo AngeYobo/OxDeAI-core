@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import { PolicyEngine } from "../policy/PolicyEngine.js";
 import type { Intent, ActionType } from "../types/intent.js";
 import type { State, ToolLimitsState } from "../types/state.js";
+import type { Authorization } from "../types/authorization.js";
 
 const DEFAULT_CASES = Number(process.env["PBT_CASES"] ?? "50");
 const BASE_SEED = Number(process.env["PBT_SEED"] ?? "20260303");
@@ -376,7 +377,7 @@ function runIntentOps(
       state = out.nextState;
       if (intent.type !== "RELEASE") {
         const queue = authsByAgent[intent.agent_id] ?? [];
-        queue.push(out.authorization.authorization_id);
+        queue.push(out.authorization.auth_id);
         authsByAgent[intent.agent_id] = queue;
       }
     }
@@ -534,15 +535,17 @@ test("D-6 strict mode: verifyAuthorization requires explicit now", () => {
     // Without `now` in strict mode: the implementation's inner strictDeterminism
     // throw is caught by the outer try/catch in verifyAuthorization and converted
     // to { valid: false, reason: "INTERNAL_ERROR" }.  The result must not be valid.
-    const noNowResult = engine.verifyAuthorization(intent, authorization, state);
+    // Cast as Authorization: runtime object has all legacy fields even though
+    // the TypeScript type was narrowed to AuthorizationV1 at the evaluatePure boundary.
+    const noNowResult = engine.verifyAuthorization(intent, authorization as Authorization, state);
     assert.ok(!noNowResult.valid,
       `seed=${seed} expected invalid result when now is omitted in strict mode`);
     assert.equal(noNowResult.reason, "INTERNAL_ERROR",
       `seed=${seed} expected INTERNAL_ERROR when now is omitted in strict mode`);
 
     // With explicit `now`: must succeed and be stable across repeated calls.
-    const r1 = engine.verifyAuthorization(intent, authorization, state, explicitNow);
-    const r2 = engine.verifyAuthorization(intent, authorization, state, explicitNow);
+    const r1 = engine.verifyAuthorization(intent, authorization as Authorization, state, explicitNow);
+    const r2 = engine.verifyAuthorization(intent, authorization as Authorization, state, explicitNow);
     assert.deepEqual(r1, r2,
       `seed=${seed} verifyAuthorization not stable with the same explicit now`);
     assert.ok(r1.valid,

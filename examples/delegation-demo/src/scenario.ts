@@ -121,9 +121,8 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     beforeExecute(_action, authorization) {
       parentDecision = "ALLOW";
       parentReason = "within budget · tool allowed · state consistent";
-      parentAuthId = authorization.authorization_id;
-      // Cast Authorization → AuthorizationV1 (Authorization is a superset)
-      parentAuth = authorization as unknown as AuthorizationV1;
+      parentAuthId = authorization.auth_id;
+      parentAuth = authorization;
     },
   });
 

@@ -21,7 +21,7 @@
  * No mocked decisions. Real policy evaluation on every call.
  */
 
-import type { Authorization, State } from "@oxdeai/core";
+import type { AuthorizationV1, State } from "@oxdeai/core";
 import { OxDeAIGuard, OxDeAIDenyError } from "@oxdeai/guard";
 import { engine, makeState, buildChargeIntent, AGENT_ID, WALLET_START } from "./policy.js";
 
@@ -92,8 +92,8 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     expectedAudience: AGENT_ID,
     // chargeIntent is identical for both calls — only state differs
     mapActionToIntent: () => chargeIntent,
-    beforeExecute(_action: unknown, authorization: Authorization) {
-      firstAuthId = authorization.authorization_id;
+    beforeExecute(_action: unknown, authorization: AuthorizationV1) {
+      firstAuthId = authorization.auth_id;
       firstDecision = "ALLOW";
       firstReason = "state consistent · no prior side effect recorded for this intent";
     },

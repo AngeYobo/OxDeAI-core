@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { PolicyEngine, signAuthorizationEd25519, verifyAuthorization } from "@oxdeai/core";
-import type { KeySet } from "@oxdeai/core";
+import type { Authorization, KeySet } from "@oxdeai/core";
 import { makeIntent } from "../../helpers/intent.js";
 import { makeState } from "../../helpers/state.js";
 
@@ -54,10 +54,13 @@ function allowOutput() {
 test("creation emits AuthorizationV1 fields on ALLOW", () => {
   const { out, state, engine } = allowOutput();
   const auth = out.authorization;
+  // Cast to Authorization to access internal engine fields in this compatibility test.
+  // The runtime object still carries them; only the TypeScript type was narrowed.
+  const authInternal = out.authorization as Authorization;
 
   assert.equal(auth.decision, "ALLOW");
   assert.ok(typeof auth.auth_id === "string" && auth.auth_id.length > 0);
-  assert.equal(auth.auth_id, auth.authorization_id);
+  assert.equal(auth.auth_id, authInternal.authorization_id);
   assert.equal(auth.issuer, "issuer-A");
   assert.equal(auth.audience, "rp-A");
   // state_hash commits to the pre-evaluation input state (PEP boundary binding).
@@ -65,10 +68,10 @@ test("creation emits AuthorizationV1 fields on ALLOW", () => {
   // They must differ because evaluation changes the state (nonces, budget, etc.).
   assert.equal(auth.state_hash, engine.computeStateHash(state),
     "state_hash must equal the canonical hash of the pre-evaluation input state");
-  assert.notEqual(auth.state_hash, auth.state_snapshot_hash,
+  assert.notEqual(auth.state_hash, authInternal.state_snapshot_hash,
     "state_hash and state_snapshot_hash must differ: evaluation changes state");
   assert.equal(auth.policy_id, "a".repeat(64));
-  assert.equal(auth.expiry, auth.expires_at);
+  assert.equal(auth.expiry, authInternal.expires_at);
   assert.equal(auth.issued_at, 1000);
   assert.ok(auth.alg === "Ed25519" || auth.alg === "HMAC-SHA256");
   assert.ok(typeof auth.kid === "string" && auth.kid.length > 0);

@@ -123,7 +123,7 @@ async function main(): Promise<void> {
       state = out.nextState;
       if (actual.type !== "RELEASE") {
         const queue = authQueue[actual.agent_id] ?? [];
-        queue.push(out.authorization.authorization_id);
+        queue.push(out.authorization.auth_id);
         authQueue[actual.agent_id] = queue;
       }
     } else {

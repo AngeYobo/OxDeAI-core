@@ -890,8 +890,8 @@ export async function runCli(argv: string[], io?: Partial<Io>): Promise<number> 
       }
       await mkdir(dirname(flags.out), { recursive: true });
       await writeFile(flags.out, `${toJson(outEval.authorization)}\n`, "utf8");
-      const payload = { ok: true, out: flags.out, authorization_id: outEval.authorization.authorization_id };
-      writePayload(out, flags, payload, `ALLOW: ${outEval.authorization.authorization_id}\nout: ${flags.out}`);
+      const payload = { ok: true, out: flags.out, authorization_id: outEval.authorization.auth_id };
+      writePayload(out, flags, payload, `ALLOW: ${outEval.authorization.auth_id}\nout: ${flags.out}`);
       return EXIT_CODE_OK;
     }
 
@@ -1018,7 +1018,7 @@ export async function runCli(argv: string[], io?: Partial<Io>): Promise<number> 
           await appendAuditEvents(auditPath, emitted);
           await writeStateFile(statePath, outEval.nextState);
         }
-        const payload = { decision: "ALLOW" as const, authorization_id: outEval.authorization.authorization_id, reasons: [] as string[], dryRun };
+        const payload = { decision: "ALLOW" as const, authorization_id: outEval.authorization.auth_id, reasons: [] as string[], dryRun };
         writePayload(out, flags, payload, `ALLOW: ${payload.authorization_id}`);
         return EXIT_CODE_OK;
       }
