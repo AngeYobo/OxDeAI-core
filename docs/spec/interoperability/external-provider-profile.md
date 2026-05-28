@@ -178,6 +178,65 @@ Same as Profile A: `state_hash` is protected by signature integrity. The adapter
 `state_hash` using its own canonicalization function. The verifier does not re-compute
 `state_hash` from live state at Profile B — only signature integrity is enforced.
 
+#### 2.2.5 KRL Integrity at Profile B
+
+Profile B requires verifying the external provider's receipt-signing key is not revoked.
+A KRL (Key Revocation List) maintained by the provider records revoked `kid` values.
+
+**KRL transport integrity options:**
+
+| Option | Integrity guarantee | Status |
+|--------|---------------------|--------|
+| `unsigned_legacy` | Transport security (HTTPS) only | Deprecated — residual risk |
+| `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | Transition mode |
+| `signed_required` | Cryptographic — `SignedKRLV1` verified via `verifySignedKrl` | Recommended for production |
+
+**`SignedKRLV1` specification.** `SignedKRLV1` is a provider-neutral OxDeAI protocol artifact
+defined in `docs/spec/artifacts/signed-krl-v1.md`. It carries a `revoked_kids` list signed
+with an Ed25519 key whose trust is configured statically at the verifier — independent of
+transport security.
+
+**Signing domain.** `OXDEAI_KRL_V1\n` + `canonicalJson(signingPayload)` — using OxDeAI
+canonicalization-v1, not Sift canonicalization.
+
+**Trust domain separation.**
+
+```text
+Sift provider receipt-signing key  ≠  OxDeAI AuthorizationV1 signing key
+                                   ≠  KRL signing key
+```
+
+All three are distinct key pairs. The KRL signing key is configured statically in the
+adapter (via `trustedKeySets` passed to `verifyKrl`), not fetched from the provider at
+verification time.
+
+**Fail-closed KRL behavior in `signed_preferred`:**
+
+- KRL body has no `signature` key → unsigned fallback (accepted; `lastIntegrity: "unsigned_fallback"`)
+- KRL body has any `signature` key → signed path (must verify via `verifyKrl`)
+- Signed path without `verifyKrl` configured → refresh fails closed (no unsigned fallback)
+- Malformed/partial `signature` field → signed path → fails closed
+
+**Residual limitations (Profile B with `unsigned_legacy` or `signed_preferred` unsigned fallback):**
+A compromised transport path can return a modified KRL that omits revoked kids.
+Unknown and revoked kids still fail closed, but suppressed revocations bypass the revocation
+check. This risk is only closed by deploying `signed_required` mode.
+
+**KRL reason-code ownership.** `SiftHttpKeyStore` surfaces two sets of codes:
+
+*Sift-local mode/contract codes* (NOT from `@oxdeai/core`):
+
+| Code | Trigger |
+|------|---------|
+| `KRL_UNSIGNED_IN_SIGNED_REQUIRED` | Unsigned KRL rejected in `signed_required` before `verifyKrl` is called |
+| `KRL_MISSING_VERIFY_CALLBACK` | KRL has a `signature` field but no `verifyKrl` configured |
+| `KRL_VERIFY_CALLBACK_ERROR` | `verifyKrl` callback threw unexpectedly |
+| `KRL_VERIFY_RESULT_INCOMPLETE` | `verifyKrl` returned `ok: true` without `accepted` metadata |
+
+*Core KRL codes* (passed through from `verifyKrl` as opaque strings):
+`KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`,
+`KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
+
 ---
 
 ### 2.3 Profile C — Full Semantic State Verification

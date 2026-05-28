@@ -303,7 +303,76 @@ Minimum requirements:
 - no fallback guessing
 - deterministic key selection
 
-**KRL payload integrity limitation.** `SiftHttpKeyStore` checks whether a `kid` appears in the fetched KRL but does NOT verify a cryptographic signature over the KRL payload itself. KRL payload integrity depends on transport security (HTTPS to a trusted endpoint). A compromised intermediary could return a modified KRL that omits specific revoked kids. Unknown and revoked kids still fail closed. Production deployments requiring cryptographic revocation integrity must wait for a signed KRL contract from Sift.
+**KRL integrity modes.** `SiftHttpKeyStore` supports three KRL integrity modes controlled by the `krlMode` constructor option:
+
+| Mode | Description | Production status |
+|------|-------------|------------------|
+| `"signed_required"` | Every KRL must be cryptographically signed (`SignedKRLV1`). Unsigned KRLs are rejected with `KRL_UNSIGNED_IN_SIGNED_REQUIRED` *before* calling `verifyKrl`. Requires a `verifyKrl` callback at construction. **Closes the transport-integrity gap.** | Recommended |
+| `"signed_preferred"` *(default)* | Signed KRLs are verified when present; unsigned KRLs are accepted as a transport-trust fallback (`unsigned_fallback` status). If a signature field is present but no `verifyKrl` is configured, refresh fails closed — there is no downgrade path. | Default transition mode |
+| `"unsigned_legacy"` | Preserves pre-Patch-B unsigned KRL behavior. Deprecated. Emits a warning at construction. **Residual risk: transport security only.** | Deprecated |
+
+**Wiring signed KRL verification.** Supply a `verifyKrl` callback that delegates to `verifySignedKrl` from `@oxdeai/core`. This preserves `@oxdeai/sift`'s zero-dependency boundary:
+
+```ts
+import { verifySignedKrl } from "@oxdeai/core";
+import type { KeySet } from "@oxdeai/core";
+
+const krlSigningKeySets: KeySet[] = [/* your trusted KRL signing key sets */];
+
+const store = new SiftHttpKeyStore({
+  jwksUrl: "https://your-sift-host/sift-jwks.json",
+  krlUrl:  "https://your-sift-host/sift-krl.json",
+  krlMode: "signed_required",
+  verifyKrl: (payload, ctx) => verifySignedKrl(payload, {
+    trustedKeySets: krlSigningKeySets,
+    ...ctx,
+  }),
+});
+```
+
+**KRL status surface.** `store.getKrlStatus()` returns an integrity snapshot:
+
+```ts
+const status = store.getKrlStatus();
+// {
+//   mode: "signed_required",
+//   lastIntegrity: "signed" | "unsigned_fallback" | "unsigned_legacy" | "failed" | "none",
+//   lastReason: undefined,           // cleared on success; error code on failure
+//   unsignedFallbackActive: false,
+//   lastVerifiedAt: 1744550000,      // unix seconds of last accepted KRL
+//   lastKrlVersionByIssuer: { "krl-authority": 5 }
+// }
+```
+
+`lastReason` is always cleared to `undefined` on a successful refresh. It never carries a stale failure reason after a later success.
+
+**Version watermark.** `SiftHttpKeyStore` tracks the highest accepted `krl_version` per issuer in memory during its lifetime and passes this to `verifyKrl` as `previousKrlVersionByIssuer`. This causes `verifySignedKrl` to reject any KRL whose `krl_version` is less than the previously accepted version (`KRL_VERSION_REGRESSION`). **This watermark is in-memory only and resets on process restart.**
+
+**Unsigned path behavior (legacy).** The unsigned fallback path (used by `unsigned_legacy` and by `signed_preferred` when the fetched KRL has no `signature` field) silently skips non-string entries in `revoked_kids`. **This is legacy behavior and is NOT `SignedKRLV1` semantics.** `SignedKRLV1` verification rejects non-string entries and duplicate entries as `KRL_MALFORMED`.
+
+**KRL reason codes.** Two sets of codes are surfaced in `krlStatus.lastReason` and `KeyStoreError` messages:
+
+*Sift-local mode/contract codes* — produced by `SiftHttpKeyStore` mode logic; never imported from `@oxdeai/core`:
+
+| Code | Trigger |
+|------|---------|
+| `KRL_UNSIGNED_IN_SIGNED_REQUIRED` | Unsigned KRL rejected in `signed_required` mode before `verifyKrl` is called |
+| `KRL_MISSING_VERIFY_CALLBACK` | KRL has a `signature` field but no `verifyKrl` callback configured; refresh fails closed |
+| `KRL_VERIFY_CALLBACK_ERROR` | `verifyKrl` callback threw instead of returning a result; refresh fails closed |
+| `KRL_VERIFY_RESULT_INCOMPLETE` | `verifyKrl` returned `ok: true` but omitted `accepted` issuer/`krl_version` metadata; refresh fails closed |
+
+*Core KRL codes* — passed through as opaque strings from the `verifyKrl` callback (originated in `@oxdeai/core`):
+`KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`, `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
+
+**`result.accepted` contract.** When `verifyKrl` returns `ok: true`, it MUST include `accepted: { issuer, krl_version }` populated from the verified `SignedKRLV1` payload fields. This is how `SiftHttpKeyStore` advances the per-issuer version watermark without independently re-parsing the body. Omitting `accepted` fails closed with `KRL_VERIFY_RESULT_INCOMPLETE`.
+
+**Deprecation trajectory:**
+
+| Release | Change |
+|---------|--------|
+| Current (`signed_preferred` default) | `unsigned_legacy` warns at construction; unsigned fallback logs status only |
+| `v-next` | `unsigned_legacy` emits stronger warning; `signed_required` recommended |
+| `v-after` | `unsigned_legacy` removed; default becomes `signed_required` |
 
 ### Prototype safety
 
@@ -407,10 +476,20 @@ await store.refresh();
 // Note: createStagingKeyStore() throws if NODE_ENV === "production".
 // Use new SiftHttpKeyStore({ jwksUrl, krlUrl }) with your production endpoints.
 
-// Production:
+// Production (signed KRL integrity):
+import { verifySignedKrl } from "@oxdeai/core";
 const prodStore = new SiftHttpKeyStore({
   jwksUrl: "https://your-production-sift-host/sift-jwks.json",
   krlUrl:  "https://your-production-sift-host/sift-krl.json",
+  krlMode: "signed_required",
+  verifyKrl: (payload, ctx) => verifySignedKrl(payload, { trustedKeySets: myKrlKeySets, ...ctx }),
+});
+
+// Transition (default — unsigned fallback if KRL is unsigned):
+const transStore = new SiftHttpKeyStore({
+  jwksUrl: "https://your-production-sift-host/sift-jwks.json",
+  krlUrl:  "https://your-production-sift-host/sift-krl.json",
+  // krlMode defaults to "signed_preferred"
 });
 
 // Inject a mock fetch for tests:

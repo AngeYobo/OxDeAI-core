@@ -47,6 +47,10 @@ export type {
   SiftHttpKeyStoreOptions,
   KeyStoreErrorCode,
   CreateStagingKeyStoreOptions,
+  KrlMode,
+  KrlIntegrity,
+  KrlVerifyFn,
+  KrlStatus,
 } from "./siftKeyStore.js";
 export {
   KeyStoreError,
