@@ -91,7 +91,29 @@ Five vectors covering:
 
 Clock model: **strict zero tolerance**. Valid iff `now < expiry`. No skew parameter, no grace period. Issuers must build delivery latency into the expiry window. See `authorization-v1.md §17`.
 
-Current validator assertion count: `191`.
+### SignedKRLV1 Verification (v1.6+)
+
+- `signed-krl-verification.json` — exercises `verifySignedKrl` across all verification paths for the `SignedKRLV1` protocol artifact.
+
+Nine vectors covering:
+
+| Vector | Mode | Expected outcome |
+|--------|------|-----------------|
+| `krl-001` | `valid` | `ok` — signature verifies, not expired |
+| `krl-002` | `invalid-signature` | `KRL_SIG_INVALID` — tampered signature |
+| `krl-003` | `expired` | `KRL_EXPIRED` — `now >= not_after` (strict zero-tolerance) |
+| `krl-004` | `malformed-revoked-kids` | `KRL_MALFORMED` — `revoked_kids` is a string, not an array |
+| `krl-005` | `duplicate-revoked-kids` | `KRL_MALFORMED` — duplicate entries in `revoked_kids` |
+| `krl-006` | `unknown-signing-kid` | `KRL_UNKNOWN_SIGNING_KID` — kid not in trusted KRL signing key set |
+| `krl-007` | `signing-key-inactive` | `KRL_SIGNING_KEY_INACTIVE` — key found but `keyIsActiveAt` returns false |
+| `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` — `signature.alg != "Ed25519"` |
+| `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` — `krl_version` less than previous accepted value |
+
+Signing domain: `OXDEAI_KRL_V1`. KRL signing fixture key (`krl-2026-01`, issuer `krl.issuer`) is distinct from the AuthorizationV1 / DelegationV1 signing fixture key to exercise trust-domain separation.
+
+**Coverage scope:** TypeScript / `@oxdeai/core` conformance runner. No cross-language harness integration in Patch A. `SiftHttpKeyStore` integration deferred to Patch B.
+
+Current validator assertion count: `209`.
 
 ### Adapter ops required for DelegationV1
 
@@ -137,7 +159,7 @@ pnpm -C packages/conformance validate
 Expected success output includes:
 
 ```text
-Conformance passed: 181 assertions
+Conformance passed: 209 assertions
 ```
 
 ## Adapter Contract

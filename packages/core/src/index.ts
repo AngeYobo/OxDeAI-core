@@ -5,6 +5,7 @@ export type * from "./types/policy.js";
 export type * from "./types/authorization.js";
 export type * from "./types/keyset.js";
 export type * from "./types/delegation.js";
+export type * from "./types/signed-krl.js";
 export type * from "./verification/types.js";
 export { encodeCanonicalState, decodeCanonicalState } from "./snapshot/CanonicalCodec.js";
 export { createCanonicalState, withModuleState } from "./snapshot/CanonicalState.js";
@@ -40,3 +41,7 @@ export type { CreateDelegationParams } from "./delegation/createDelegation.js";
 export { PolicyEngine } from "./policy/PolicyEngine.js";
 export type { EngineOptions, EngineEvalOptions, EvaluateOutput, EvaluatePureOutput, SimulationResult } from "./policy/PolicyEngine.js";
 export { HashChainedLog } from "./audit/HashChainedLog.js";
+export {
+  verifySignedKrl,
+  signedKrlSigningPayload,
+} from "./verification/verifySignedKrl.js";
