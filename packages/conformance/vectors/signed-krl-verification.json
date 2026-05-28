@@ -1,0 +1,103 @@
+{
+  "version": "1.0.0",
+  "description": "SignedKRLV1 verification conformance vectors. Artifacts are built dynamically by the validator using the KRL fixture key (krl-ed25519.test-only.fixture.ts, kid: krl-2026-01, issuer: krl.issuer). Fixed timestamps: KRL_T_ISSUED=1730000000, KRL_T_NOT_AFTER=1730003600, verify now=1730000010.",
+  "vectors": [
+    {
+      "id": "krl-001",
+      "mode": "valid",
+      "description": "Valid signed KRL — signature verifies, not expired, no regression",
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "krl-002",
+      "mode": "invalid-signature",
+      "description": "Tampered signature (last 4 bytes replaced) — Ed25519 verification fails",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_SIG_INVALID", "message": "Ed25519 signature verification failed" }
+        ]
+      }
+    },
+    {
+      "id": "krl-003",
+      "mode": "expired",
+      "description": "Verification time is not_after + 1 — strict zero-tolerance expiry fires",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_EXPIRED", "message": "KRL has expired" }
+        ]
+      }
+    },
+    {
+      "id": "krl-004",
+      "mode": "malformed-revoked-kids",
+      "description": "revoked_kids is a string, not an array — structural malformation",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_MALFORMED", "message": "revoked_kids must be an array of strings" }
+        ]
+      }
+    },
+    {
+      "id": "krl-005",
+      "mode": "duplicate-revoked-kids",
+      "description": "revoked_kids contains [\"kid-1\", \"kid-1\"] — producers must deduplicate; verifier rejects",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_MALFORMED", "message": "duplicate entry in revoked_kids" }
+        ]
+      }
+    },
+    {
+      "id": "krl-006",
+      "mode": "unknown-signing-kid",
+      "description": "signature.kid tampered to \"unknown-kid\" after signing — not found in trusted key sets",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_UNKNOWN_SIGNING_KID", "message": "KRL signing kid not found in trusted key sets" }
+        ]
+      }
+    },
+    {
+      "id": "krl-007",
+      "mode": "signing-key-inactive",
+      "description": "Trusted key set contains the correct kid but with status: revoked — keyIsActiveAt returns false",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_SIGNING_KEY_INACTIVE", "message": "KRL signing key is not active at verification time" }
+        ]
+      }
+    },
+    {
+      "id": "krl-008",
+      "mode": "unsupported-alg",
+      "description": "signature.alg is \"HMAC-SHA256\" — only Ed25519 is accepted for SignedKRLV1",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_UNSUPPORTED_ALG", "message": "only Ed25519 is supported for SignedKRLV1 signing" }
+        ]
+      }
+    },
+    {
+      "id": "krl-009",
+      "mode": "version-regression",
+      "description": "krl_version=1 but previousKrlVersionByIssuer[krl.issuer]=5 — version went backwards",
+      "expected": {
+        "status": "invalid",
+        "violations": [
+          { "code": "KRL_VERSION_REGRESSION", "message": "krl_version 1 is less than the previously accepted version 5 for issuer \"krl.issuer\"" }
+        ]
+      }
+    }
+  ]
+}

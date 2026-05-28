@@ -16,12 +16,20 @@ import {
   createDelegation,
   verifyDelegation,
   verifyDelegationChain,
+  signEd25519,
+  SIGNING_DOMAINS,
+  signedKrlSigningPayload,
+  verifySignedKrl,
 } from "@oxdeai/core";
-import type { AuthorizationV1, Intent, KeySet, KeySetKey, State, VerificationResult, DelegationV1, DelegationScope, VerifyDelegationOptions } from "@oxdeai/core";
+import type { AuthorizationV1, Intent, KeySet, KeySetKey, State, VerificationResult, DelegationV1, DelegationScope, VerifyDelegationOptions, SignedKRLV1 } from "@oxdeai/core";
 import {
   TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
   TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
 } from "./fixtures/ed25519.test-only.fixture.js";
+import {
+  KRL_TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
+  KRL_TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
+} from "./fixtures/krl-ed25519.test-only.fixture.js";
 import { CONFORMANCE_ENGINE_SECRET } from "./fixtures/conformance-engine-secret.fixture.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -1422,6 +1430,134 @@ function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: Confor
   }
 }
 
+// ── SignedKRLV1 verification ───────────────────────────────────────────────────
+
+const KRL_ISSUER     = "krl.issuer";
+const KRL_KID        = "krl-2026-01";
+const KRL_T_ISSUED   = 1_730_000_000;
+const KRL_T_NOW      = 1_730_000_010;
+const KRL_T_NOT_AFTER = 1_730_003_600;
+
+const KRL_TRUSTED_KEYSET: KeySet = {
+  issuer: KRL_ISSUER,
+  version: "1",
+  keys: [{
+    kid:        KRL_KID,
+    alg:        "Ed25519",
+    public_key: KRL_TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
+  }],
+};
+
+function buildValidKrlBase(): Omit<SignedKRLV1, "signature"> {
+  return {
+    version:      "SignedKRLV1",
+    issuer:       KRL_ISSUER,
+    krl_version:  1,
+    issued_at:    KRL_T_ISSUED,
+    not_after:    KRL_T_NOT_AFTER,
+    revoked_kids: ["kid-provider-1", "kid-provider-2"],
+  };
+}
+
+function signValidKrl(override?: Partial<Omit<SignedKRLV1, "signature">>): SignedKRLV1 {
+  const base = { ...buildValidKrlBase(), ...override };
+  const envelope: SignedKRLV1 = {
+    ...base,
+    signature: { alg: "Ed25519", kid: KRL_KID, sig: "" },
+  };
+  const payload = signedKrlSigningPayload(envelope);
+  const sig = signEd25519(SIGNING_DOMAINS.KRL_V1, payload, KRL_TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION);
+  return { ...envelope, signature: { alg: "Ed25519", kid: KRL_KID, sig } };
+}
+
+function validateSignedKrlVectors(ctx: CheckCtx): void {
+  const file = loadJson<VectorFile>("signed-krl-verification.json");
+
+  for (const v of file.vectors) {
+    const id   = String(v.id);
+    const mode = String(v.mode);
+    const expected = asRecord(v.expected);
+
+    let result: VerificationResult;
+
+    if (mode === "valid") {
+      // Valid KRL — signature verifies, not expired
+      const krl = signValidKrl();
+      result = verifySignedKrl(krl, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "invalid-signature") {
+      // Tamper last 4 base64 characters of the signature
+      const krl = signValidKrl();
+      const tampered: SignedKRLV1 = {
+        ...krl,
+        signature: { ...krl.signature, sig: krl.signature.sig.slice(0, -4) + "AAAA" },
+      };
+      result = verifySignedKrl(tampered, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "expired") {
+      // Verification time is one second past not_after
+      const krl = signValidKrl();
+      result = verifySignedKrl(krl, { now: KRL_T_NOT_AFTER + 1, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "malformed-revoked-kids") {
+      // revoked_kids is a string, not an array — structural malformation
+      const raw = {
+        ...buildValidKrlBase(),
+        revoked_kids: "not-an-array",
+        signature: { alg: "Ed25519", kid: KRL_KID, sig: "placeholder" },
+      };
+      result = verifySignedKrl(raw, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "duplicate-revoked-kids") {
+      // Valid signature but revoked_kids has duplicate entries
+      const krl = signValidKrl({ revoked_kids: ["kid-1", "kid-1"] });
+      result = verifySignedKrl(krl, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "unknown-signing-kid") {
+      // kid tampered after signing — not found in trusted key sets
+      const krl = signValidKrl();
+      const wrongKid: SignedKRLV1 = {
+        ...krl,
+        signature: { ...krl.signature, kid: "unknown-kid" },
+      };
+      result = verifySignedKrl(wrongKid, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "signing-key-inactive") {
+      // The correct kid exists in the trusted set but is marked revoked
+      const krl = signValidKrl();
+      const revokedKeyset: KeySet = {
+        ...KRL_TRUSTED_KEYSET,
+        keys: [{ ...KRL_TRUSTED_KEYSET.keys[0], status: "revoked" }],
+      };
+      result = verifySignedKrl(krl, { now: KRL_T_NOW, trustedKeySets: revokedKeyset });
+
+    } else if (mode === "unsupported-alg") {
+      // signature.alg is not "Ed25519" — structural KRL_UNSUPPORTED_ALG before sig check
+      const raw = {
+        ...buildValidKrlBase(),
+        signature: { alg: "HMAC-SHA256" as any, kid: KRL_KID, sig: "placeholder" },
+      };
+      result = verifySignedKrl(raw, { now: KRL_T_NOW, trustedKeySets: KRL_TRUSTED_KEYSET });
+
+    } else if (mode === "version-regression") {
+      // krl_version=1 but caller knows previous version was 5
+      const krl = signValidKrl(); // krl_version = 1
+      result = verifySignedKrl(krl, {
+        now: KRL_T_NOW,
+        trustedKeySets: KRL_TRUSTED_KEYSET,
+        previousKrlVersionByIssuer: { [KRL_ISSUER]: 5 },
+      });
+
+    } else {
+      fail(ctx, `${id}: unknown mode "${mode}"`);
+      continue;
+    }
+
+    eq(ctx, `${id} status`,     result.status,     String(expected.status));
+    eq(ctx, `${id} violations`, result.violations, expected.violations ?? []);
+  }
+}
+
 function main(): void {
   const ctx: CheckCtx = { failures: [], passed: 0 };
   const adapter = coreAdapter;
@@ -1444,6 +1580,7 @@ function main(): void {
   validateKeyLifecycleVectors(ctx, adapter);
   validateClockSemanticsVectors(ctx, adapter);
   validateProfileCStateVerificationVectors(ctx, adapter);
+  validateSignedKrlVectors(ctx);
 
   if (ctx.failures.length > 0) {
     console.error(`\nConformance failed: ${ctx.failures.length} assertion(s)`);

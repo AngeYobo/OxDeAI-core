@@ -1,8 +1,8 @@
 # Protocol Audit - Post-Interoperability Hardening
 
-**Date:** 2026-05-17  
-**Scope:** OxDeAI execution authorization boundary protocol, after completion of the external-provider interoperability hardening sequence  
-**Auditor:** Internal protocol audit (Ange)  
+**Date:** 2026-05-17
+**Scope:** OxDeAI execution authorization boundary protocol, after completion of the external-provider interoperability hardening sequence
+**Auditor:** Internal protocol audit (Ange)
 **Protocol invariant under audit:**
 
 > **No valid authorization → no execution path**
@@ -90,6 +90,7 @@
 | `not_after` enforcement | `DONE` | Implemented. Conformance vectors `key-lifecycle-004`, `key-lifecycle-006`, `key-lifecycle-008` (expired windows). |
 | Key rotation (dual-sign) | `PARTIAL` | Rotation procedure documented in `key-custody-and-rotation.md`. Dual-sign overlap verified by `key-lifecycle-007` (retired key within window → ok). No automated rotation machinery. |
 | Sift KRL (Key Revocation List) | `PARTIAL` | `SiftHttpKeyStore` checks `revoked_kids`. KRL payload is **not cryptographically signature-verified** - transport security (HTTPS) only. Known risk, documented in `packages/sift/README.md`. |
+| `SignedKRLV1` artifact | `PARTIAL` | Defined in `docs/spec/artifacts/signed-krl-v1.md`. Pure `verifySignedKrl` verifier implemented in `@oxdeai/core` with 9 conformance vectors. **Not yet integrated into `SiftHttpKeyStore`** — `SiftHttpKeyStore` still uses unsigned KRL. Patch A establishes the cryptographic contract; Patch B wires it into the runtime. |
 
 ---
 
@@ -303,13 +304,13 @@ The following areas still have **no portable conformance vector**:
 
 ### 5.3 Residual Trust Risks
 
-**RT-TRUST-1: State provider integrity**  
+**RT-TRUST-1: State provider integrity**
 The state provider is unconditionally trusted. A compromised `getState()` implementation can return a state that produces a matching `state_hash` for an authorization, bypassing the semantic check. **No mitigation exists at the protocol layer.** Documented in `threat-model-external-providers.md` (T-8).
 
-**RT-TRUST-2: KRL transport integrity**  
-Sift KRL is not cryptographically signed. MITM can suppress revocations. Documented as known limitation in `packages/sift/README.md`. Mitigation: wait for Sift to publish a signed KRL contract.
+**RT-TRUST-2: KRL transport integrity**
+Sift KRL is not cryptographically signed. MITM can suppress revocations. Documented as known limitation in `packages/sift/README.md`. **Patch A progress:** `SignedKRLV1` artifact defined and `verifySignedKrl` pure verifier implemented in `@oxdeai/core`. The cryptographic contract exists. **Patch B required** to integrate `signed_required` / `signed_preferred` modes into `SiftHttpKeyStore`. Transport integrity risk is not eliminated until Patch B is deployed with `signed_required` mode.
 
-**RT-TRUST-3: Replay store bootstrapping**  
+**RT-TRUST-3: Replay store bootstrapping**
 New deployments start with an empty replay store. Authorization artifacts issued before the store was populated can replay within their validity window. No mitigation; documented in `replay-store-ttl-alignment.md` (RT-3: clock-skew edge) and adjacent scenarios.
 
 ---
@@ -426,6 +427,7 @@ Key rotation                 ██████████░░░░░░░
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Clock skew spec              ████████████████████  DONE (strict zero-tolerance + 10 vectors)
 Public artifact boundary     ████████████████████  DONE (#103: toPublicAuthorizationV1, delegationParentHash)
+SignedKRLV1 artifact         ██████████████░░░░░░  PARTIAL (verifier + 9 vectors; Sift integration Patch B pending)
 HTTP PEP                     ░░░░░░░░░░░░░░░░░░░░  MISSING (planned v2.6)
 Structured events / metrics  ░░░░░░░░░░░░░░░░░░░░  MISSING
 ```
@@ -436,13 +438,13 @@ Structured events / metrics  ░░░░░░░░░░░░░░░░░
 
 ### P0 - Must resolve before external adoption
 
-**P0-1: Add portable conformance vectors for key lifecycle** ✓ RESOLVED  
+**P0-1: Add portable conformance vectors for key lifecycle** ✓ RESOLVED
 Resolution: `key-lifecycle-verification.json` added — 10 vectors, 20 assertions covering active, revoked, retired (within/past window), `not_before`/`not_after` time windows, revocation-overrides-window, and wrong-kid-known-issuer. Conformance count: 161 → 181.
 
-**P0-2: Define and specify clock skew tolerance** ✓ RESOLVED  
+**P0-2: Define and specify clock skew tolerance** ✓ RESOLVED
 Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md §17` defines: valid iff `now < expiry`, no grace period, `issued_at` informational-only (no lower-bound enforcement), NTP synchronization required, issuers must build delivery latency into expiry window. `clock-semantics-verification.json` added — 5 vectors, 10 assertions covering last-valid-second, one-past-expiry, verifier-clock-behind, and Encoding B variants. Conformance count: 181 → 191.
 
-**P0-3: Harden `parentScope` handling in `OxDeAIGuard`** ✓ RESOLVED  
+**P0-3: Harden `parentScope` handling in `OxDeAIGuard`** ✓ RESOLVED
 Resolution: `GuardDelegationInput` now requires `parentScope: DelegationScope` as an explicit typed field. `isValidDelegationScope` validates the structure before chain verification. The unsafe `(parentAuth as any).scope` cast has been removed from `guard.ts`. All delegation tests and the `delegation-demo` example updated to pass `parentScope` explicitly. Missing or malformed `parentScope` fails closed before execution; `OxDeAIAuthorizationError` is thrown before the delegation chain verification path is reached.
 
 **P0-4: Separate public `AuthorizationV1` artifact boundary from internal legacy authorization shape** ✓ RESOLVED
@@ -461,55 +463,57 @@ Resolution: `authorization-v1.json` vector `auth-expiry-wins-over-expires-at` ad
 **P1-3: Add Profile B trust separation conformance vector** ✓ RESOLVED
 Resolution: Two vectors added to `authorization-v1.json`: `pb-trust-oxdeai-key-allow` (artifact signed by `portable-key-1`, an OxDeAI key present in the runner's `keys` array → ALLOW) and `pb-trust-provider-key-rejected` (identical artifact with `signature.kid = "provider-receipt-key-1"`, a provider receipt key absent from the `keys` array → DENY/UNKNOWN_KID). Proves that the PEP must verify AuthorizationV1 artifacts against OxDeAI trustedKeySets, not the provider's receipt-signing key. Authorization vector count: 10 → 12. Resolved in #108.
 
-**P1-4: Resolve or formally mitigate KRL transport integrity risk**  
-Reason: Sift KRL payload is not signature-verified. A compromised network path can suppress revocations. Either require a signed KRL contract from Sift, or formally document this as an accepted operational risk with compensating controls.  
-Scope: `packages/sift/README.md` + `docs/architecture/threat-model-external-providers.md`.
+**P1-4: Resolve KRL transport integrity risk** *(Patch A complete; Patch B required to close)*
+Reason: Sift KRL payload is not signature-verified. A compromised network path can suppress revocations.
+**Patch A (complete):** `SignedKRLV1` artifact defined (`docs/spec/artifacts/signed-krl-v1.md`). Pure `verifySignedKrl` verifier implemented in `packages/core` with 7 deterministic reason codes and 9 conformance vectors (`packages/conformance/vectors/signed-krl-verification.json`). KRL signing domain `OXDEAI_KRL_V1` established. KRL fixture key separate from AuthorizationV1 signing key — trust domain separation is testable.
+**Patch B (pending):** Integrate `verifySignedKrl` into `SiftHttpKeyStore` with `krl_mode` configuration (`signed_required` / `signed_preferred` / `unsigned_legacy`). The transport integrity risk is not closed until `SiftHttpKeyStore` enforces signed KRLs in production.
+Scope remaining: `packages/sift/src/siftKeyStore.ts` + `packages/sift/README.md` + `docs/architecture/threat-model-external-providers.md`.
 
 **P1-5: Mark HMAC-SHA256 as deprecated** ✓ RESOLVED
 Resolution: `authorization-v1.md §5` now carries an explicit "Deprecated legacy algorithm" section: HMAC-SHA256 is not standard, is symmetric/non-portable, and its migration path is documented. `legacyHmacSecret` in `VerifyAuthorizationOptions` carries a `@deprecated` JSDoc with removal notice. `authorization_signing_alg: "HMAC-SHA256"` default in `EngineOptions` carries a `@deprecated` JSDoc directing new users to Ed25519. Two explicit legacy-path tests document backward-compat guarantee and the fail-closed behavior when `legacyHmacSecret` is absent. Resolved in #107.
 
-**P1-6: Add cross-language Profile C conformance vectors**  
-Reason: Profile C is executable in TypeScript but not portable across Go/Python harnesses. Standardization positioning for Profile C requires external verifiers to validate `computeStateHash` integration against the same vectors. TypeScript-only coverage is insufficient for a multi-implementer profile claim.  
+**P1-6: Add cross-language Profile C conformance vectors**
+Reason: Profile C is executable in TypeScript but not portable across Go/Python harnesses. Standardization positioning for Profile C requires external verifiers to validate `computeStateHash` integration against the same vectors. TypeScript-only coverage is insufficient for a multi-implementer profile claim.
 Scope: Go harness extension to support a pluggable `computeStateHash` callback or equivalent; expose at minimum `live-state-match`, `live-state-mismatch`, and `compute-throws` modes.
 
 ---
 
 ### P2 - Address before production scale-out
 
-**P2-1: Enforce durable replay store configuration in scaled deployments**  
-Reason: Default in-memory store silently degrades to single-process semantics. No detection or warning when deployed in multi-process context. Add a configuration flag or documentation assertion that fails loudly if a non-durable store is used in an environment where durability is expected.  
+**P2-1: Enforce durable replay store configuration in scaled deployments**
+Reason: Default in-memory store silently degrades to single-process semantics. No detection or warning when deployed in multi-process context. Add a configuration flag or documentation assertion that fails loudly if a non-durable store is used in an environment where durability is expected.
 Scope: `OxDeAIGuardConfig` - optional `replayStoreTier` hint or guard-level warning.
 
-**P2-2: Add replay TTL failure conformance vectors (subset of RT scenarios)**  
-Reason: RT-1–RT-10 are documented but not executable. At minimum, RT-1 (TTL computed as zero) and RT-3 (clock skew edge) should be vectorized to make failure semantics testable.  
+**P2-2: Add replay TTL failure conformance vectors (subset of RT scenarios)**
+Reason: RT-1–RT-10 are documented but not executable. At minimum, RT-1 (TTL computed as zero) and RT-3 (clock skew edge) should be vectorized to make failure semantics testable.
 Scope: New `replay-ttl-verification.json` vector set.
 
-**P2-3: Define structured decision event schema**  
-Reason: `onDecision` hook exists but produces no specified schema. Observability tooling cannot be built reliably without a stable event format.  
+**P2-3: Define structured decision event schema**
+Reason: `onDecision` hook exists but produces no specified schema. Observability tooling cannot be built reliably without a stable event format.
 Scope: `GuardDecisionRecord` type - finalize as a versioned schema; add to `pep-gateway-v1.md`.
 
-**P2-4: Specify state provider trust boundary**  
-Reason: `getState()` is unconditionally trusted at the protocol layer. No minimum integrity requirements are specified for the state source. Specify access controls, CAS semantics, and audit expectations for compliant state provider implementations.  
+**P2-4: Specify state provider trust boundary**
+Reason: `getState()` is unconditionally trusted at the protocol layer. No minimum integrity requirements are specified for the state source. Specify access controls, CAS semantics, and audit expectations for compliant state provider implementations.
 Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 ---
 
 ## 10. Audit Summary
 
-**Total areas audited:** 23 protocol areas, 14 invariants, 15 conformance vector sets, 9 trust components.
+**Total areas audited:** 24 protocol areas, 14 invariants, 16 conformance vector sets, 9 trust components.
 
 | Status | Count |
 |--------|-------|
 | `DONE` | 56 |
-| `PARTIAL` | 16 |
+| `PARTIAL` | 17 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 191 assertions across 15 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-5 resolved).
+**Conformance:** 209 assertions across 16 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-5 resolved; P1-4 Patch A complete).
 
-**Follow-up issue counts:** P0: 0 open (P0-1, P0-2, P0-3, P0-4 resolved) · P1: 2 · P2: 4 · Total: 6 open
+**Follow-up issue counts:** P0: 0 open · P1: 2 open (P1-4 Patch B pending, P1-6 open) · P2: 4 · Total: 6 open
 
 **Critical path to external adoption:**
 
