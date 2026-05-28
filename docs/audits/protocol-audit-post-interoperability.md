@@ -89,8 +89,8 @@
 | `not_before` enforcement | `DONE` | Implemented. Conformance vector `key-lifecycle-003` (future `not_before` → inactive). |
 | `not_after` enforcement | `DONE` | Implemented. Conformance vectors `key-lifecycle-004`, `key-lifecycle-006`, `key-lifecycle-008` (expired windows). |
 | Key rotation (dual-sign) | `PARTIAL` | Rotation procedure documented in `key-custody-and-rotation.md`. Dual-sign overlap verified by `key-lifecycle-007` (retired key within window → ok). No automated rotation machinery. |
-| Sift KRL (Key Revocation List) | `PARTIAL` | `SiftHttpKeyStore` checks `revoked_kids`. KRL payload is **not cryptographically signature-verified** - transport security (HTTPS) only. Known risk, documented in `packages/sift/README.md`. |
-| `SignedKRLV1` artifact | `PARTIAL` | Defined in `docs/spec/artifacts/signed-krl-v1.md`. Pure `verifySignedKrl` verifier implemented in `@oxdeai/core` with 9 conformance vectors. **Not yet integrated into `SiftHttpKeyStore`** — `SiftHttpKeyStore` still uses unsigned KRL. Patch A establishes the cryptographic contract; Patch B wires it into the runtime. |
+| Sift KRL (Key Revocation List) | `DONE` | `SiftHttpKeyStore` now supports three KRL integrity modes: `signed_required` (closes transport gap), `signed_preferred` (default, signed when present), `unsigned_legacy` (deprecated). `verifyKrl` callback injection preserves `@oxdeai/sift` zero-dependency boundary. 29 new tests. See `packages/sift/README.md`. |
+| `SignedKRLV1` artifact | `DONE` | Defined in `docs/spec/artifacts/signed-krl-v1.md`. `verifySignedKrl` verifier in `@oxdeai/core` with 9 conformance vectors. Integrated into `SiftHttpKeyStore` via `verifyKrl` callback (`signed_required` mode closes the transport-integrity gap). Residual: persistent high-watermark storage and cross-language vectors deferred to future patches. |
 
 ---
 
@@ -307,8 +307,8 @@ The following areas still have **no portable conformance vector**:
 **RT-TRUST-1: State provider integrity**
 The state provider is unconditionally trusted. A compromised `getState()` implementation can return a state that produces a matching `state_hash` for an authorization, bypassing the semantic check. **No mitigation exists at the protocol layer.** Documented in `threat-model-external-providers.md` (T-8).
 
-**RT-TRUST-2: KRL transport integrity**
-Sift KRL is not cryptographically signed. MITM can suppress revocations. Documented as known limitation in `packages/sift/README.md`. **Patch A progress:** `SignedKRLV1` artifact defined and `verifySignedKrl` pure verifier implemented in `@oxdeai/core`. The cryptographic contract exists. **Patch B required** to integrate `signed_required` / `signed_preferred` modes into `SiftHttpKeyStore`. Transport integrity risk is not eliminated until Patch B is deployed with `signed_required` mode.
+**RT-TRUST-2: KRL transport integrity** *(mitigated by `signed_required` mode; residual in default mode)*
+`SiftHttpKeyStore` now supports three KRL integrity modes. `signed_required` mode (via `verifyKrl` callback + `verifySignedKrl` from `@oxdeai/core`) closes the transport-integrity gap for deployments that configure it. The default `signed_preferred` mode accepts unsigned KRLs as a fallback. **Residual risk:** the gap is only eliminated when `signed_required` is actively deployed. `unsigned_legacy` and unsigned fallback in `signed_preferred` remain transport-trust-only. See deprecation trajectory in `packages/sift/README.md`.
 
 **RT-TRUST-3: Replay store bootstrapping**
 New deployments start with an empty replay store. Authorization artifacts issued before the store was populated can replay within their validity window. No mitigation; documented in `replay-store-ttl-alignment.md` (RT-3: clock-skew edge) and adjacent scenarios.
@@ -427,7 +427,7 @@ Key rotation                 ██████████░░░░░░░
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Clock skew spec              ████████████████████  DONE (strict zero-tolerance + 10 vectors)
 Public artifact boundary     ████████████████████  DONE (#103: toPublicAuthorizationV1, delegationParentHash)
-SignedKRLV1 artifact         ██████████████░░░░░░  PARTIAL (verifier + 9 vectors; Sift integration Patch B pending)
+SignedKRLV1 artifact         ████████████████████  DONE (verifier + 9 vectors; signed_required mode closes transport gap)
 HTTP PEP                     ░░░░░░░░░░░░░░░░░░░░  MISSING (planned v2.6)
 Structured events / metrics  ░░░░░░░░░░░░░░░░░░░░  MISSING
 ```
@@ -463,11 +463,14 @@ Resolution: `authorization-v1.json` vector `auth-expiry-wins-over-expires-at` ad
 **P1-3: Add Profile B trust separation conformance vector** ✓ RESOLVED
 Resolution: Two vectors added to `authorization-v1.json`: `pb-trust-oxdeai-key-allow` (artifact signed by `portable-key-1`, an OxDeAI key present in the runner's `keys` array → ALLOW) and `pb-trust-provider-key-rejected` (identical artifact with `signature.kid = "provider-receipt-key-1"`, a provider receipt key absent from the `keys` array → DENY/UNKNOWN_KID). Proves that the PEP must verify AuthorizationV1 artifacts against OxDeAI trustedKeySets, not the provider's receipt-signing key. Authorization vector count: 10 → 12. Resolved in #108.
 
-**P1-4: Resolve KRL transport integrity risk** *(Patch A complete; Patch B required to close)*
-Reason: Sift KRL payload is not signature-verified. A compromised network path can suppress revocations.
-**Patch A (complete):** `SignedKRLV1` artifact defined (`docs/spec/artifacts/signed-krl-v1.md`). Pure `verifySignedKrl` verifier implemented in `packages/core` with 7 deterministic reason codes and 9 conformance vectors (`packages/conformance/vectors/signed-krl-verification.json`). KRL signing domain `OXDEAI_KRL_V1` established. KRL fixture key separate from AuthorizationV1 signing key — trust domain separation is testable.
-**Patch B (pending):** Integrate `verifySignedKrl` into `SiftHttpKeyStore` with `krl_mode` configuration (`signed_required` / `signed_preferred` / `unsigned_legacy`). The transport integrity risk is not closed until `SiftHttpKeyStore` enforces signed KRLs in production.
-Scope remaining: `packages/sift/src/siftKeyStore.ts` + `packages/sift/README.md` + `docs/architecture/threat-model-external-providers.md`.
+**P1-4: Resolve KRL transport integrity risk** ✓ RESOLVED for `signed_required`; residual risk in default mode
+Resolution: `SiftHttpKeyStore` now supports three KRL integrity modes via `verifyKrl` callback injection (Patch A + Patch B):
+- `signed_required` — closes the transport-integrity gap. Every KRL must be a signed `SignedKRLV1` verified by `verifySignedKrl` from `@oxdeai/core`. Unsigned KRLs rejected before `verifyKrl` is consulted. Constructor fails fast without `verifyKrl`.
+- `signed_preferred` (default) — signed KRLs verified when present; unsigned fallback for unsigned KRLs. Signed KRL with missing `verifyKrl` fails closed.
+- `unsigned_legacy` — deprecated; transport-trust-only; warns at construction.
+`@oxdeai/sift` zero-dependency boundary preserved via callback injection. `krl_version` per-issuer watermark tracked in memory. `getKrlStatus()` status surface added. 29 new mode tests in `siftKeyStore.krl-modes.test.ts`.
+Caveats: transport-integrity gap is only fully closed when callers deploy `signed_required`. `signed_preferred` unsigned fallback and `unsigned_legacy` retain transport-trust-only semantics. Persistent high-watermark storage and cross-language KRL vectors remain future work. Non-string `revoked_kids` skipping is legacy-path-only behavior, not `SignedKRLV1` semantics.
+**KRL reason-code ownership:** Four codes are Sift-local (produced by mode logic, NOT from `@oxdeai/core`): `KRL_UNSIGNED_IN_SIGNED_REQUIRED`, `KRL_MISSING_VERIFY_CALLBACK`, `KRL_VERIFY_CALLBACK_ERROR`, `KRL_VERIFY_RESULT_INCOMPLETE`. Seven core codes are passed through as opaque strings from the `verifyKrl` callback: `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`, `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
 
 **P1-5: Mark HMAC-SHA256 as deprecated** ✓ RESOLVED
 Resolution: `authorization-v1.md §5` now carries an explicit "Deprecated legacy algorithm" section: HMAC-SHA256 is not standard, is symmetric/non-portable, and its migration path is documented. `legacyHmacSecret` in `VerifyAuthorizationOptions` carries a `@deprecated` JSDoc with removal notice. `authorization_signing_alg: "HMAC-SHA256"` default in `EngineOptions` carries a `@deprecated` JSDoc directing new users to Ed25519. Two explicit legacy-path tests document backward-compat guarantee and the fail-closed behavior when `legacyHmacSecret` is absent. Resolved in #107.
@@ -504,16 +507,16 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 56 |
-| `PARTIAL` | 17 |
+| `DONE` | 58 |
+| `PARTIAL` | 15 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 6 |
 | `RISK` | 4 |
 
-**Conformance:** 209 assertions across 16 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-5 resolved; P1-4 Patch A complete).
+**Conformance:** 209 assertions across 16 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-4, P1-5 resolved with caveats).
 
-**Follow-up issue counts:** P0: 0 open · P1: 2 open (P1-4 Patch B pending, P1-6 open) · P2: 4 · Total: 6 open
+**Follow-up issue counts:** P0: 0 open · P1: 1 open (P1-6) · P2: 4 · Total: 5 open
 
 **Critical path to external adoption:**
 
@@ -530,7 +533,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, expiry precedence, and HMAC-SHA256 deprecation are now resolved. The spec/implementation mismatch is closed. State provider trust, KRL transport integrity, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, expiry precedence, HMAC-SHA256 deprecation, and KRL transport integrity (for `signed_required` mode deployments) are now resolved. State provider trust, Profile C cross-language coverage, and independent security review remain open before that claim can be made honestly.
 
 ---
 
