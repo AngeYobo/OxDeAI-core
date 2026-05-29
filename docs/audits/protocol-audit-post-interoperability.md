@@ -154,7 +154,7 @@
 | Profile A (Core-native) | `DONE` | Defined, implemented, conformance covered by existing auth-sig and auth-verify vectors. |
 | Profile B (External wire-compatible) | `DONE` | Defined. Encoding B accepted in verifyAuthorization. Conformance vector `authorization-sig-010`. Trust separation proven: `pb-trust-oxdeai-key-allow` (OxDeAI key in trustedKeySets → ALLOW) and `pb-trust-provider-key-rejected` (provider receipt key absent from trustedKeySets → DENY/UNKNOWN_KID). Resolved in #108. |
 | Profile C (Full semantic state verification) | `DONE` | Defined. Implemented via pluggable `computeStateHash`. 12 executable conformance assertions across 8 vectors. Encoding B path tested. |
-| Profile C cross-language | `MISSING` | No Go/Python harness integration for Profile C vectors. |
+| Profile C cross-language | `PARTIAL` | Go harness validates state-hash semantics (modes 001–005) via `docs/spec/test-vectors/profile-c-state-verification.json`. Profile C Encoding B modes 006–008 remain TypeScript-only. Python pending. |
 | Interoperability matrix | `DOCUMENTED ONLY` | Matrix in `external-provider-profile.md`. Not backed by conformance automation. |
 
 ---
@@ -421,7 +421,8 @@ Key lifecycle (lifecycle)    █████████████████
 DelegationV1                 ████████████████████  DONE
 Profile A interop            ████████████████████  DONE
 Profile B interop            ████████████████░░░░  PARTIAL (trust sep. gap)
-Profile C interop            ██████████████████░░  PARTIAL (TS-only vectors)
+Profile C interop            ████████████████████  DONE (state-hash semantics; Encoding B modes 006–008 TS-only)
+Profile C cross-language     ████████████████░░░░  PARTIAL (Go state-hash 001–005; Python pending; EB modes TS-only)
 Replay durability            ████████████████░░░░  PARTIAL (in-memory default risk)
 Key rotation                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
@@ -475,9 +476,18 @@ Caveats: transport-integrity gap is only fully closed when callers deploy `signe
 **P1-5: Mark HMAC-SHA256 as deprecated** ✓ RESOLVED
 Resolution: `authorization-v1.md §5` now carries an explicit "Deprecated legacy algorithm" section: HMAC-SHA256 is not standard, is symmetric/non-portable, and its migration path is documented. `legacyHmacSecret` in `VerifyAuthorizationOptions` carries a `@deprecated` JSDoc with removal notice. `authorization_signing_alg: "HMAC-SHA256"` default in `EngineOptions` carries a `@deprecated` JSDoc directing new users to Ed25519. Two explicit legacy-path tests document backward-compat guarantee and the fail-closed behavior when `legacyHmacSecret` is absent. Resolved in #107.
 
-**P1-6: Add cross-language Profile C conformance vectors**
-Reason: Profile C is executable in TypeScript but not portable across Go/Python harnesses. Standardization positioning for Profile C requires external verifiers to validate `computeStateHash` integration against the same vectors. TypeScript-only coverage is insufficient for a multi-implementer profile claim.
-Scope: Go harness extension to support a pluggable `computeStateHash` callback or equivalent; expose at minimum `live-state-match`, `live-state-mismatch`, and `compute-throws` modes.
+**P1-6: Add cross-language Profile C and SignedKRLV1 conformance vectors**
+Status: **PARTIAL — Go cross-language coverage for Profile C state-hash semantics and SignedKRLV1 merged; Python pending; Profile C Encoding B modes 006–008 remain TypeScript-only.**
+
+Go coverage (merged, #119 Go PR):
+- `go-harness/profile_c_verify.go` validates Profile C state-hash semantics modes 001–005: live-state-match, live-state-mismatch, hash-strategy-mismatch, compute-throws, toctou-stale-state. Independently computes SHA-256 of `canonicalJson(state)` (core) and SHA-256 of `"PROVIDER:" + canonicalJson(state)` (provider) using Go stdlib.
+- `go-harness/signed_krl_verify.go` validates all 9 SignedKRLV1 portable vectors. Independently reconstructs the `OXDEAI_KRL_V1` signing preimage and verifies Ed25519 signatures using Go `crypto/ed25519`. Checks all 7 reason codes: `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`, `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
+- Portable vector files added: `docs/spec/test-vectors/profile-c-state-verification.json`, `docs/spec/test-vectors/signed-krl-v1.json`.
+
+Remaining:
+- Python cross-language coverage (next PR).
+- Profile C Encoding B modes 006–008 remain TypeScript-only; tracked as a separate P2 issue.
+- P1-6 remains open until Python coverage lands.
 
 ---
 
@@ -503,20 +513,20 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 ## 10. Audit Summary
 
-**Total areas audited:** 24 protocol areas, 14 invariants, 16 conformance vector sets, 9 trust components.
+**Total areas audited:** 24 protocol areas, 14 invariants, 18 conformance vector sets, 9 trust components.
 
 | Status | Count |
 |--------|-------|
 | `DONE` | 58 |
-| `PARTIAL` | 15 |
+| `PARTIAL` | 16 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
-| `MISSING` | 6 |
+| `MISSING` | 5 |
 | `RISK` | 4 |
 
-**Conformance:** 209 assertions across 16 vector files + 12 portable `authorization-v1.json` vectors. Remaining gaps reduced (P0-1, P0-2, P0-3, P0-4, P1-1, P1-2, P1-3, P1-4, P1-5 resolved with caveats).
+**Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 25 Go harness assertions (11 canonicalization + 5 Profile C state-hash + 9 SignedKRLV1). Remaining gaps reduced (P0-1–P0-4, P1-1–P1-5 resolved; P1-4 resolved with caveats; P1-6 partial — Go merged, Python pending).
 
-**Follow-up issue counts:** P0: 0 open · P1: 1 open (P1-6) · P2: 4 · Total: 5 open
+**Follow-up issue counts:** P0: 0 open · P1: 1 open (P1-6 partial) · P2: 4 · Total: 5 open
 
 **Critical path to external adoption:**
 

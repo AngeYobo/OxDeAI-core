@@ -244,13 +244,22 @@ func join(parts []string, sep string) string {
 	return b.String()
 }
 
-func loadVectors() ([]vector, error) {
+// testVectorsDir returns the absolute path to docs/spec/test-vectors/ relative
+// to this source file, so go run . works regardless of working directory.
+func testVectorsDir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
+		return ""
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "docs", "spec", "test-vectors"))
+}
+
+func loadVectors() ([]vector, error) {
+	dir := testVectorsDir()
+	if dir == "" {
 		return nil, fmt.Errorf("unable to resolve caller path")
 	}
-	base := filepath.Dir(file)
-	path := filepath.Clean(filepath.Join(base, "..", "docs", "spec", "test-vectors", "canonicalization-v1.json"))
+	path := filepath.Join(dir, "canonicalization-v1.json")
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -273,25 +282,26 @@ func sha256Hex(data []byte) string {
 }
 
 func main() {
+	// ── 1. Canonicalization vectors ──────────────────────────────────────────
 	vectors, err := loadVectors()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load vectors: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to load canonicalization vectors: %v\n", err)
 		os.Exit(1)
 	}
 
-	var failed int
+	var canFailed int
 
 	for _, v := range vectors {
 		switch v.Status {
 		case "ok":
 			canon, err := canonicalize(v.Input)
 			if err != nil {
-				failed++
+				canFailed++
 				fmt.Fprintf(os.Stderr, "FAIL %s: unexpected error %s\n", v.ID, err.Error())
 				continue
 			}
 			if canon != v.ExpectedCanonical {
-				failed++
+				canFailed++
 				fmt.Fprintf(os.Stderr, "FAIL %s: canonical JSON mismatch\n", v.ID)
 				fmt.Fprintf(os.Stderr, "  expected: %s\n", v.ExpectedCanonical)
 				fmt.Fprintf(os.Stderr, "  actual:   %s\n", canon)
@@ -299,7 +309,7 @@ func main() {
 			}
 			hash := sha256Hex([]byte(canon))
 			if v.ExpectedSHA256 != "" && hash != v.ExpectedSHA256 {
-				failed++
+				canFailed++
 				fmt.Fprintf(os.Stderr, "FAIL %s: SHA-256 mismatch\n", v.ID)
 				fmt.Fprintf(os.Stderr, "  expected: %s\n", v.ExpectedSHA256)
 				fmt.Fprintf(os.Stderr, "  actual:   %s\n", hash)
@@ -309,12 +319,12 @@ func main() {
 		case "error":
 			_, err := canonicalize(v.Input)
 			if err == nil {
-				failed++
+				canFailed++
 				fmt.Fprintf(os.Stderr, "FAIL %s: expected error %s, got success\n", v.ID, v.ExpectedError)
 				continue
 			}
 			if err.Error() != v.ExpectedError {
-				failed++
+				canFailed++
 				fmt.Fprintf(os.Stderr, "FAIL %s: wrong error\n", v.ID)
 				fmt.Fprintf(os.Stderr, "  expected: %s\n", v.ExpectedError)
 				fmt.Fprintf(os.Stderr, "  actual:   %s\n", err.Error())
@@ -322,17 +332,37 @@ func main() {
 			}
 			fmt.Printf("PASS %s\n", v.ID)
 		default:
-			failed++
+			canFailed++
 			fmt.Fprintf(os.Stderr, "FAIL %s: unsupported status %s\n", v.ID, v.Status)
 		}
 	}
 
-	if failed > 0 {
-		fmt.Fprintf(os.Stderr, "\n%d vector(s) failed\n", failed)
-		os.Exit(1)
+	if canFailed > 0 {
+		fmt.Fprintf(os.Stderr, "\n%d canonicalization vector(s) failed\n", canFailed)
+	} else {
+		fmt.Printf("\nAll %d canonicalization vector(s) passed\n", len(vectors))
 	}
 
-	fmt.Printf("\nAll %d vector(s) passed\n", len(vectors))
+	// ── 2. Profile C state-hash semantics (modes 001–005) ────────────────────
+	profCPassed, profCFailed := verifyProfileCVectors()
+	if profCFailed > 0 {
+		fmt.Fprintf(os.Stderr, "\n%d Profile C vector(s) failed\n", profCFailed)
+	} else {
+		fmt.Printf("\nAll %d Profile C vector(s) passed\n", profCPassed)
+	}
+
+	// ── 3. SignedKRLV1 verification (9 vectors) ───────────────────────────────
+	krlPassed, krlFailed := verifySignedKrlVectors()
+	if krlFailed > 0 {
+		fmt.Fprintf(os.Stderr, "\n%d SignedKRL vector(s) failed\n", krlFailed)
+	} else {
+		fmt.Printf("\nAll %d SignedKRL vector(s) passed\n", krlPassed)
+	}
+
+	// ── Final exit code ───────────────────────────────────────────────────────
+	if canFailed+profCFailed+krlFailed > 0 {
+		os.Exit(1)
+	}
 }
 
 func reflectInt64(v interface{}) int64 {

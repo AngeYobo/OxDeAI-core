@@ -241,7 +241,9 @@ The following are explicitly out of scope for Patch A and will be addressed in s
 | `now` injection into `SiftHttpKeyStore.refresh()` | Patch B |
 | Persistent per-issuer `krl_version` high-watermark storage | Patch B |
 | Last-known-good KRL cache | Patch B |
-| Cross-language conformance vectors (Go, Python, Rust) | Future |
+| Cross-language conformance vectors — Go | #119 Go PR (merged) |
+| Cross-language conformance vectors — Python | Next PR |
+| Cross-language conformance vectors — Rust | Future |
 | KRL signing key rotation automation | Future |
 | `krlStatus` / `getKrlStatus()` surface | Patch B |
 
@@ -265,5 +267,25 @@ Runner: `pnpm -C packages/conformance validate`
 | `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` — `alg != "Ed25519"` |
 | `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` — version went backwards |
 
-**Coverage scope:** TypeScript / `@oxdeai/core` conformance runner. Cross-language
-harnesses (Go, Python) do not yet include SignedKRLV1 vectors.
+**Coverage scope:** Two runners:
+
+| Runner | Command | Coverage |
+|--------|---------|---------|
+| TypeScript (`@oxdeai/core`) | `pnpm -C packages/conformance validate` | 9 mode-based vectors (dynamic artifact construction) |
+| **Go harness** | `pnpm test:vectors:go` | **9 portable vectors with committed artifacts — independent Ed25519 verification** |
+
+Python cross-language coverage is pending the next PR.
+
+**Vector relationship.** `docs/spec/test-vectors/signed-krl-v1.json` is the normative
+portable cross-language vector source for SignedKRLV1. It contains committed
+`SignedKRLV1` artifacts with pre-computed Ed25519 signatures that Go and Python
+reproduce independently using only canonicalization-v1 and standard Ed25519 libraries.
+`packages/conformance/vectors/signed-krl-verification.json` is the TypeScript
+conformance mirror (mode-driven, no committed artifacts). Future changes must keep
+both files aligned or document divergence explicitly.
+
+**Independent verification model.** The Go harness does not consume TypeScript-generated
+intermediate artifacts (canonical bytes, signing preimages). It reconstructs the signing
+preimage from the committed vector inputs using its own canonicalization-v1 implementation
+and verifies the Ed25519 signature independently using `crypto/ed25519` from the Go
+standard library.
