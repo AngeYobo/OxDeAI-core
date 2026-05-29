@@ -1,0 +1,387 @@
+{
+  "version": "1.0.0",
+  "description": "Portable SignedKRLV1 cross-language conformance vectors. Each harness independently reconstructs the signing payload, builds the OXDEAI_KRL_V1 domain-prefixed preimage, and verifies the Ed25519 signature using its own crypto library. Committed signatures are deterministic Ed25519 outputs (RFC 8032). This file is the normative portable cross-language vector source for SignedKRLV1. packages/conformance/vectors/signed-krl-verification.json is the TypeScript conformance mirror. Future changes must keep them aligned or document divergence.",
+  "signing_domain": "OXDEAI_KRL_V1",
+  "signing_preimage": "domain + '\\n' + canonicalJson(signedKrlSigningPayload(envelope)) where signedKrlSigningPayload excludes only signature.sig",
+  "constants": {
+    "KRL_T_ISSUED": 1730000000,
+    "KRL_T_NOT_AFTER": 1730003600,
+    "KRL_T_NOW": 1730000010,
+    "KRL_T_NOW_EXPIRED": 1730003601
+  },
+  "keys": [
+    {
+      "id": "krl-signing-key",
+      "note": "TEST ONLY — KRL signing fixture key, kid krl-2026-01. Distinct from the AuthorizationV1 / DelegationV1 signing fixture key. issuer krl.issuer.",
+      "issuer": "krl.issuer",
+      "kid": "krl-2026-01",
+      "alg": "Ed25519",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----"
+    }
+  ],
+  "vectors": [
+    {
+      "id": "KRL_SIGNED_VALID",
+      "description": "Valid signed KRL: signature verifies, KRL is not expired, no version regression. Expected: ok, no violations.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "KRL_SIGNED_INVALID_SIG",
+      "description": "Tampered signature: base signature with last 4 base64 characters replaced by AAAA. Ed25519 verification fails — KRL_SIG_INVALID.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZAAAA"
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_SIG_INVALID" }]
+      }
+    },
+    {
+      "id": "KRL_SIGNED_EXPIRED",
+      "description": "Verification time is not_after + 1 (1730003601 >= 1730003600). Strict zero-tolerance expiry: now >= not_after — KRL_EXPIRED.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730003601,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_EXPIRED" }]
+      }
+    },
+    {
+      "id": "KRL_MALFORMED_REVOKED_KIDS",
+      "description": "revoked_kids is a JSON string, not an array. Structural malformation detected before signature verification — KRL_MALFORMED.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": "not-an-array",
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_MALFORMED" }]
+      }
+    },
+    {
+      "id": "KRL_DUPLICATE_REVOKED_KIDS",
+      "description": "revoked_kids contains [\"kid-1\", \"kid-1\"]. Producers MUST deduplicate; verifiers MUST reject duplicates as KRL_MALFORMED before signature verification. The signature is valid over this envelope but the structural check fires first.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-1", "kid-1"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "+mwEd2QP5+tx6pCKAiF8BKzMAHf1c28mcTQF575pDn/DwgRiJ+PkYnv+sasIdgj1S7E9mSZZK1pOTP43nlnsDA=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_MALFORMED" }]
+      }
+    },
+    {
+      "id": "KRL_UNKNOWN_SIGNING_KID",
+      "description": "signature.kid tampered to \"unknown-kid\" after signing. The trusted key set contains only krl-2026-01; unknown-kid is not found — KRL_UNKNOWN_SIGNING_KID. The signature field is the base valid signature but is never reached.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "unknown-kid",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_UNKNOWN_SIGNING_KID" }]
+      }
+    },
+    {
+      "id": "KRL_SIGNING_KEY_INACTIVE",
+      "description": "The correct kid (krl-2026-01) is found in the trusted key set, but its status is \"revoked\". keyIsActiveAt returns false — KRL_SIGNING_KEY_INACTIVE.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "revoked"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_SIGNING_KEY_INACTIVE" }]
+      }
+    },
+    {
+      "id": "KRL_UNSUPPORTED_ALG",
+      "description": "signature.alg is \"HMAC-SHA256\". Only Ed25519 is accepted for SignedKRLV1. Structural rejection before key lookup or signature verification — KRL_UNSUPPORTED_ALG.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1"],
+          "signature": {
+            "alg": "HMAC-SHA256",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_UNSUPPORTED_ALG" }]
+      }
+    },
+    {
+      "id": "KRL_VERSION_REGRESSION",
+      "description": "krl_version=1 but previousKrlVersionByIssuer[\"krl.issuer\"]=5 — version went backwards. The envelope is otherwise valid; version regression check fires before signature verification.",
+      "input": {
+        "envelope": {
+          "version": "SignedKRLV1",
+          "issuer": "krl.issuer",
+          "krl_version": 1,
+          "issued_at": 1730000000,
+          "not_after": 1730003600,
+          "revoked_kids": ["kid-provider-1", "kid-provider-2"],
+          "signature": {
+            "alg": "Ed25519",
+            "kid": "krl-2026-01",
+            "sig": "lg4uUp/qZ11JARiO/N+YCP9pJkISzJMCCyXpb3ibd1oNuyFMZ428842Q9fpD10MiQB+9QEXwSgUXjMsgsV4ZBg=="
+          }
+        },
+        "opts": {
+          "now": 1730000010,
+          "trustedKeySets": [
+            {
+              "issuer": "krl.issuer",
+              "version": "1",
+              "keys": [
+                {
+                  "kid": "krl-2026-01",
+                  "alg": "Ed25519",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAoNLRsm0uJ8Zb4z9BErD/xcPyN8kK1Y3zTrpdxDGiT2A=\n-----END PUBLIC KEY-----",
+                  "status": "active"
+                }
+              ]
+            }
+          ],
+          "previousKrlVersionByIssuer": {
+            "krl.issuer": 5
+          }
+        }
+      },
+      "expected": {
+        "status": "invalid",
+        "violations": [{ "code": "KRL_VERSION_REGRESSION" }]
+      }
+    }
+  ]
+}

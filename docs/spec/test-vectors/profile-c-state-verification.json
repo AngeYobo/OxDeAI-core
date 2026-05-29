@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "profile": "C",
+  "portable": true,
+  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Covers modes 001–005 only — these require only canonicalization-v1 and SHA-256, which every compliant implementation must support independently. Modes 006–008 (Encoding B Authorization variants) are TypeScript-only and tracked separately. See packages/conformance/vectors/profile-c-state-verification.json for the full TypeScript set.",
+  "hash_strategies": {
+    "core": "SHA-256(canonicalJson(state)) — standard OxDeAI state hash",
+    "provider": "SHA-256('PROVIDER:' + canonicalJson(state)) — simulates external provider algorithm",
+    "throws": "Simulates a computeStateHash failure; harness must return outcome 'compute-error' without computing any hash"
+  },
+  "outcomes": {
+    "ok": "Committed hash equals live-state hash — Profile C step 10 passes",
+    "state-hash-mismatch": "Committed hash does not equal live-state hash — Profile C step 10 blocks execution",
+    "compute-error": "computeStateHash threw — execution blocked fail-closed"
+  },
+  "vectors": [
+    {
+      "id": "profile-c-001",
+      "mode": "live-state-match",
+      "description": "Core strategy: same state at signing and verification — hashes are identical, outcome ok.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "hash_strategy": "core",
+      "expected": {
+        "outcome": "ok"
+      }
+    },
+    {
+      "id": "profile-c-002",
+      "mode": "live-state-mismatch",
+      "description": "Core strategy: live state has advanced since signing — hashes differ, outcome state-hash-mismatch.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "live_state_input": { "period": "p1", "spent": 500000 },
+      "hash_strategy": "core",
+      "expected": {
+        "outcome": "state-hash-mismatch"
+      }
+    },
+    {
+      "id": "profile-c-003",
+      "mode": "hash-strategy-mismatch",
+      "description": "Provider hash committed at signing; core hash used at verification. Even with the same state, hashes differ — outcome state-hash-mismatch. Models a missing or wrong computeStateHash configuration.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "signing_strategy": "provider",
+      "verify_strategy": "core",
+      "expected": {
+        "outcome": "state-hash-mismatch"
+      }
+    },
+    {
+      "id": "profile-c-004",
+      "mode": "compute-throws",
+      "description": "computeStateHash throws — execution blocked fail-closed. Harness must return compute-error without computing any hash.",
+      "hash_strategy": "throws",
+      "expected": {
+        "outcome": "compute-error"
+      }
+    },
+    {
+      "id": "profile-c-005",
+      "mode": "toctou-stale-state",
+      "description": "TOCTOU / stale state: authorization issued against an earlier state; live state has advanced to a different period and higher spend. Core hash of live state does not match committed hash — outcome state-hash-mismatch.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "live_state_input": { "period": "p2", "spent": 5000000 },
+      "hash_strategy": "core",
+      "expected": {
+        "outcome": "state-hash-mismatch"
+      }
+    }
+  ]
+}

@@ -237,6 +237,13 @@ check. This risk is only closed by deploying `signed_required` mode.
 `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`,
 `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
 
+**Cross-language SignedKRLV1 conformance.** The Go harness now independently verifies
+all 9 SignedKRLV1 portable vectors (`docs/spec/test-vectors/signed-krl-v1.json`) using
+Go's `crypto/ed25519` standard library. Each vector contains a committed `SignedKRLV1`
+artifact; the harness reconstructs the `OXDEAI_KRL_V1` signing preimage independently
+using canonicalization-v1 and verifies the Ed25519 signature without consuming any
+TypeScript-generated intermediate artifact. Python cross-language coverage is pending.
+
 ---
 
 ### 2.3 Profile C — Full Semantic State Verification
@@ -280,7 +287,20 @@ MISCONFIGURED (fail-closed, but blocks legitimate execution):
 The guard cannot detect whether a state_hash mismatch is due to actual state change or
 wrong hash strategy — both produce DENY. Deployers must ensure alignment.
 
-#### 2.3.4 Distinguishing Profile B and Profile C
+#### 2.3.4 Cross-language conformance
+
+Go harness now validates Profile C **state-hash semantics** (modes 001–005) independently
+via `docs/spec/test-vectors/profile-c-state-verification.json`. Each vector provides raw
+state JSON objects; the harness computes SHA-256 of `canonicalJson(state)` (core strategy)
+or SHA-256 of `"PROVIDER:" + canonicalJson(state)` (provider strategy) independently and
+compares outcomes against expected verdicts (`ok`, `state-hash-mismatch`, `compute-error`).
+
+**Scope of Go coverage:** state-hash comparison semantics only (modes 001–005).
+Profile C Encoding B modes 006–008 (which require AuthorizationV1 Encoding B signature
+verification) remain TypeScript-only and are tracked as a separate issue.
+Python cross-language coverage is pending.
+
+#### 2.3.5 Distinguishing Profile B and Profile C
 
 | Concern | Profile B | Profile C |
 |---|---|---|
