@@ -30,7 +30,7 @@
     "test:vectors": "pnpm test:vectors:ts",
     "test:vectors:ts": "tsx scripts/verify-canonicalization-vectors.ts",
     "test:vectors:go": "cd go-harness && go run .",
-    "test:vectors:py": "python3 python-harness/verify_canonicalization_vectors.py",
+    "test:vectors:py": "python3 python-harness/verify_canonicalization_vectors.py && python3 python-harness/verify_profile_c_vectors.py && python3 python-harness/verify_signed_krl_vectors.py",
     "test:vectors:auth": "node scripts/verify-authorization-vectors.mjs",
     "test:vectors:pep": "node scripts/verify-pep-vectors.mjs",
     "test:vectors:delegation": "node scripts/verify-delegation-vectors.mjs",

@@ -242,7 +242,7 @@ The following are explicitly out of scope for Patch A and will be addressed in s
 | Persistent per-issuer `krl_version` high-watermark storage | Patch B |
 | Last-known-good KRL cache | Patch B |
 | Cross-language conformance vectors — Go | #119 Go PR (merged) |
-| Cross-language conformance vectors — Python | Next PR |
+| Cross-language conformance vectors — Python | #119 Python PR (merged) |
 | Cross-language conformance vectors — Rust | Future |
 | KRL signing key rotation automation | Future |
 | `krlStatus` / `getKrlStatus()` surface | Patch B |
@@ -273,8 +273,7 @@ Runner: `pnpm -C packages/conformance validate`
 |--------|---------|---------|
 | TypeScript (`@oxdeai/core`) | `pnpm -C packages/conformance validate` | 9 mode-based vectors (dynamic artifact construction) |
 | **Go harness** | `pnpm test:vectors:go` | **9 portable vectors with committed artifacts — independent Ed25519 verification** |
-
-Python cross-language coverage is pending the next PR.
+| **Python harness** | `pnpm test:vectors:py` | **9 portable vectors with committed artifacts — independent Ed25519 verification via ctypes + libcrypto** |
 
 **Vector relationship.** `docs/spec/test-vectors/signed-krl-v1.json` is the normative
 portable cross-language vector source for SignedKRLV1. It contains committed
@@ -284,8 +283,10 @@ reproduce independently using only canonicalization-v1 and standard Ed25519 libr
 conformance mirror (mode-driven, no committed artifacts). Future changes must keep
 both files aligned or document divergence explicitly.
 
-**Independent verification model.** The Go harness does not consume TypeScript-generated
-intermediate artifacts (canonical bytes, signing preimages). It reconstructs the signing
-preimage from the committed vector inputs using its own canonicalization-v1 implementation
-and verifies the Ed25519 signature independently using `crypto/ed25519` from the Go
-standard library.
+**Independent verification model.** The Go and Python harnesses do not consume
+TypeScript-generated intermediate artifacts (canonical bytes, signing preimages). Each
+independently reconstructs the signing preimage from committed vector inputs using its
+own canonicalization-v1 implementation and verifies the Ed25519 signature using its
+own crypto library (`crypto/ed25519` for Go; `ctypes + libcrypto` for Python). The
+duplicate-kids signature (`+mwEd2QP5+...`) serves as the cross-language byte-equivalence
+proof point.
