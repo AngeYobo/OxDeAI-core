@@ -242,7 +242,7 @@ all 9 SignedKRLV1 portable vectors (`docs/spec/test-vectors/signed-krl-v1.json`)
 Go's `crypto/ed25519` standard library. Each vector contains a committed `SignedKRLV1`
 artifact; the harness reconstructs the `OXDEAI_KRL_V1` signing preimage independently
 using canonicalization-v1 and verifies the Ed25519 signature without consuming any
-TypeScript-generated intermediate artifact. Python cross-language coverage is pending.
+TypeScript-generated intermediate artifact. Python cross-language coverage is also complete — `python-harness/verify_signed_krl_vectors.py` uses ctypes + libcrypto for independent Ed25519 verification.
 
 ---
 
@@ -295,10 +295,12 @@ state JSON objects; the harness computes SHA-256 of `canonicalJson(state)` (core
 or SHA-256 of `"PROVIDER:" + canonicalJson(state)` (provider strategy) independently and
 compares outcomes against expected verdicts (`ok`, `state-hash-mismatch`, `compute-error`).
 
-**Scope of Go coverage:** state-hash comparison semantics only (modes 001–005).
+**Scope of Go + Python coverage:** state-hash comparison semantics only (modes 001–005).
+Both Go (`go-harness/profile_c_verify.go`) and Python (`python-harness/verify_profile_c_vectors.py`)
+independently compute SHA-256 of `canonicalJson(state)` (core) and SHA-256 of
+`"PROVIDER:" + canonicalJson(state)` (provider) and compare outcomes against expected verdicts.
 Profile C Encoding B modes 006–008 (which require AuthorizationV1 Encoding B signature
 verification) remain TypeScript-only and are tracked as a separate issue.
-Python cross-language coverage is pending.
 
 #### 2.3.5 Distinguishing Profile B and Profile C
 
