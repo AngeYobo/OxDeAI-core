@@ -18,8 +18,8 @@ provider ambiguity → not interoperable → DENY → no execution
 
 ## Related Documents
 
-- [AuthorizationV1 specification](../artifacts/authorization-v1.md) — accepted wire encodings (normative)
-- [PEP Gateway specification](../enforcement/pep-gateway-v1.md) — enforcement contract (normative)
+- [AuthorizationV1 specification](../artifacts/authorization-v1.md) - accepted wire encodings (normative)
+- [PEP Gateway specification](../enforcement/pep-gateway-v1.md) - enforcement contract (normative)
 - [Threat model: external providers](../../architecture/threat-model-external-providers.md)
 - [Key custody and rotation guide](../../architecture/key-custody-and-rotation.md)
 - [Replay-store TTL alignment guide](../../architecture/replay-store-ttl-alignment.md)
@@ -57,23 +57,23 @@ Three compatibility profiles are defined. Each is cumulative: Profile C requires
 ```text
 Profile A ⊂ Profile B ⊂ Profile C
 
-Profile A — Core-native AuthorizationV1
+Profile A - Core-native AuthorizationV1
   Valid ALLOW artifact, Ed25519 signature, expiry, replay, intent binding.
   State binding via signature integrity only (state_hash is signed but not
   re-verified against live state at the gateway level).
 
-Profile B — External provider wire-compatible
+Profile B - External provider wire-compatible
   Extends Profile A with Sift-compatible wire encoding and adapter trust model.
   Gateway-level only: signature integrity protects state_hash.
 
-Profile C — Full semantic state verification
+Profile C - Full semantic state verification
   Extends Profile B with live-state re-verification using a pluggable
   computeStateHash strategy. Requires OxDeAIGuard (not just PEP gateway).
 ```
 
 ---
 
-### 2.1 Profile A — Core-native AuthorizationV1
+### 2.1 Profile A - Core-native AuthorizationV1
 
 **Summary:** The provider uses Core-native encoding. The verifier applies all standard checks.
 This is the default integration path for providers using `@oxdeai/core`.
@@ -83,7 +83,7 @@ This is the default integration path for providers using `@oxdeai/core`.
 | Requirement | Specification |
 |---|---|
 | Artifact type | `AuthorizationV1` |
-| Wire encoding | Encoding A (Core-native) — see §3.1 |
+| Wire encoding | Encoding A (Core-native) - see §3.1 |
 | `decision` | Must be `"ALLOW"` |
 | `issuer` | Non-empty string; must match a `KeySet.issuer` in verifier's `trustedKeySets` |
 | `audience` | Non-empty string; must match verifier's `expectedAudience` |
@@ -120,7 +120,7 @@ This is the default integration path for providers using `@oxdeai/core`.
 
 Profile A enforces state_hash integrity via signature: any post-issuance tamper of `state_hash`
 breaks the Ed25519 signature. However, the verifier does NOT re-verify `state_hash` against live
-state — there is no live-state access at the gateway level. Profile A is suitable when the
+state - there is no live-state access at the gateway level. Profile A is suitable when the
 issuing policy engine is the sole source of state truth.
 
 #### 2.1.4 Fail-Closed Behavior
@@ -130,7 +130,7 @@ Exception during signature verification → DENY. Replay store exception → DEN
 
 ---
 
-### 2.2 Profile B — External Provider Wire-Compatible
+### 2.2 Profile B - External Provider Wire-Compatible
 
 **Summary:** The provider uses Sift-compatible encoding or another accepted external encoding.
 The verifier accepts both Encoding A and Encoding B. The trust root is the adapter's Ed25519 key,
@@ -142,10 +142,10 @@ Profile B is a strict superset of Profile A. A Profile B-capable verifier accept
 
 | Requirement | Specification |
 |---|---|
-| Wire encoding | Encoding B (Sift-compatible) — see §3.2 — OR Encoding A |
+| Wire encoding | Encoding B (Sift-compatible) - see §3.2 - OR Encoding A |
 | `expires_at` | May be used instead of `expiry` (see §3.3 expiry resolution) |
-| `signature.alg` | `"ed25519"` (lowercase) — OR `"Ed25519"` for Encoding A |
-| Signature encoding | Base64url (RFC 4648 §5) for `sig` field — OR standard base64 |
+| `signature.alg` | `"ed25519"` (lowercase) - OR `"Ed25519"` for Encoding A |
+| Signature encoding | Base64url (RFC 4648 §5) for `sig` field - OR standard base64 |
 | Signing preimage | `canonicalJson(payload_without_sig_bytes)` (no domain prefix) for Encoding B |
 | Adapter identity | Provider output must be re-signed by an adapter Ed25519 key listed in `trustedKeySets`; the external provider's receipt-signing key is NOT the OxDeAI trust root |
 | `state_hash` | Computed by the adapter using a defined canonicalization function (e.g., `siftCanonicalJsonHash`); the function used must be documented and stable |
@@ -176,7 +176,7 @@ provider cannot produce a guard-passing authorization without the adapter's Ed25
 
 Same as Profile A: `state_hash` is protected by signature integrity. The adapter computes
 `state_hash` using its own canonicalization function. The verifier does not re-compute
-`state_hash` from live state at Profile B — only signature integrity is enforced.
+`state_hash` from live state at Profile B - only signature integrity is enforced.
 
 #### 2.2.5 KRL Integrity at Profile B
 
@@ -187,16 +187,16 @@ A KRL (Key Revocation List) maintained by the provider records revoked `kid` val
 
 | Option | Integrity guarantee | Status |
 |--------|---------------------|--------|
-| `unsigned_legacy` | Transport security (HTTPS) only | Deprecated — residual risk |
+| `unsigned_legacy` | Transport security (HTTPS) only | Deprecated - residual risk |
 | `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | Transition mode |
-| `signed_required` | Cryptographic — `SignedKRLV1` verified via `verifySignedKrl` | Recommended for production |
+| `signed_required` | Cryptographic - `SignedKRLV1` verified via `verifySignedKrl` | Recommended for production |
 
 **`SignedKRLV1` specification.** `SignedKRLV1` is a provider-neutral OxDeAI protocol artifact
 defined in `docs/spec/artifacts/signed-krl-v1.md`. It carries a `revoked_kids` list signed
-with an Ed25519 key whose trust is configured statically at the verifier — independent of
+with an Ed25519 key whose trust is configured statically at the verifier - independent of
 transport security.
 
-**Signing domain.** `OXDEAI_KRL_V1\n` + `canonicalJson(signingPayload)` — using OxDeAI
+**Signing domain.** `OXDEAI_KRL_V1\n` + `canonicalJson(signingPayload)` - using OxDeAI
 canonicalization-v1, not Sift canonicalization.
 
 **Trust domain separation.**
@@ -232,6 +232,8 @@ check. This risk is only closed by deploying `signed_required` mode.
 | `KRL_MISSING_VERIFY_CALLBACK` | KRL has a `signature` field but no `verifyKrl` configured |
 | `KRL_VERIFY_CALLBACK_ERROR` | `verifyKrl` callback threw unexpectedly |
 | `KRL_VERIFY_RESULT_INCOMPLETE` | `verifyKrl` returned `ok: true` without `accepted` metadata |
+| `KRL_WATERMARK_LOAD_FAILED` | *(Phase A, #117)* `KrlWatermarkStore.list()` failed before verification; refresh fails closed before `verifyKrl` is called |
+| `KRL_WATERMARK_PERSIST_FAILED` | *(Phase A, #117)* Signed KRL verified but `KrlWatermarkStore.set()` failed; refresh fails closed before cache swap |
 
 *Core KRL codes* (passed through from `verifyKrl` as opaque strings):
 `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`,
@@ -242,11 +244,11 @@ all 9 SignedKRLV1 portable vectors (`docs/spec/test-vectors/signed-krl-v1.json`)
 Go's `crypto/ed25519` standard library. Each vector contains a committed `SignedKRLV1`
 artifact; the harness reconstructs the `OXDEAI_KRL_V1` signing preimage independently
 using canonicalization-v1 and verifies the Ed25519 signature without consuming any
-TypeScript-generated intermediate artifact. Python cross-language coverage is also complete — `python-harness/verify_signed_krl_vectors.py` uses ctypes + libcrypto for independent Ed25519 verification.
+TypeScript-generated intermediate artifact. Python cross-language coverage is also complete - `python-harness/verify_signed_krl_vectors.py` uses ctypes + libcrypto for independent Ed25519 verification.
 
 ---
 
-### 2.3 Profile C — Full Semantic State Verification
+### 2.3 Profile C - Full Semantic State Verification
 
 **Summary:** Extends Profile B with live-state re-verification. The verifier re-computes
 `state_hash` from the live state snapshot using the same canonicalization function the
@@ -285,7 +287,7 @@ MISCONFIGURED (fail-closed, but blocks legitimate execution):
 ```
 
 The guard cannot detect whether a state_hash mismatch is due to actual state change or
-wrong hash strategy — both produce DENY. Deployers must ensure alignment.
+wrong hash strategy - both produce DENY. Deployers must ensure alignment.
 
 #### 2.3.4 Cross-language conformance
 
@@ -316,7 +318,7 @@ verification) remain TypeScript-only and are tracked as a separate issue.
 
 ## 3. Wire Encoding Reference
 
-### 3.1 Encoding A — Core-native
+### 3.1 Encoding A - Core-native
 
 See [`docs/spec/artifacts/authorization-v1.md §5.1`](../artifacts/authorization-v1.md) for the normative definition.
 
@@ -345,7 +347,7 @@ Or with nested signature object:
 }
 ```
 
-### 3.2 Encoding B — Sift-compatible
+### 3.2 Encoding B - Sift-compatible
 
 ```json
 {
