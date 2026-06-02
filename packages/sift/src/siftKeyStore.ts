@@ -514,6 +514,11 @@ export class SiftHttpKeyStore implements SiftKeyStore {
   private revokedKids = new Set<string>();
   private krlVersionByIssuer = new Map<string, number>();
   private _krlStatus: KrlStatus;
+  /**
+   * Guards the once-per-instance signed_preferred unsigned-fallback deprecation
+   * warning. Ensures it fires at most once per SiftHttpKeyStore lifetime.
+   */
+  private _unsignedFallbackWarned = false;
 
   constructor(opts: SiftHttpKeyStoreOptions) {
     this.jwksUrl = opts.jwksUrl;
@@ -535,13 +540,18 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       );
     }
 
-    // Deprecation warning for unsigned_legacy.
+    // Structured deprecation warning for unsigned_legacy.
+    // Promoted from console.warn to process.emitWarning so that it cannot be
+    // accidentally swallowed by production logging configurations and is
+    // programmatically testable via process.on('warning', ...).
     if (this.krlMode === "unsigned_legacy") {
-      console.warn(
-        "[SiftHttpKeyStore] krlMode \"unsigned_legacy\" is deprecated. " +
-        "KRL payload integrity depends on transport security (HTTPS) only. " +
-        "Migrate to \"signed_preferred\" or \"signed_required\" with a verifyKrl callback " +
-        "to enforce cryptographic KRL integrity. See docs/spec/artifacts/signed-krl-v1.md."
+      process.emitWarning(
+        "[SiftHttpKeyStore] krlMode \"unsigned_legacy\" is deprecated and will be removed " +
+        "in a future release. KRL payload integrity depends on transport security (HTTPS) " +
+        "only — there is no cryptographic guarantee. Migrate to \"signed_required\" with a " +
+        "verifyKrl callback to close the KRL transport-integrity gap. " +
+        "See packages/sift/README.md (Migration guide) and docs/spec/artifacts/signed-krl-v1.md.",
+        { type: "DeprecationWarning", code: "DEP_OXDEAI_KRL_UNSIGNED_LEGACY" }
       );
     }
 
@@ -742,6 +752,24 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       lkgCacheActive: false,
       lkgVerifiedAt: undefined,
     };
+
+    // ── Once-per-instance unsigned-fallback warning (signed_preferred) ───────
+    // Fires the first time this SiftHttpKeyStore instance accepts an unsigned
+    // KRL via transport trust in signed_preferred mode. Not emitted for
+    // signed_preferred signed KRL success, nor for unsigned_legacy (which has
+    // its own construction warning via process.emitWarning).
+    if (krlResult.integrity === "unsigned_fallback" && !this._unsignedFallbackWarned) {
+      this._unsignedFallbackWarned = true;
+      console.warn(
+        "[SiftHttpKeyStore] signed_preferred mode: the fetched KRL has no signature field " +
+        "and was accepted via transport trust (unsigned fallback). " +
+        "This is a transition posture — not production-grade revocation integrity. " +
+        "Migrate to signed_required with a verifyKrl callback to close the KRL " +
+        "transport-integrity gap. " +
+        "This warning fires once per SiftHttpKeyStore instance. " +
+        "See packages/sift/README.md (Migration guide)."
+      );
+    }
 
     // ── Best-effort LKG write after successful signed verification ─────────
     // Write only signed KRL payloads. Never writes unsigned fallback KRLs.

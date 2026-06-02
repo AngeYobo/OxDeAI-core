@@ -58,10 +58,34 @@ export class SiftAdapter {
 
   constructor(config: AdapterConfig) {
     this.config = config;
+    // ── KRL integrity mode ───────────────────────────────────────────────────
+    // TRANSITION MODE: This example uses the default signed_preferred mode,
+    // which accepts unsigned KRLs via transport trust as a fallback.
+    // This is a transition posture — NOT production-grade revocation integrity.
+    //
+    // For production deployments, configure signed_required with verifyKrl,
+    // KrlWatermarkStore, and SignedKrlCache to fully close RT-TRUST-2.
+    // See packages/sift/README.md (Migration guide) for the production pattern.
+    //
+    // Example production wiring (not activated here — requires KRL signing keys):
+    //
+    //   import { verifySignedKrl } from "@oxdeai/core";
+    //   import { createFileBackedKrlWatermarkStore, createFileBackedSignedKrlCache } from "@oxdeai/sift";
+    //   krlMode: "signed_required",
+    //   verifyKrl: (payload, ctx) => {
+    //     const result = verifySignedKrl(payload, { trustedKeySets: myKrlSigningKeySets, ...ctx });
+    //     if (!result.ok) return result;
+    //     const krl = payload as { issuer: string; krl_version: number };
+    //     return { ...result, accepted: { issuer: krl.issuer, krl_version: krl.krl_version } };
+    //   },
+    //   krlWatermarkStore: createFileBackedKrlWatermarkStore("/var/app/krl-watermark.json"),
+    //   signedKrlCache: createFileBackedSignedKrlCache("/var/app/krl-lkg.json"),
+    //
     this.keyStore = new SiftHttpKeyStore({
       jwksUrl: config.siftJwksUrl,
       krlUrl: config.siftKrlUrl,
       fetch: config.fetch,
+      // krlMode defaults to "signed_preferred" — see comment above.
     });
   }
 

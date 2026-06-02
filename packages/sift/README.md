@@ -459,9 +459,77 @@ const store = new SiftHttpKeyStore({
 
 | Release | Change |
 |---------|--------|
-| Current (`signed_preferred` default) | `unsigned_legacy` warns at construction; unsigned fallback logs status only |
-| `v-next` | `unsigned_legacy` emits stronger warning; `signed_required` recommended |
-| `v-after` | `unsigned_legacy` removed; default becomes `signed_required` |
+| Current (`signed_preferred` default) | `unsigned_legacy` warns at construction via `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)`; `signed_preferred` unsigned fallback warns once per instance via `console.warn` |
+| `v-next` | See above (already landed) |
+| `v-after` | `unsigned_legacy` removed; default becomes `signed_required` — **breaking change for callers not wiring `verifyKrl`** |
+
+---
+
+## Migration guide
+
+### Closing the KRL transport-integrity gap
+
+The `RT-TRUST-2` transport-integrity gap is fully closeable when all four are configured. Use this pattern for production deployments:
+
+```ts
+import {
+  SiftHttpKeyStore,
+  createFileBackedKrlWatermarkStore,
+  createFileBackedSignedKrlCache,
+} from "@oxdeai/sift";
+import { verifySignedKrl } from "@oxdeai/core";
+import type { KeySet } from "@oxdeai/core";
+
+// Your KRL signing key sets — distinct from AuthorizationV1 signing keys.
+const krlSigningKeySets: KeySet[] = [
+  {
+    issuer: "your-krl-authority",
+    version: "1",
+    keys: [{ kid: "krl-2026-01", alg: "Ed25519", public_key: "...PEM..." }],
+  },
+];
+
+const store = new SiftHttpKeyStore({
+  jwksUrl: "https://your-sift-host/sift-jwks.json",
+  krlUrl:  "https://your-sift-host/sift-krl.json",
+  krlMode: "signed_required",                         // 1. close transport-integrity gap
+  verifyKrl: (payload, ctx) => {                       // 2. cryptographic KRL verification
+    const result = verifySignedKrl(payload, {
+      trustedKeySets: krlSigningKeySets,
+      ...ctx,
+    });
+    if (!result.ok) return result;
+    const krl = payload as { issuer: string; krl_version: number };
+    return { ...result, accepted: { issuer: krl.issuer, krl_version: krl.krl_version } };
+  },
+  krlWatermarkStore: createFileBackedKrlWatermarkStore("/var/app/krl-watermark.json"), // 3. prevent restart downgrade
+  signedKrlCache:    createFileBackedSignedKrlCache("/var/app/krl-lkg.json"),          // 4. cold-start resilience
+});
+```
+
+### Mode descriptions
+
+| Mode | Posture | When to use |
+|------|---------|-------------|
+| `signed_required` | **Production target.** Every KRL must be cryptographically signed and verified. | New deployments; all deployments when ready |
+| `signed_preferred` | **Transition mode.** Signed KRLs verified; unsigned KRLs accepted via transport trust fallback. Will not remain the default permanently. | Migrations in progress; deployments working toward signed KRLs |
+| `unsigned_legacy` | **Deprecated.** Transport-trust only. No cryptographic KRL integrity. Emits `DeprecationWarning` at construction. Will be removed in a future release. | Do not use in new code |
+
+### Migrating from `unsigned_legacy`
+
+1. Remove `krlMode: "unsigned_legacy"` from your `SiftHttpKeyStore` options
+2. If your KRL provider supplies signed KRLs: configure `krlMode: "signed_required"` + `verifyKrl` (see full example above)
+3. If your KRL provider does not yet supply signed KRLs: use `krlMode: "signed_preferred"` (no `verifyKrl` needed; unsigned fallback remains available as a temporary bridge)
+
+### Migrating from `signed_preferred` unsigned fallback to `signed_required`
+
+`signed_preferred` will remain available as an explicit opt-in after `signed_required` becomes the default. To proactively migrate:
+
+1. Ensure your KRL publisher produces `SignedKRLV1` payloads
+2. Obtain the KRL signing public key from your provider; configure it as a `KeySet`
+3. Wire `verifyKrl` as shown in the production example above
+4. Change `krlMode: "signed_required"`
+5. Optionally add `krlWatermarkStore` and `signedKrlCache` for restart resilience
 
 ### Prototype safety
 

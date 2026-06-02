@@ -187,9 +187,11 @@ A KRL (Key Revocation List) maintained by the provider records revoked `kid` val
 
 | Option | Integrity guarantee | Status |
 |--------|---------------------|--------|
-| `unsigned_legacy` | Transport security (HTTPS) only | Deprecated - residual risk |
-| `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | Transition mode |
-| `signed_required` | Cryptographic - `SignedKRLV1` verified via `verifySignedKrl` | Recommended for production |
+| `unsigned_legacy` | Transport security (HTTPS) only | **Deprecated** — emits `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)`; will be removed in a future release |
+| `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | **Transition mode** — not the permanent production posture; emits a once-per-instance `console.warn` when unsigned fallback is active |
+| `signed_required` | Cryptographic — `SignedKRLV1` verified via `verifySignedKrl` | **Production target** |
+
+**Migration.** `signed_required` is the production target. `signed_preferred` is a temporary migration bridge. `unsigned_legacy` is deprecated and will be removed. See `packages/sift/README.md` (Migration guide) for step-by-step migration instructions. Full RT-TRUST-2 closure requires `signed_required` + `verifyKrl` + `KrlWatermarkStore` + `SignedKrlCache`; compatibility modes retain residual transport-trust risk.
 
 **`SignedKRLV1` specification.** `SignedKRLV1` is a provider-neutral OxDeAI protocol artifact
 defined in `docs/spec/artifacts/signed-krl-v1.md`. It carries a `revoked_kids` list signed
