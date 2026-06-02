@@ -1,8 +1,8 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "profile": "C",
   "portable": true,
-  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Covers modes 001–005 only — these require only canonicalization-v1 and SHA-256, which every compliant implementation must support independently. Modes 006–008 (Encoding B Authorization variants) are TypeScript-only and tracked separately. See packages/conformance/vectors/profile-c-state-verification.json for the full TypeScript set.",
+  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Modes 001–005 require only canonicalization-v1 and SHA-256. Modes 006–008 additionally require AuthorizationV1 Encoding B signature verification (alg='ed25519', expires_at, base64url signature, no domain prefix). See packages/conformance/vectors/profile-c-state-verification.json for the full TypeScript set.",
   "hash_strategies": {
     "core": "SHA-256(canonicalJson(state)) — standard OxDeAI state hash",
     "provider": "SHA-256('PROVIDER:' + canonicalJson(state)) — simulates external provider algorithm",
@@ -12,6 +12,13 @@
     "ok": "Committed hash equals live-state hash — Profile C step 10 passes",
     "state-hash-mismatch": "Committed hash does not equal live-state hash — Profile C step 10 blocks execution",
     "compute-error": "computeStateHash threw — execution blocked fail-closed"
+  },
+  "encoding_b_notes": {
+    "signing_preimage": "canonicalJson(signingPayload) — NO domain prefix. Different from SignedKRLV1 which uses 'OXDEAI_KRL_V1\\n' prefix.",
+    "signing_payload": "All auth fields except signature.sig. signature becomes { alg, kid } with sig excluded.",
+    "alg": "ed25519 (lowercase — Sift-compatible Encoding B)",
+    "signature_encoding": "base64url (RFC 4648 §5, no padding)",
+    "expiry_field": "expires_at (not expiry — Encoding B wire format)"
   },
   "vectors": [
     {
@@ -62,6 +69,110 @@
       "state_input": { "period": "p1", "spent": 0 },
       "live_state_input": { "period": "p2", "spent": 5000000 },
       "hash_strategy": "core",
+      "expected": {
+        "outcome": "state-hash-mismatch"
+      }
+    },
+    {
+      "id": "profile-c-006",
+      "mode": "encoding-b-live-state-match",
+      "description": "Encoding B AuthorizationV1 (alg='ed25519', expires_at, base64url sig) + provider hash strategy, matching state. Harness: (1) verify Encoding B signature independently, (2) compute committedHash=providerHash(state_input), cross-check with auth.state_hash, (3) liveHash=providerHash(state_input) — same, outcome ok.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "hash_strategy": "provider",
+      "auth": {
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "issuer": "oxdeai.policy-engine",
+        "audience": "merchant-gateway",
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "issued_at": 1730000000,
+        "expires_at": 1730000060,
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        }
+      },
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "kid": "2026-01",
+          "alg": "Ed25519",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
+      "expected": {
+        "outcome": "ok"
+      }
+    },
+    {
+      "id": "profile-c-007",
+      "mode": "encoding-b-live-state-mismatch",
+      "description": "Encoding B AuthorizationV1 + provider hash strategy, stale state. Signature verifies. committedHash=providerHash({period:p1,spent:0}), liveHash=providerHash({period:p1,spent:250000}) — mismatch, outcome state-hash-mismatch.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "live_state_input": { "period": "p1", "spent": 250000 },
+      "hash_strategy": "provider",
+      "auth": {
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "issuer": "oxdeai.policy-engine",
+        "audience": "merchant-gateway",
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "issued_at": 1730000000,
+        "expires_at": 1730000060,
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        }
+      },
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "kid": "2026-01",
+          "alg": "Ed25519",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
+      "expected": {
+        "outcome": "state-hash-mismatch"
+      }
+    },
+    {
+      "id": "profile-c-008",
+      "mode": "encoding-b-hash-strategy-mismatch",
+      "description": "Encoding B AuthorizationV1 + hash strategy mismatch: provider committed, core used for live verification. Signature verifies. committedHash=providerHash(state_input), liveHash=coreHash(state_input) — different algorithms, mismatch, outcome state-hash-mismatch.",
+      "state_input": { "period": "p1", "spent": 0 },
+      "signing_strategy": "provider",
+      "verify_strategy": "core",
+      "auth": {
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "issuer": "oxdeai.policy-engine",
+        "audience": "merchant-gateway",
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "issued_at": 1730000000,
+        "expires_at": 1730000060,
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        }
+      },
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "kid": "2026-01",
+          "alg": "Ed25519",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
       "expected": {
         "outcome": "state-hash-mismatch"
       }
