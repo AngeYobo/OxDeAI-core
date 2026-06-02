@@ -59,6 +59,7 @@
 
 import { b64uDecode } from "./siftCanonical.js";
 import type { KrlWatermarkStore } from "./krlWatermarkStore.js";
+import type { SignedKrlCache } from "./signedKrlCache.js";
 
 // ─── Fetch abstraction ────────────────────────────────────────────────────────
 
@@ -189,6 +190,17 @@ export interface KrlStatus {
   lastVerifiedAt?: number;
   /** Per-issuer high-watermark of accepted krl_version values (in-memory only). */
   lastKrlVersionByIssuer: Record<string, number>;
+  /**
+   * True when the active revokedKids were sourced from a re-verified
+   * last-known-good signed KRL cache entry rather than a fresh fetch.
+   * False after a normal fresh refresh or before any refresh.
+   */
+  lkgCacheActive: boolean;
+  /**
+   * The `verifiedAt` timestamp of the LKG entry that is currently active,
+   * or undefined when lkgCacheActive is false.
+   */
+  lkgVerifiedAt?: number;
   /**
    * Whether a persistent KrlWatermarkStore is configured.
    *
@@ -458,6 +470,32 @@ export interface SiftHttpKeyStoreOptions {
    * @public
    */
   krlWatermarkStore?: KrlWatermarkStore;
+  /**
+   * Opt-in last-known-good signed-KRL cache.
+   *
+   * When configured, `SiftHttpKeyStore` writes the signed KRL payload to this
+   * cache after every successful signed verification + durable watermark
+   * persistence. If the primary KRL fetch fails in a subsequent `refresh()`
+   * call, the cache is used as a fallback — but ONLY after full re-verification
+   * through the configured `verifyKrl` callback. A cached payload is never
+   * trusted without re-verification.
+   *
+   * Mode behavior:
+   *   - signed_required: valid LKG may be used after re-verification on fetch
+   *     failure; invalid or missing LKG fails closed.
+   *   - signed_preferred: LKG fallback attempted; on failure or absence,
+   *     preserves existing compatibility behavior.
+   *   - unsigned_legacy: LKG is never read or written.
+   *
+   * No I/O is performed at construction time.
+   *
+   * Reference implementations:
+   *   - createInMemorySignedKrlCache()          — process-local
+   *   - createFileBackedSignedKrlCache(path)    — single-node persistent
+   *
+   * @public
+   */
+  signedKrlCache?: SignedKrlCache;
 }
 
 export class SiftHttpKeyStore implements SiftKeyStore {
@@ -470,6 +508,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
   private readonly krlWatermarkStore: KrlWatermarkStore | undefined;
   /** Derived at construction; stable for the lifetime of the instance. */
   private readonly watermarkStoreType: "memory" | "persistent";
+  private readonly signedKrlCache: SignedKrlCache | undefined;
 
   private keyCache = new Map<string, Uint8Array>();
   private revokedKids = new Set<string>();
@@ -485,6 +524,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
     this.nowFn = opts.now ?? (() => Math.floor(Date.now() / 1000));
     this.krlWatermarkStore = opts.krlWatermarkStore;
     this.watermarkStoreType = opts.krlWatermarkStore ? "persistent" : "memory";
+    this.signedKrlCache = opts.signedKrlCache;
 
     // Fast-fail: signed_required mode requires a verifyKrl callback.
     if (this.krlMode === "signed_required" && !this.verifyKrl) {
@@ -513,6 +553,8 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       lastVerifiedAt: undefined,
       lastKrlVersionByIssuer: {},
       watermarkStore: this.watermarkStoreType,
+      lkgCacheActive: false,
+      lkgVerifiedAt: undefined,
     };
   }
 
@@ -539,10 +581,47 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       lastVerifiedAt: this._krlStatus.lastVerifiedAt,
       lastKrlVersionByIssuer: { ...this._krlStatus.lastKrlVersionByIssuer },
       watermarkStore: this._krlStatus.watermarkStore,
+      lkgCacheActive: this._krlStatus.lkgCacheActive,
+      lkgVerifiedAt: this._krlStatus.lkgVerifiedAt,
     };
   }
 
   async refresh(): Promise<void> {
+    const nowSeconds = this.nowFn();
+
+    // ── Primary path: fresh fetch ─────────────────────────────────────────────
+    let primaryError: KeyStoreError | undefined;
+    try {
+      await this._doFreshRefresh(nowSeconds);
+      return;
+    } catch (err) {
+      primaryError = err instanceof KeyStoreError
+        ? err
+        : new KeyStoreError("KEYSTORE_REFRESH_FAILED", String(err));
+    }
+
+    // ── LKG fallback path ─────────────────────────────────────────────────────
+    // Only attempted when signedKrlCache is configured and mode is not
+    // unsigned_legacy (which never writes to LKG).
+    if (this.signedKrlCache !== undefined && this.krlMode !== "unsigned_legacy") {
+      try {
+        await this._doLkgFallback(nowSeconds);
+        return;
+      } catch (lkgErr) {
+        // signed_required: LKG failure means fail closed (propagate LKG error).
+        // signed_preferred: preserve existing compatibility (rethrow primary error).
+        if (this.krlMode === "signed_required") {
+          throw lkgErr;
+        }
+        throw primaryError;
+      }
+    }
+
+    throw primaryError;
+  }
+
+  /** Primary refresh path: fetch JWKS + KRL, verify, persist watermark, swap caches. */
+  private async _doFreshRefresh(nowSeconds: number): Promise<void> {
     // Fetch both endpoints concurrently.
     let jwksRes: Response;
     let krlRes: Response;
@@ -588,69 +667,29 @@ export class SiftHttpKeyStore implements SiftKeyStore {
     // Parse JWKS — throws JWKS_FETCH_FAILED on malformed input.
     const newKeys = parseJwks(jwksBody);
 
-    const nowSeconds = this.nowFn();
-
     // ── Lazy watermark load ────────────────────────────────────────────────
-    // Merge the persisted per-issuer high-watermarks into the in-memory map
-    // before processKrlForMode runs. This ensures previousKrlVersionByIssuer
-    // passed to verifyKrl reflects durable state from prior process lifetimes.
-    //
-    // Skipped for unsigned_legacy (no signed path, no watermark relevance).
-    // Fail closed if the store is unavailable — we cannot safely proceed
-    // without knowing the current durable floor.
-    if (this.krlWatermarkStore && this.krlMode !== "unsigned_legacy") {
-      let persisted: Record<string, number>;
-      try {
-        persisted = await this.krlWatermarkStore.list();
-      } catch (err) {
-        this._krlStatus = {
-          mode: this.krlMode,
-          lastIntegrity: "failed",
-          lastReason: KRL_WATERMARK_LOAD_FAILED,
-          unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
-          lastVerifiedAt: this._krlStatus.lastVerifiedAt,
-          lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
-          watermarkStore: this.watermarkStoreType,
-        };
-        throw new KeyStoreError(
-          "KEYSTORE_REFRESH_FAILED",
-          `${KRL_WATERMARK_LOAD_FAILED}: Persistent watermark store could not be loaded ` +
-          `before KRL verification — refresh fails closed. ` +
-          `Error: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-      // Monotonic merge — only raise the floor, never lower it.
-      for (const [issuer, version] of Object.entries(persisted)) {
-        const current = this.krlVersionByIssuer.get(issuer);
-        if (current === undefined || version > current) {
-          this.krlVersionByIssuer.set(issuer, version);
-        }
-      }
-    }
+    await this._mergeWatermarks();
 
     // Process KRL according to configured mode.
     const krlResult = this.processKrlForMode(krlBody, nowSeconds);
 
     if (!krlResult.ok) {
       // Update status to record failure before throwing (observability).
-      // lastReason is set to the specific KRL code; preserved until next refresh.
       this._krlStatus = {
         mode: this.krlMode,
         lastIntegrity: "failed",
         lastReason: krlResult.reason,
-        // Preserve previous active-state fields — the cache was not swapped.
         unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
         lastVerifiedAt: this._krlStatus.lastVerifiedAt,
         lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
         watermarkStore: this.watermarkStoreType,
+        lkgCacheActive: this._krlStatus.lkgCacheActive,
+        lkgVerifiedAt: this._krlStatus.lkgVerifiedAt,
       };
       throw krlResult.error;
     }
 
     // ── Persist watermark BEFORE cache swap (invariant 2) ─────────────────
-    // If the signed KRL was verified and the write fails, fail closed before
-    // swapping the cache. A KRL must not be accepted unless its krl_version
-    // was durably recorded when a persistent store is configured.
     if (this.krlWatermarkStore && krlResult.updatedVersion) {
       try {
         await this.krlWatermarkStore.set(
@@ -658,7 +697,6 @@ export class SiftHttpKeyStore implements SiftKeyStore {
           krlResult.updatedVersion.krl_version
         );
       } catch (err) {
-        // Fail closed — do not swap caches.
         this._krlStatus = {
           mode: this.krlMode,
           lastIntegrity: "failed",
@@ -667,6 +705,8 @@ export class SiftHttpKeyStore implements SiftKeyStore {
           lastVerifiedAt: this._krlStatus.lastVerifiedAt,
           lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
           watermarkStore: this.watermarkStoreType,
+          lkgCacheActive: this._krlStatus.lkgCacheActive,
+          lkgVerifiedAt: this._krlStatus.lkgVerifiedAt,
         };
         throw new KeyStoreError(
           "KRL_FETCH_FAILED",
@@ -678,8 +718,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       }
     }
 
-    // Both parses, all integrity checks, and (if configured) watermark
-    // persistence succeeded — atomic in-memory cache swap.
+    // All checks and persistence succeeded — atomic in-memory cache swap.
     this.keyCache = newKeys;
     this.revokedKids = krlResult.revoked;
 
@@ -691,7 +730,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       );
     }
 
-    // Update status — lastReason is ALWAYS cleared on success.
+    // Update status — lastReason and LKG fields cleared on fresh success.
     this._krlStatus = {
       mode: this.krlMode,
       lastIntegrity: krlResult.integrity,
@@ -700,7 +739,153 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       lastVerifiedAt: nowSeconds,
       lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
       watermarkStore: this.watermarkStoreType,
+      lkgCacheActive: false,
+      lkgVerifiedAt: undefined,
     };
+
+    // ── Best-effort LKG write after successful signed verification ─────────
+    // Write only signed KRL payloads. Never writes unsigned fallback KRLs.
+    // Failure is non-fatal after durable watermark persistence has succeeded.
+    if (this.signedKrlCache !== undefined && krlResult.integrity === "signed") {
+      try {
+        await this.signedKrlCache.set(krlBody, nowSeconds);
+      } catch (lkgWriteErr) {
+        console.warn(
+          `[SiftHttpKeyStore] LKG cache write failed after successful signed verification (non-fatal): ` +
+          `${lkgWriteErr instanceof Error ? lkgWriteErr.message : String(lkgWriteErr)}`
+        );
+      }
+    }
+  }
+
+  /**
+   * LKG fallback path: re-verify a cached signed KRL payload and, if valid,
+   * use it to populate revokedKids. JWKS (keyCache) is not updated — it
+   * continues to serve from whatever was loaded in prior refreshes.
+   */
+  private async _doLkgFallback(nowSeconds: number): Promise<void> {
+    // No verifyKrl → cannot re-verify LKG.
+    if (!this.verifyKrl) {
+      const error = new KeyStoreError(
+        "KRL_FETCH_FAILED",
+        `${KRL_MISSING_VERIFY_CALLBACK}: Fresh KRL fetch failed and an LKG cache entry ` +
+        `was found, but no verifyKrl callback is configured to re-verify it.`
+      );
+      this._krlStatus = {
+        ...this._krlStatus,
+        lastIntegrity: "failed",
+        lastReason: KRL_MISSING_VERIFY_CALLBACK,
+      };
+      throw error;
+    }
+
+    // Merge watermarks so previousKrlVersionByIssuer is correct.
+    await this._mergeWatermarks();
+
+    // Load the LKG entry.
+    let entry: { payload: unknown; verifiedAt: number } | undefined;
+    try {
+      entry = await this.signedKrlCache!.get();
+    } catch (err) {
+      this._krlStatus = {
+        ...this._krlStatus,
+        lastIntegrity: "failed",
+        lastReason: "KRL_LKG_READ_FAILED",
+        lkgCacheActive: false,
+      };
+      throw new KeyStoreError(
+        "KEYSTORE_REFRESH_FAILED",
+        `LKG cache read failed during fallback: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    if (entry === undefined) {
+      // No LKG entry — nothing to fall back to.
+      throw new KeyStoreError(
+        "KEYSTORE_REFRESH_FAILED",
+        "No last-known-good signed KRL available in the configured cache."
+      );
+    }
+
+    // Re-verify via verifyKrl — identical path to fresh signed verification.
+    const lkgResult = this.runVerifyKrl(entry.payload, nowSeconds);
+
+    if (!lkgResult.ok) {
+      this._krlStatus = {
+        mode: this.krlMode,
+        lastIntegrity: "failed",
+        lastReason: lkgResult.reason,
+        unsignedFallbackActive: false,
+        lastVerifiedAt: this._krlStatus.lastVerifiedAt,
+        lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+        watermarkStore: this.watermarkStoreType,
+        lkgCacheActive: false,
+        lkgVerifiedAt: this._krlStatus.lkgVerifiedAt,
+      };
+      throw lkgResult.error;
+    }
+
+    // LKG re-verification succeeded.
+    // Update revokedKids only — keyCache (JWKS) is not part of LKG.
+    this.revokedKids = lkgResult.revoked;
+
+    if (lkgResult.updatedVersion) {
+      this.krlVersionByIssuer.set(
+        lkgResult.updatedVersion.issuer,
+        lkgResult.updatedVersion.krl_version
+      );
+    }
+
+    this._krlStatus = {
+      mode: this.krlMode,
+      lastIntegrity: "signed",
+      lastReason: undefined,
+      unsignedFallbackActive: false,
+      lastVerifiedAt: nowSeconds,
+      lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+      watermarkStore: this.watermarkStoreType,
+      lkgCacheActive: true,
+      lkgVerifiedAt: entry.verifiedAt,
+    };
+  }
+
+  /**
+   * Merge persisted watermarks from the configured KrlWatermarkStore into the
+   * in-memory map. Monotonic: only raises the floor, never lowers it. Skipped
+   * for unsigned_legacy. Fails closed if the store is unavailable.
+   */
+  private async _mergeWatermarks(): Promise<void> {
+    if (!this.krlWatermarkStore || this.krlMode === "unsigned_legacy") return;
+
+    let persisted: Record<string, number>;
+    try {
+      persisted = await this.krlWatermarkStore.list();
+    } catch (err) {
+      this._krlStatus = {
+        mode: this.krlMode,
+        lastIntegrity: "failed",
+        lastReason: KRL_WATERMARK_LOAD_FAILED,
+        unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
+        lastVerifiedAt: this._krlStatus.lastVerifiedAt,
+        lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+        watermarkStore: this.watermarkStoreType,
+        lkgCacheActive: this._krlStatus.lkgCacheActive,
+        lkgVerifiedAt: this._krlStatus.lkgVerifiedAt,
+      };
+      throw new KeyStoreError(
+        "KEYSTORE_REFRESH_FAILED",
+        `${KRL_WATERMARK_LOAD_FAILED}: Persistent watermark store could not be loaded ` +
+        `before KRL verification — refresh fails closed. ` +
+        `Error: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    for (const [issuer, version] of Object.entries(persisted)) {
+      const current = this.krlVersionByIssuer.get(issuer);
+      if (current === undefined || version > current) {
+        this.krlVersionByIssuer.set(issuer, version);
+      }
+    }
   }
 
   // ─── Private: KRL mode routing ──────────────────────────────────────────────

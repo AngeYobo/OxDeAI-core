@@ -235,6 +235,8 @@ check. This risk is only closed by deploying `signed_required` mode.
 | `KRL_WATERMARK_LOAD_FAILED` | *(Phase A, #117)* `KrlWatermarkStore.list()` failed before verification; refresh fails closed before `verifyKrl` is called |
 | `KRL_WATERMARK_PERSIST_FAILED` | *(Phase A, #117)* Signed KRL verified but `KrlWatermarkStore.set()` failed; refresh fails closed before cache swap |
 
+**Last-known-good signed-KRL cache (Phase B, #117).** `SignedKrlCache` is an opt-in interface that stores signed KRL payloads for cold-start and fetch-failure resilience. A cached payload is **never trusted without re-verification** through the configured `verifyKrl` callback. LKG re-verification uses existing reason codes; no new codes are introduced. LKG write is best-effort and non-fatal after durable watermark persistence. `krlStatus.lkgCacheActive` and `lkgVerifiedAt` surface LKG state without exposing payload or key material. `RT-TRUST-2` is closeable when `signed_required` + `KrlWatermarkStore` + `SignedKrlCache` are all configured; without all three, residual risks remain.
+
 *Core KRL codes* (passed through from `verifyKrl` as opaque strings):
 `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`,
 `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
