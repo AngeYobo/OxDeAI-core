@@ -1,6 +1,6 @@
 # Protocol Audit - Post-Interoperability Hardening
 
-**Date:** 2026-05-17
+**Date:** 2026-06-02
 **Scope:** OxDeAI execution authorization boundary protocol, after completion of the external-provider interoperability hardening sequence
 **Auditor:** Internal protocol audit (Ange)
 **Protocol invariant under audit:**
@@ -90,7 +90,7 @@
 | `not_after` enforcement | `DONE` | Implemented. Conformance vectors `key-lifecycle-004`, `key-lifecycle-006`, `key-lifecycle-008` (expired windows). |
 | Key rotation (dual-sign) | `PARTIAL` | Rotation procedure documented in `key-custody-and-rotation.md`. Dual-sign overlap verified by `key-lifecycle-007` (retired key within window → ok). No automated rotation machinery. |
 | Sift KRL (Key Revocation List) | `DONE` | `SiftHttpKeyStore` now supports three KRL integrity modes: `signed_required` (closes transport gap), `signed_preferred` (default, signed when present), `unsigned_legacy` (deprecated). `verifyKrl` callback injection preserves `@oxdeai/sift` zero-dependency boundary. 29 new tests. See `packages/sift/README.md`. |
-| `SignedKRLV1` artifact | `DONE` | Defined in `docs/spec/artifacts/signed-krl-v1.md`. `verifySignedKrl` verifier in `@oxdeai/core` with 9 conformance vectors. Integrated into `SiftHttpKeyStore` via `verifyKrl` callback (`signed_required` mode closes the transport-integrity gap). Residual: persistent high-watermark storage and cross-language vectors deferred to future patches. |
+| `SignedKRLV1` artifact | `DONE` | Defined in `docs/spec/artifacts/signed-krl-v1.md`. `verifySignedKrl` verifier in `@oxdeai/core` with 9 conformance vectors. Integrated into `SiftHttpKeyStore` via `verifyKrl` callback. Phase A (#117): `KrlWatermarkStore` + `createFileBackedKrlWatermarkStore` added - persistent watermark closes the restart-and-replay downgrade window when configured. Residual: LKG cache (Phase B) pending. |
 
 ---
 
@@ -255,7 +255,7 @@ The following areas still have **no portable conformance vector**:
 | Gap | Risk Level | Notes |
 |-----|-----------|-------|
 | `decision != "ALLOW"` portable vector | **Medium** | Only checked structurally; no dedicated cross-language vector. |
-| Both `expiry` and `expires_at` present simultaneously | ~~**Medium**~~ | ✓ Resolved: vector `auth-expiry-wins-over-expires-at` locks the precedence rule — `expiry` expired + `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
+| Both `expiry` and `expires_at` present simultaneously | ~~**Medium**~~ | ✓ Resolved: vector `auth-expiry-wins-over-expires-at` locks the precedence rule - `expiry` expired + `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
 | Intent hash mismatch → DENY (cross-language) | ~~**Medium**~~ | ✓ Resolved: `authorization-v1.json` now includes `proposed_action` field enabling independent hash derivation. Portable ALLOW case `auth-intent-action-match-1` and `portable-key-1` fixture key added. Go/Python authorization harness integration remains a future item. Resolved in #105. |
 | Profile B trust separation vector | ~~**Medium**~~ | ✓ Resolved: `pb-trust-oxdeai-key-allow` proves OxDeAI key (in trustedKeySets) verifies correctly; `pb-trust-provider-key-rejected` proves provider receipt key absent from trustedKeySets returns DENY/UNKNOWN_KID. Resolved in #108. |
 | Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
@@ -308,7 +308,7 @@ The following areas still have **no portable conformance vector**:
 The state provider is unconditionally trusted. A compromised `getState()` implementation can return a state that produces a matching `state_hash` for an authorization, bypassing the semantic check. **No mitigation exists at the protocol layer.** Documented in `threat-model-external-providers.md` (T-8).
 
 **RT-TRUST-2: KRL transport integrity** *(mitigated by `signed_required` mode; residual in default mode)*
-`SiftHttpKeyStore` now supports three KRL integrity modes. `signed_required` mode (via `verifyKrl` callback + `verifySignedKrl` from `@oxdeai/core`) closes the transport-integrity gap for deployments that configure it. The default `signed_preferred` mode accepts unsigned KRLs as a fallback. **Residual risk:** the gap is only eliminated when `signed_required` is actively deployed. `unsigned_legacy` and unsigned fallback in `signed_preferred` remain transport-trust-only. See deprecation trajectory in `packages/sift/README.md`.
+`SiftHttpKeyStore` now supports three KRL integrity modes. `signed_required` mode closes the transport-integrity gap for deployments that configure it. **Phase A (#117):** `KrlWatermarkStore` interface and `createFileBackedKrlWatermarkStore` reference implementation added. With `signed_required` + persistent watermark store, the restart-and-replay downgrade window is also closed. **Residual risk:** the gap is only fully closed when `signed_required` + a persistent `KrlWatermarkStore` are both actively deployed. `signed_preferred` unsigned fallback and `unsigned_legacy` retain transport-trust-only semantics. Two new sift-local reason codes: `KRL_WATERMARK_LOAD_FAILED` (store unreadable before verification) and `KRL_WATERMARK_PERSIST_FAILED` (verified KRL could not be durably recorded; fails closed before cache swap). Phase B (#117): last-known-good cache pending.
 
 **RT-TRUST-3: Replay store bootstrapping**
 New deployments start with an empty replay store. Authorization artifacts issued before the store was populated can replay within their validity window. No mitigation; documented in `replay-store-ttl-alignment.md` (RT-3: clock-skew edge) and adjacent scenarios.
@@ -342,8 +342,8 @@ New deployments start with an empty replay store. Authorization artifacts issued
 - `AuthorizationV1` is well-specified and has cross-language conformance vectors (Go harness).
 - Canonicalization-v1 is fully specified with cross-language vectors.
 - `DelegationV1` has cross-language vectors.
-- ~~**Gap:** Key lifecycle (`revoked`, `not_before`, `not_after`) has no portable conformance vectors.~~ ✓ resolved — `key-lifecycle-verification.json` added (P0-1).
-- ~~**Gap:** Intent hash mismatch has no cross-language vector.~~ ✓ resolved — portable `authorization-v1.json` vector with `proposed_action` added (P1-1).
+- ~~**Gap:** Key lifecycle (`revoked`, `not_before`, `not_after`) has no portable conformance vectors.~~ ✓ resolved - `key-lifecycle-verification.json` added (P0-1).
+- ~~**Gap:** Intent hash mismatch has no cross-language vector.~~ ✓ resolved - portable `authorization-v1.json` vector with `proposed_action` added (P1-1).
 - **Gap:** State hash mismatch has no cross-language vector.
 - **Gap:** Profile C is TypeScript-only; `computeStateHash` integration requires external harness work.
 
@@ -354,7 +354,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 `verifyAuthorization` is stateless and fully portable. An independent verifier can reproduce all signature checks and field validation with the existing conformance vectors. However:
 
 - No vector for `AUTH_KEY_INACTIVE` (revoked or window-expired key).
-- ~~No vector for simultaneous `expiry`/`expires_at` precedence.~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector added (P1-2).
+- ~~No vector for simultaneous `expiry`/`expires_at` precedence.~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector added (P1-2).
 - Strict-mode behavior (no `trustedKeySets` provided) is not covered by a portable vector.
 
 ### 7.3 Conformance Suite Readiness
@@ -363,10 +363,10 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Key lifecycle, intent hash mismatch, and expiry precedence coverage resolved. Remaining gaps:
 
-1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved — `key-lifecycle-verification.json`
-2. ~~Intent hash mismatch portable vector~~ ✓ resolved — `authorization-v1.json` vectors include `proposed_action` mismatch case and portable ALLOW case; Go/Python auth harness integration is a future item
-3. ~~`expiry`/`expires_at` simultaneous presence precedence vector~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
-4. Cross-language Profile C vectors — important for Profile C adoption
+1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved - `key-lifecycle-verification.json`
+2. ~~Intent hash mismatch portable vector~~ ✓ resolved - `authorization-v1.json` vectors include `proposed_action` mismatch case and portable ALLOW case; Go/Python auth harness integration is a future item
+3. ~~`expiry`/`expires_at` simultaneous presence precedence vector~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
+4. Cross-language Profile C vectors - important for Profile C adoption
 
 ### 7.4 Interoperability Profile Readiness
 
@@ -395,9 +395,9 @@ Prerequisites before external standard positioning:
 
 1. ~~Close key lifecycle conformance vector gap~~ ✓ resolved
 2. ~~Define clock skew tolerance specification~~ ✓ resolved
-3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
-4. ~~Close intent hash mismatch portable vector gap~~ ✓ resolved — portable `AuthorizationV1` vector added with `proposed_action`
-5. ~~Close `expiry`/`expires_at` precedence vector gap~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
+3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved - clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
+4. ~~Close intent hash mismatch portable vector gap~~ ✓ resolved - portable `AuthorizationV1` vector added with `proposed_action`
+5. ~~Close `expiry`/`expires_at` precedence vector gap~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
 6. Resolve or formally mitigate state provider trust risk
 7. Resolve or formally mitigate KRL transport integrity risk
 8. Independent security review
@@ -440,10 +440,10 @@ Structured events / metrics  ░░░░░░░░░░░░░░░░░
 ### P0 - Must resolve before external adoption
 
 **P0-1: Add portable conformance vectors for key lifecycle** ✓ RESOLVED
-Resolution: `key-lifecycle-verification.json` added — 10 vectors, 20 assertions covering active, revoked, retired (within/past window), `not_before`/`not_after` time windows, revocation-overrides-window, and wrong-kid-known-issuer. Conformance count: 161 → 181.
+Resolution: `key-lifecycle-verification.json` added - 10 vectors, 20 assertions covering active, revoked, retired (within/past window), `not_before`/`not_after` time windows, revocation-overrides-window, and wrong-kid-known-issuer. Conformance count: 161 → 181.
 
 **P0-2: Define and specify clock skew tolerance** ✓ RESOLVED
-Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md §17` defines: valid iff `now < expiry`, no grace period, `issued_at` informational-only (no lower-bound enforcement), NTP synchronization required, issuers must build delivery latency into expiry window. `clock-semantics-verification.json` added — 5 vectors, 10 assertions covering last-valid-second, one-past-expiry, verifier-clock-behind, and Encoding B variants. Conformance count: 181 → 191.
+Resolution: Strict zero-tolerance selected and specified. `authorization-v1.md §17` defines: valid iff `now < expiry`, no grace period, `issued_at` informational-only (no lower-bound enforcement), NTP synchronization required, issuers must build delivery latency into expiry window. `clock-semantics-verification.json` added - 5 vectors, 10 assertions covering last-valid-second, one-past-expiry, verifier-clock-behind, and Encoding B variants. Conformance count: 181 → 191.
 
 **P0-3: Harden `parentScope` handling in `OxDeAIGuard`** ✓ RESOLVED
 Resolution: `GuardDelegationInput` now requires `parentScope: DelegationScope` as an explicit typed field. `isValidDelegationScope` validates the structure before chain verification. The unsafe `(parentAuth as any).scope` cast has been removed from `guard.ts`. All delegation tests and the `delegation-demo` example updated to pass `parentScope` explicitly. Missing or malformed `parentScope` fails closed before execution; `OxDeAIAuthorizationError` is thrown before the delegation chain verification path is reached.
@@ -466,9 +466,9 @@ Resolution: Two vectors added to `authorization-v1.json`: `pb-trust-oxdeai-key-a
 
 **P1-4: Resolve KRL transport integrity risk** ✓ RESOLVED for `signed_required`; residual risk in default mode
 Resolution: `SiftHttpKeyStore` now supports three KRL integrity modes via `verifyKrl` callback injection (Patch A + Patch B):
-- `signed_required` — closes the transport-integrity gap. Every KRL must be a signed `SignedKRLV1` verified by `verifySignedKrl` from `@oxdeai/core`. Unsigned KRLs rejected before `verifyKrl` is consulted. Constructor fails fast without `verifyKrl`.
-- `signed_preferred` (default) — signed KRLs verified when present; unsigned fallback for unsigned KRLs. Signed KRL with missing `verifyKrl` fails closed.
-- `unsigned_legacy` — deprecated; transport-trust-only; warns at construction.
+- `signed_required` - closes the transport-integrity gap. Every KRL must be a signed `SignedKRLV1` verified by `verifySignedKrl` from `@oxdeai/core`. Unsigned KRLs rejected before `verifyKrl` is consulted. Constructor fails fast without `verifyKrl`.
+- `signed_preferred` (default) - signed KRLs verified when present; unsigned fallback for unsigned KRLs. Signed KRL with missing `verifyKrl` fails closed.
+- `unsigned_legacy` - deprecated; transport-trust-only; warns at construction.
 `@oxdeai/sift` zero-dependency boundary preserved via callback injection. `krl_version` per-issuer watermark tracked in memory. `getKrlStatus()` status surface added. 29 new mode tests in `siftKeyStore.krl-modes.test.ts`.
 Caveats: transport-integrity gap is only fully closed when callers deploy `signed_required`. `signed_preferred` unsigned fallback and `unsigned_legacy` retain transport-trust-only semantics. Persistent high-watermark storage and cross-language KRL vectors remain future work. Non-string `revoked_kids` skipping is legacy-path-only behavior, not `SignedKRLV1` semantics.
 **KRL reason-code ownership:** Four codes are Sift-local (produced by mode logic, NOT from `@oxdeai/core`): `KRL_UNSIGNED_IN_SIGNED_REQUIRED`, `KRL_MISSING_VERIFY_CALLBACK`, `KRL_VERIFY_CALLBACK_ERROR`, `KRL_VERIFY_RESULT_INCOMPLETE`. Seven core codes are passed through as opaque strings from the `verifyKrl` callback: `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`, `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
@@ -534,13 +534,13 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 **Critical path to external adoption:**
 
-1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved — 20 assertions added
-2. ~~Clock skew specification (P0-2)~~ ✓ resolved — strict zero-tolerance specified, 10 assertions added
-3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved — unsafe cast removed, fail-closed before chain verification
-4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved — clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
-5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved — portable `AuthorizationV1` vector added for `proposed_action` mismatch
-6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved — `auth-expiry-wins-over-expires-at` vector locks precedence rule
-7. ~~HMAC-SHA256 deprecation (P1-5)~~ ✓ resolved — spec deprecation notice added; `@deprecated` JSDoc on `legacyHmacSecret` and `authorization_signing_alg`
+1. ~~Key lifecycle portable vectors (P0-1)~~ ✓ resolved - 20 assertions added
+2. ~~Clock skew specification (P0-2)~~ ✓ resolved - strict zero-tolerance specified, 10 assertions added
+3. ~~parentScope type safety in guard (P0-3)~~ ✓ resolved - unsafe cast removed, fail-closed before chain verification
+4. ~~Public `AuthorizationV1` artifact boundary (P0-4)~~ ✓ resolved - clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
+5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved - portable `AuthorizationV1` vector added for `proposed_action` mismatch
+6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
+7. ~~HMAC-SHA256 deprecation (P1-5)~~ ✓ resolved - spec deprecation notice added; `@deprecated` JSDoc on `legacyHmacSecret` and `authorization_signing_alg`
 8. Cross-language Profile C vectors (P1-6)
 
 **Protocol positioning:**
@@ -551,4 +551,4 @@ The protocol is **not yet ready for standard adoption**. Key lifecycle, clock sk
 
 ---
 
-*This document reflects the protocol state as of 2026-05-17. It should be revisited after each significant milestone.*
+*This document reflects the protocol state as of 2026-06-02. It should be revisited after each significant milestone.*

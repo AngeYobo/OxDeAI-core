@@ -308,7 +308,7 @@ Minimum requirements:
 | Mode | Description | Production status |
 |------|-------------|------------------|
 | `"signed_required"` | Every KRL must be cryptographically signed (`SignedKRLV1`). Unsigned KRLs are rejected with `KRL_UNSIGNED_IN_SIGNED_REQUIRED` *before* calling `verifyKrl`. Requires a `verifyKrl` callback at construction. **Closes the transport-integrity gap.** | Recommended |
-| `"signed_preferred"` *(default)* | Signed KRLs are verified when present; unsigned KRLs are accepted as a transport-trust fallback (`unsigned_fallback` status). If a signature field is present but no `verifyKrl` is configured, refresh fails closed — there is no downgrade path. | Default transition mode |
+| `"signed_preferred"` *(default)* | Signed KRLs are verified when present; unsigned KRLs are accepted as a transport-trust fallback (`unsigned_fallback` status). If a signature field is present but no `verifyKrl` is configured, refresh fails closed - there is no downgrade path. | Default transition mode |
 | `"unsigned_legacy"` | Preserves pre-Patch-B unsigned KRL behavior. Deprecated. Emits a warning at construction. **Residual risk: transport security only.** | Deprecated |
 
 **Wiring signed KRL verification.** Supply a `verifyKrl` callback that delegates to `verifySignedKrl` from `@oxdeai/core`. This preserves `@oxdeai/sift`'s zero-dependency boundary:
@@ -346,13 +346,13 @@ const status = store.getKrlStatus();
 
 `lastReason` is always cleared to `undefined` on a successful refresh. It never carries a stale failure reason after a later success.
 
-**Version watermark.** `SiftHttpKeyStore` tracks the highest accepted `krl_version` per issuer in memory during its lifetime and passes this to `verifyKrl` as `previousKrlVersionByIssuer`. This causes `verifySignedKrl` to reject any KRL whose `krl_version` is less than the previously accepted version (`KRL_VERSION_REGRESSION`). **This watermark is in-memory only and resets on process restart.**
+**Version watermark.** `SiftHttpKeyStore` tracks the highest accepted `krl_version` per issuer and passes this to `verifyKrl` as `previousKrlVersionByIssuer`. This causes `verifySignedKrl` to reject any KRL whose `krl_version` is less than the previously accepted version (`KRL_VERSION_REGRESSION`). By default the watermark is in-memory and resets on process restart. Configure a `KrlWatermarkStore` to persist the watermark across restarts - see **Persistent KRL high-watermark** below.
 
 **Unsigned path behavior (legacy).** The unsigned fallback path (used by `unsigned_legacy` and by `signed_preferred` when the fetched KRL has no `signature` field) silently skips non-string entries in `revoked_kids`. **This is legacy behavior and is NOT `SignedKRLV1` semantics.** `SignedKRLV1` verification rejects non-string entries and duplicate entries as `KRL_MALFORMED`.
 
 **KRL reason codes.** Two sets of codes are surfaced in `krlStatus.lastReason` and `KeyStoreError` messages:
 
-*Sift-local mode/contract codes* — produced by `SiftHttpKeyStore` mode logic; never imported from `@oxdeai/core`:
+*Sift-local mode/contract codes* - produced by `SiftHttpKeyStore` mode logic; never imported from `@oxdeai/core`:
 
 | Code | Trigger |
 |------|---------|
@@ -360,11 +360,52 @@ const status = store.getKrlStatus();
 | `KRL_MISSING_VERIFY_CALLBACK` | KRL has a `signature` field but no `verifyKrl` callback configured; refresh fails closed |
 | `KRL_VERIFY_CALLBACK_ERROR` | `verifyKrl` callback threw instead of returning a result; refresh fails closed |
 | `KRL_VERIFY_RESULT_INCOMPLETE` | `verifyKrl` returned `ok: true` but omitted `accepted` issuer/`krl_version` metadata; refresh fails closed |
+| `KRL_WATERMARK_LOAD_FAILED` | *(Phase A)* Persistent watermark store could not be loaded before verification; refresh fails closed before `verifyKrl` is called |
+| `KRL_WATERMARK_PERSIST_FAILED` | *(Phase A)* Signed KRL verified but persisting the new watermark failed; refresh fails closed before cache swap |
 
-*Core KRL codes* — passed through as opaque strings from the `verifyKrl` callback (originated in `@oxdeai/core`):
+*Core KRL codes* - passed through as opaque strings from the `verifyKrl` callback (originated in `@oxdeai/core`):
 `KRL_MALFORMED`, `KRL_SIG_INVALID`, `KRL_EXPIRED`, `KRL_UNSUPPORTED_ALG`, `KRL_UNKNOWN_SIGNING_KID`, `KRL_SIGNING_KEY_INACTIVE`, `KRL_VERSION_REGRESSION`.
 
 **`result.accepted` contract.** When `verifyKrl` returns `ok: true`, it MUST include `accepted: { issuer, krl_version }` populated from the verified `SignedKRLV1` payload fields. This is how `SiftHttpKeyStore` advances the per-issuer version watermark without independently re-parsing the body. Omitting `accepted` fails closed with `KRL_VERIFY_RESULT_INCOMPLETE`.
+
+**Persistent KRL high-watermark.** By default, the per-issuer `krl_version` watermark is in-memory only and resets on process restart, opening a one-cycle downgrade window. Supply a `KrlWatermarkStore` to make the watermark durable:
+
+```ts
+import {
+  SiftHttpKeyStore,
+  createFileBackedKrlWatermarkStore,
+} from "@oxdeai/sift";
+import { verifySignedKrl } from "@oxdeai/core";
+
+const store = new SiftHttpKeyStore({
+  jwksUrl, krlUrl,
+  krlMode: "signed_required",
+  verifyKrl: (payload, ctx) => {
+    const result = verifySignedKrl(payload, { trustedKeySets: myKrlKeys, ...ctx });
+    if (!result.ok) return result;
+    const krl = payload as { issuer: string; krl_version: number };
+    return { ...result, accepted: { issuer: krl.issuer, krl_version: krl.krl_version } };
+  },
+  // Phase A: persistent high-watermark (single-node)
+  krlWatermarkStore: createFileBackedKrlWatermarkStore("/var/app/krl-watermark.json"),
+});
+```
+
+| Interface | Description |
+|-----------|-------------|
+| `KrlWatermarkStore` | Pluggable interface: `get(issuer)`, `set(issuer, version)`, `list()` |
+| `createInMemoryKrlWatermarkStore()` | Default in-process store (current behavior, no persistence) |
+| `createFileBackedKrlWatermarkStore(path)` | Persistent single-node store; atomic write via temp-file + rename |
+
+**No constructor I/O.** The store is never accessed at construction time. On the first signed `refresh()`, `list()` is called to load persisted watermarks and merge them into the in-memory map.
+
+**Persist-before-cache-swap.** After signed KRL verification succeeds, the new `krl_version` is written to the store *before* the in-memory revocation cache is swapped. If the write fails, `refresh()` throws `KRL_WATERMARK_PERSIST_FAILED` and the cache is not updated. A KRL is only accepted if its version was durably recorded.
+
+**Restart downgrade protection.** With a persistent store configured, an older signed KRL replayed after process restart will be rejected with `KRL_VERSION_REGRESSION` because the persisted watermark is restored before `verifyKrl` is called on the new refresh.
+
+**`krlStatus.watermarkStore`:** `"memory"` when no store is configured (default); `"persistent"` when a `KrlWatermarkStore` is configured.
+
+**Single-node / single-writer.** `createFileBackedKrlWatermarkStore` uses read-modify-write and is NOT safe for concurrent writes from multiple processes. Multi-node deployments should implement `KrlWatermarkStore` backed by a database with atomic compare-and-set.
 
 **Deprecation trajectory:**
 
@@ -470,7 +511,7 @@ latency requirements - not just on startup.
 ```ts
 import { SiftHttpKeyStore, createStagingKeyStore, type SiftKeyStore } from "@oxdeai/sift";
 
-// Staging (development / testing only — NOT for production):
+// Staging (development / testing only - NOT for production):
 const store = createStagingKeyStore();
 await store.refresh();
 // Note: createStagingKeyStore() throws if NODE_ENV === "production".
@@ -485,7 +526,7 @@ const prodStore = new SiftHttpKeyStore({
   verifyKrl: (payload, ctx) => verifySignedKrl(payload, { trustedKeySets: myKrlKeySets, ...ctx }),
 });
 
-// Transition (default — unsigned fallback if KRL is unsigned):
+// Transition (default - unsigned fallback if KRL is unsigned):
 const transStore = new SiftHttpKeyStore({
   jwksUrl: "https://your-production-sift-host/sift-jwks.json",
   krlUrl:  "https://your-production-sift-host/sift-krl.json",

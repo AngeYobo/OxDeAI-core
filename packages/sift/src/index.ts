@@ -57,3 +57,8 @@ export {
   SiftHttpKeyStore,
   createStagingKeyStore,
 } from "./siftKeyStore.js";
+
+// KRL watermark store (persistent per-issuer krl_version high-watermark)
+export type { KrlWatermarkStore } from "./krlWatermarkStore.js";
+export { createInMemoryKrlWatermarkStore } from "./krlWatermarkStore.js";
+export { createFileBackedKrlWatermarkStore } from "./krlWatermarkStore.file.js";

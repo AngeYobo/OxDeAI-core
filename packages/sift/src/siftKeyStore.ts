@@ -58,6 +58,7 @@
  */
 
 import { b64uDecode } from "./siftCanonical.js";
+import type { KrlWatermarkStore } from "./krlWatermarkStore.js";
 
 // ─── Fetch abstraction ────────────────────────────────────────────────────────
 
@@ -188,6 +189,15 @@ export interface KrlStatus {
   lastVerifiedAt?: number;
   /** Per-issuer high-watermark of accepted krl_version values (in-memory only). */
   lastKrlVersionByIssuer: Record<string, number>;
+  /**
+   * Whether a persistent KrlWatermarkStore is configured.
+   *
+   * - "memory"     — no KrlWatermarkStore configured; watermark is in-memory only
+   *                  and resets on process restart (default, current behavior).
+   * - "persistent" — a KrlWatermarkStore is configured; watermark survives
+   *                  process restarts and prevents restart-and-replay attacks.
+   */
+  watermarkStore: "memory" | "persistent";
 }
 
 // ─── Sift-local KRL mode/contract codes ──────────────────────────────────────
@@ -215,9 +225,29 @@ export interface KrlStatus {
 // KRL_UNSUPPORTED_ALG, KRL_UNKNOWN_SIGNING_KID, KRL_SIGNING_KEY_INACTIVE,
 // KRL_VERSION_REGRESSION) are passed through as opaque strings from verifyKrl.
 //
+//   KRL_WATERMARK_LOAD_FAILED (Phase A, #117)
+//     The configured KrlWatermarkStore could not be loaded (list() threw) before
+//     KRL verification. Refresh fails closed before calling verifyKrl and before
+//     any cache swap. Without the durable floor, previousKrlVersionByIssuer would
+//     be incomplete, opening a downgrade window.
+//
+//   KRL_WATERMARK_PERSIST_FAILED (Phase A, #117)
+//     A signed KRL verified successfully (verifyKrl returned ok: true with accepted
+//     issuer/krl_version), but persisting the new high-watermark to the configured
+//     KrlWatermarkStore failed. Refresh is blocked before cache swap to prevent
+//     accepting a KRL whose version was not durably recorded.
+//
 const KRL_UNSIGNED_IN_SIGNED_REQUIRED  = "KRL_UNSIGNED_IN_SIGNED_REQUIRED";
 const KRL_MISSING_VERIFY_CALLBACK      = "KRL_MISSING_VERIFY_CALLBACK";
 const KRL_VERIFY_RESULT_INCOMPLETE     = "KRL_VERIFY_RESULT_INCOMPLETE";
+const KRL_WATERMARK_PERSIST_FAILED     = "KRL_WATERMARK_PERSIST_FAILED";
+//
+//   KRL_WATERMARK_LOAD_FAILED (Phase A, #117)
+//     The configured KrlWatermarkStore could not be read (list() threw) before
+//     verification started. Refresh fails closed before calling verifyKrl and
+//     before any cache swap, so the durable floor cannot be established.
+//
+const KRL_WATERMARK_LOAD_FAILED        = "KRL_WATERMARK_LOAD_FAILED";
 
 // ─── JWKS parsing ─────────────────────────────────────────────────────────────
 
@@ -405,6 +435,29 @@ export interface SiftHttpKeyStoreOptions {
    * Must remain optional — existing callers work without it.
    */
   now?: () => number;
+  /**
+   * Pluggable persistent store for per-issuer KRL version high-watermarks.
+   *
+   * When configured, the watermark is persisted across process restarts,
+   * closing the restart-and-replay downgrade window. On each signed refresh,
+   * the store is queried via list() and its values are merged into the
+   * in-memory watermark map before verifyKrl is called, ensuring
+   * previousKrlVersionByIssuer reflects the durable floor.
+   *
+   * After successful signed KRL verification, the new krl_version is written
+   * to the store before the in-memory cache is swapped. If the write fails,
+   * refresh() fails closed and the cache is not updated.
+   *
+   * Default: undefined (in-memory watermark only — current Patch-B behavior).
+   * No I/O is performed at construction time regardless of this option.
+   *
+   * Reference implementations:
+   *   - createInMemoryKrlWatermarkStore()  — default in-process store
+   *   - createFileBackedKrlWatermarkStore(filePath)  — single-node persistent
+   *
+   * @public
+   */
+  krlWatermarkStore?: KrlWatermarkStore;
 }
 
 export class SiftHttpKeyStore implements SiftKeyStore {
@@ -414,6 +467,9 @@ export class SiftHttpKeyStore implements SiftKeyStore {
   private readonly krlMode: KrlMode;
   private readonly verifyKrl: KrlVerifyFn | undefined;
   private readonly nowFn: () => number;
+  private readonly krlWatermarkStore: KrlWatermarkStore | undefined;
+  /** Derived at construction; stable for the lifetime of the instance. */
+  private readonly watermarkStoreType: "memory" | "persistent";
 
   private keyCache = new Map<string, Uint8Array>();
   private revokedKids = new Set<string>();
@@ -427,6 +483,8 @@ export class SiftHttpKeyStore implements SiftKeyStore {
     this.krlMode = opts.krlMode ?? "signed_preferred";
     this.verifyKrl = opts.verifyKrl;
     this.nowFn = opts.now ?? (() => Math.floor(Date.now() / 1000));
+    this.krlWatermarkStore = opts.krlWatermarkStore;
+    this.watermarkStoreType = opts.krlWatermarkStore ? "persistent" : "memory";
 
     // Fast-fail: signed_required mode requires a verifyKrl callback.
     if (this.krlMode === "signed_required" && !this.verifyKrl) {
@@ -454,6 +512,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       unsignedFallbackActive: false,
       lastVerifiedAt: undefined,
       lastKrlVersionByIssuer: {},
+      watermarkStore: this.watermarkStoreType,
     };
   }
 
@@ -479,6 +538,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
       lastVerifiedAt: this._krlStatus.lastVerifiedAt,
       lastKrlVersionByIssuer: { ...this._krlStatus.lastKrlVersionByIssuer },
+      watermarkStore: this._krlStatus.watermarkStore,
     };
   }
 
@@ -528,8 +588,47 @@ export class SiftHttpKeyStore implements SiftKeyStore {
     // Parse JWKS — throws JWKS_FETCH_FAILED on malformed input.
     const newKeys = parseJwks(jwksBody);
 
-    // Process KRL according to configured mode.
     const nowSeconds = this.nowFn();
+
+    // ── Lazy watermark load ────────────────────────────────────────────────
+    // Merge the persisted per-issuer high-watermarks into the in-memory map
+    // before processKrlForMode runs. This ensures previousKrlVersionByIssuer
+    // passed to verifyKrl reflects durable state from prior process lifetimes.
+    //
+    // Skipped for unsigned_legacy (no signed path, no watermark relevance).
+    // Fail closed if the store is unavailable — we cannot safely proceed
+    // without knowing the current durable floor.
+    if (this.krlWatermarkStore && this.krlMode !== "unsigned_legacy") {
+      let persisted: Record<string, number>;
+      try {
+        persisted = await this.krlWatermarkStore.list();
+      } catch (err) {
+        this._krlStatus = {
+          mode: this.krlMode,
+          lastIntegrity: "failed",
+          lastReason: KRL_WATERMARK_LOAD_FAILED,
+          unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
+          lastVerifiedAt: this._krlStatus.lastVerifiedAt,
+          lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+          watermarkStore: this.watermarkStoreType,
+        };
+        throw new KeyStoreError(
+          "KEYSTORE_REFRESH_FAILED",
+          `${KRL_WATERMARK_LOAD_FAILED}: Persistent watermark store could not be loaded ` +
+          `before KRL verification — refresh fails closed. ` +
+          `Error: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+      // Monotonic merge — only raise the floor, never lower it.
+      for (const [issuer, version] of Object.entries(persisted)) {
+        const current = this.krlVersionByIssuer.get(issuer);
+        if (current === undefined || version > current) {
+          this.krlVersionByIssuer.set(issuer, version);
+        }
+      }
+    }
+
+    // Process KRL according to configured mode.
     const krlResult = this.processKrlForMode(krlBody, nowSeconds);
 
     if (!krlResult.ok) {
@@ -543,15 +642,48 @@ export class SiftHttpKeyStore implements SiftKeyStore {
         unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
         lastVerifiedAt: this._krlStatus.lastVerifiedAt,
         lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+        watermarkStore: this.watermarkStoreType,
       };
       throw krlResult.error;
     }
 
-    // Both parses and all integrity checks succeeded — atomic cache swap.
+    // ── Persist watermark BEFORE cache swap (invariant 2) ─────────────────
+    // If the signed KRL was verified and the write fails, fail closed before
+    // swapping the cache. A KRL must not be accepted unless its krl_version
+    // was durably recorded when a persistent store is configured.
+    if (this.krlWatermarkStore && krlResult.updatedVersion) {
+      try {
+        await this.krlWatermarkStore.set(
+          krlResult.updatedVersion.issuer,
+          krlResult.updatedVersion.krl_version
+        );
+      } catch (err) {
+        // Fail closed — do not swap caches.
+        this._krlStatus = {
+          mode: this.krlMode,
+          lastIntegrity: "failed",
+          lastReason: KRL_WATERMARK_PERSIST_FAILED,
+          unsignedFallbackActive: this._krlStatus.unsignedFallbackActive,
+          lastVerifiedAt: this._krlStatus.lastVerifiedAt,
+          lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+          watermarkStore: this.watermarkStoreType,
+        };
+        throw new KeyStoreError(
+          "KRL_FETCH_FAILED",
+          `${KRL_WATERMARK_PERSIST_FAILED}: Signed KRL verified successfully but persisting ` +
+          `the krl_version watermark to the configured KrlWatermarkStore failed. ` +
+          `Refresh is blocked to prevent accepting a KRL whose version was not durably recorded. ` +
+          `Error: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+
+    // Both parses, all integrity checks, and (if configured) watermark
+    // persistence succeeded — atomic in-memory cache swap.
     this.keyCache = newKeys;
     this.revokedKids = krlResult.revoked;
 
-    // Update per-issuer krl_version high-watermark for signed KRLs.
+    // Update in-memory per-issuer krl_version high-watermark.
     if (krlResult.updatedVersion) {
       this.krlVersionByIssuer.set(
         krlResult.updatedVersion.issuer,
@@ -567,6 +699,7 @@ export class SiftHttpKeyStore implements SiftKeyStore {
       unsignedFallbackActive: krlResult.integrity === "unsigned_fallback",
       lastVerifiedAt: nowSeconds,
       lastKrlVersionByIssuer: Object.fromEntries(this.krlVersionByIssuer),
+      watermarkStore: this.watermarkStoreType,
     };
   }
 
