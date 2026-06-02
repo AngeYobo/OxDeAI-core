@@ -295,18 +295,25 @@ wrong hash strategy - both produce DENY. Deployers must ensure alignment.
 
 #### 2.3.4 Cross-language conformance
 
-Go harness now validates Profile C **state-hash semantics** (modes 001–005) independently
-via `docs/spec/test-vectors/profile-c-state-verification.json`. Each vector provides raw
-state JSON objects; the harness computes SHA-256 of `canonicalJson(state)` (core strategy)
-or SHA-256 of `"PROVIDER:" + canonicalJson(state)` (provider strategy) independently and
-compares outcomes against expected verdicts (`ok`, `state-hash-mismatch`, `compute-error`).
+Go and Python harnesses now validate **all 8 Profile C vectors** independently via
+`docs/spec/test-vectors/profile-c-state-verification.json`:
 
-**Scope of Go + Python coverage:** state-hash comparison semantics only (modes 001–005).
-Both Go (`go-harness/profile_c_verify.go`) and Python (`python-harness/verify_profile_c_vectors.py`)
-independently compute SHA-256 of `canonicalJson(state)` (core) and SHA-256 of
-`"PROVIDER:" + canonicalJson(state)` (provider) and compare outcomes against expected verdicts.
-Profile C Encoding B modes 006–008 (which require AuthorizationV1 Encoding B signature
-verification) remain TypeScript-only and are tracked as a separate issue.
+- **Modes 001–005** (state-hash semantics): canonicalization-v1 + SHA-256 only
+- **Modes 006–008** (Encoding B): additionally require independent Encoding B
+  AuthorizationV1 signature verification (`alg: "ed25519"` lowercase, `expires_at`,
+  base64url signature, **no domain prefix**)
+
+For Encoding B modes, each harness:
+1. Independently reconstructs the signing payload from the committed artifact
+   (all fields + `signature.{alg,kid}`, excluding `signature.sig`)
+2. Computes `canonicalJson(signingPayload)` — no domain prefix (distinct from
+   SignedKRLV1 which uses `OXDEAI_KRL_V1\n`)
+3. Verifies the Ed25519 signature (Go: `crypto/ed25519`; Python: `ctypes + libcrypto`)
+4. Cross-checks independently-computed `committedHash` against committed `auth.state_hash`
+   (byte-equivalence proof — any divergence is a harness canonicalization bug)
+5. Compares `liveHash` vs `committedHash` for the state-hash outcome
+
+No protocol semantics were changed. This is conformance coverage, not a runtime security change.
 
 #### 2.3.5 Distinguishing Profile B and Profile C
 

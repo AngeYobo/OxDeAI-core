@@ -58,56 +58,56 @@ Encoding B vectors (`profile-c-006` through `profile-c-008`) exercise the Sift-c
 
 ### Key Lifecycle (v1.5+)
 
-- `key-lifecycle-verification.json` — exercises `keyIsActiveAt`, `findKeyInKeySets`, and `AUTH_KEY_INACTIVE` / `AUTH_KID_UNKNOWN` enforcement across all key status and time-window states.
+- `key-lifecycle-verification.json` - exercises `keyIsActiveAt`, `findKeyInKeySets`, and `AUTH_KEY_INACTIVE` / `AUTH_KID_UNKNOWN` enforcement across all key status and time-window states.
 
 Ten vectors covering:
 
 | Vector | Mode | Expected outcome |
 |--------|------|-----------------|
-| `key-lifecycle-001` | `key-active` | `ok` — active key, no time constraints |
-| `key-lifecycle-002` | `key-revoked` | `AUTH_KEY_INACTIVE` — revoked key rejected |
-| `key-lifecycle-003` | `key-not-before-future` | `AUTH_KEY_INACTIVE` — key not yet active |
-| `key-lifecycle-004` | `key-not-after-past` | `AUTH_KEY_INACTIVE` — validity window expired |
-| `key-lifecycle-005` | `key-valid-window` | `ok` — explicit `not_before`/`not_after` window active |
-| `key-lifecycle-006` | `key-expired-window` | `AUTH_KEY_INACTIVE` — `not_after` in the past |
-| `key-lifecycle-007` | `key-retired-within-window` | `ok` — retired key accepted during dual-sign overlap window |
-| `key-lifecycle-008` | `key-retired-past-window` | `AUTH_KEY_INACTIVE` — retired key, window closed |
-| `key-lifecycle-009` | `key-revoked-valid-window` | `AUTH_KEY_INACTIVE` — revocation overrides valid time window |
-| `key-lifecycle-010` | `wrong-kid-known-issuer` | `AUTH_KID_UNKNOWN` — correct issuer, unknown kid |
+| `key-lifecycle-001` | `key-active` | `ok` - active key, no time constraints |
+| `key-lifecycle-002` | `key-revoked` | `AUTH_KEY_INACTIVE` - revoked key rejected |
+| `key-lifecycle-003` | `key-not-before-future` | `AUTH_KEY_INACTIVE` - key not yet active |
+| `key-lifecycle-004` | `key-not-after-past` | `AUTH_KEY_INACTIVE` - validity window expired |
+| `key-lifecycle-005` | `key-valid-window` | `ok` - explicit `not_before`/`not_after` window active |
+| `key-lifecycle-006` | `key-expired-window` | `AUTH_KEY_INACTIVE` - `not_after` in the past |
+| `key-lifecycle-007` | `key-retired-within-window` | `ok` - retired key accepted during dual-sign overlap window |
+| `key-lifecycle-008` | `key-retired-past-window` | `AUTH_KEY_INACTIVE` - retired key, window closed |
+| `key-lifecycle-009` | `key-revoked-valid-window` | `AUTH_KEY_INACTIVE` - revocation overrides valid time window |
+| `key-lifecycle-010` | `wrong-kid-known-issuer` | `AUTH_KID_UNKNOWN` - correct issuer, unknown kid |
 
 ### Clock Semantics (v1.5+)
 
-- `clock-semantics-verification.json` — exercises strict zero-tolerance expiry enforcement (`now < expiry`) and `issued_at` informational-only semantics for both wire encodings.
+- `clock-semantics-verification.json` - exercises strict zero-tolerance expiry enforcement (`now < expiry`) and `issued_at` informational-only semantics for both wire encodings.
 
 Five vectors covering:
 
 | Vector | Mode | Expected outcome |
 |--------|------|-----------------|
-| `clock-001` | `last-valid-second` | `ok` — `now = expiry - 1`, last valid second |
-| `clock-002` | `one-past-expiry` | `AUTH_EXPIRED` — `now = expiry + 1`, no grace period |
-| `clock-003` | `verifier-clock-behind` | `ok` — `now < issued_at`, `issued_at` not enforced as lower bound |
-| `clock-004` | `encoding-b-last-valid-second` | `ok` — Encoding B (`expires_at`), `now = expires_at - 1` |
-| `clock-005` | `encoding-b-verifier-clock-behind` | `ok` — Encoding B, `now < issued_at` |
+| `clock-001` | `last-valid-second` | `ok` - `now = expiry - 1`, last valid second |
+| `clock-002` | `one-past-expiry` | `AUTH_EXPIRED` - `now = expiry + 1`, no grace period |
+| `clock-003` | `verifier-clock-behind` | `ok` - `now < issued_at`, `issued_at` not enforced as lower bound |
+| `clock-004` | `encoding-b-last-valid-second` | `ok` - Encoding B (`expires_at`), `now = expires_at - 1` |
+| `clock-005` | `encoding-b-verifier-clock-behind` | `ok` - Encoding B, `now < issued_at` |
 
 Clock model: **strict zero tolerance**. Valid iff `now < expiry`. No skew parameter, no grace period. Issuers must build delivery latency into the expiry window. See `authorization-v1.md §17`.
 
 ### SignedKRLV1 Verification (v1.6+)
 
-- `signed-krl-verification.json` — exercises `verifySignedKrl` across all verification paths for the `SignedKRLV1` protocol artifact.
+- `signed-krl-verification.json` - exercises `verifySignedKrl` across all verification paths for the `SignedKRLV1` protocol artifact.
 
 Nine vectors covering:
 
 | Vector | Mode | Expected outcome |
 |--------|------|-----------------|
-| `krl-001` | `valid` | `ok` — signature verifies, not expired |
-| `krl-002` | `invalid-signature` | `KRL_SIG_INVALID` — tampered signature |
-| `krl-003` | `expired` | `KRL_EXPIRED` — `now >= not_after` (strict zero-tolerance) |
-| `krl-004` | `malformed-revoked-kids` | `KRL_MALFORMED` — `revoked_kids` is a string, not an array |
-| `krl-005` | `duplicate-revoked-kids` | `KRL_MALFORMED` — duplicate entries in `revoked_kids` |
-| `krl-006` | `unknown-signing-kid` | `KRL_UNKNOWN_SIGNING_KID` — kid not in trusted KRL signing key set |
-| `krl-007` | `signing-key-inactive` | `KRL_SIGNING_KEY_INACTIVE` — key found but `keyIsActiveAt` returns false |
-| `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` — `signature.alg != "Ed25519"` |
-| `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` — `krl_version` less than previous accepted value |
+| `krl-001` | `valid` | `ok` - signature verifies, not expired |
+| `krl-002` | `invalid-signature` | `KRL_SIG_INVALID` - tampered signature |
+| `krl-003` | `expired` | `KRL_EXPIRED` - `now >= not_after` (strict zero-tolerance) |
+| `krl-004` | `malformed-revoked-kids` | `KRL_MALFORMED` - `revoked_kids` is a string, not an array |
+| `krl-005` | `duplicate-revoked-kids` | `KRL_MALFORMED` - duplicate entries in `revoked_kids` |
+| `krl-006` | `unknown-signing-kid` | `KRL_UNKNOWN_SIGNING_KID` - kid not in trusted KRL signing key set |
+| `krl-007` | `signing-key-inactive` | `KRL_SIGNING_KEY_INACTIVE` - key found but `keyIsActiveAt` returns false |
+| `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` - `signature.alg != "Ed25519"` |
+| `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` - `krl_version` less than previous accepted value |
 
 Signing domain: `OXDEAI_KRL_V1`. KRL signing fixture key (`krl-2026-01`, issuer `krl.issuer`) is distinct from the AuthorizationV1 / DelegationV1 signing fixture key to exercise trust-domain separation.
 
@@ -141,9 +141,9 @@ compatibility but not used by the harness runners.
 | `delegation-verification.json` | Field checks, expiry, scope, replay, trust-missing | Yes - no crypto required |
 | `delegation-chain-verification.json` | Chain structural checks (hash binding, delegator, expiry ceiling, policy) | Yes - independently recomputed |
 | `delegation-signature-verification.json` | Ed25519 verification path | Yes - independently verified |
-| `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes — portable across any `verifyAuthorization` implementation |
-| `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | Yes — portable; no crypto required |
-| `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (requires `computeStateHash` integration) |
+| `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes - portable across any `verifyAuthorization` implementation |
+| `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | Yes - portable; no crypto required |
+| `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (TS runner); **Go + Python cover all 8 modes** via `docs/spec/test-vectors/profile-c-state-verification.json` (#120) |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
 | `guard.delegation.property.test.ts` (G-D1–G-D3) | Guard PEP delegation path | TypeScript only |
 | `cross-adapter.test.ts` (CA-1–CA-10) | Cross-adapter equivalence, I6 | TypeScript only |

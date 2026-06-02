@@ -154,7 +154,7 @@
 | Profile A (Core-native) | `DONE` | Defined, implemented, conformance covered by existing auth-sig and auth-verify vectors. |
 | Profile B (External wire-compatible) | `DONE` | Defined. Encoding B accepted in verifyAuthorization. Conformance vector `authorization-sig-010`. Trust separation proven: `pb-trust-oxdeai-key-allow` (OxDeAI key in trustedKeySets → ALLOW) and `pb-trust-provider-key-rejected` (provider receipt key absent from trustedKeySets → DENY/UNKNOWN_KID). Resolved in #108. |
 | Profile C (Full semantic state verification) | `DONE` | Defined. Implemented via pluggable `computeStateHash`. 12 executable conformance assertions across 8 vectors. Encoding B path tested. |
-| Profile C cross-language | `DONE` | Go + Python harnesses validate state-hash semantics (modes 001–005) via `docs/spec/test-vectors/profile-c-state-verification.json`. Profile C Encoding B modes 006–008 remain TypeScript-only and are tracked separately. |
+| Profile C cross-language | `DONE` | Go + Python harnesses validate all 8 Profile C vectors (#120): modes 001–005 (state-hash semantics) and modes 006–008 (Encoding B, independent Ed25519 sig verification + state hash comparison). No domain prefix; preimage is `canonicalJson(signingPayload)`. |
 | Interoperability matrix | `DOCUMENTED ONLY` | Matrix in `external-provider-profile.md`. Not backed by conformance automation. |
 
 ---
@@ -421,8 +421,8 @@ Key lifecycle (lifecycle)    █████████████████
 DelegationV1                 ████████████████████  DONE
 Profile A interop            ████████████████████  DONE
 Profile B interop            ████████████████░░░░  PARTIAL (trust sep. gap)
-Profile C interop            ████████████████████  DONE (state-hash semantics; Encoding B modes 006–008 TS-only)
-Profile C cross-language     ████████████████████  DONE (Go + Python state-hash semantics; Encoding B modes 006–008 TS-only)
+Profile C interop            ████████████████████  DONE (all 8 modes; Encoding B verified cross-language #120)
+Profile C cross-language     ████████████████████  DONE (Go + Python, all 8 Profile C modes including Encoding B)
 Replay durability            ████████████████░░░░  PARTIAL (in-memory default risk)
 Key rotation                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
 Threat model                 ██████████░░░░░░░░░░  DOCUMENTED ONLY
@@ -476,7 +476,7 @@ Caveats: transport-integrity gap is only fully closed when callers deploy `signe
 **P1-5: Mark HMAC-SHA256 as deprecated** ✓ RESOLVED
 Resolution: `authorization-v1.md §5` now carries an explicit "Deprecated legacy algorithm" section: HMAC-SHA256 is not standard, is symmetric/non-portable, and its migration path is documented. `legacyHmacSecret` in `VerifyAuthorizationOptions` carries a `@deprecated` JSDoc with removal notice. `authorization_signing_alg: "HMAC-SHA256"` default in `EngineOptions` carries a `@deprecated` JSDoc directing new users to Ed25519. Two explicit legacy-path tests document backward-compat guarantee and the fail-closed behavior when `legacyHmacSecret` is absent. Resolved in #107.
 
-**P1-6: Add cross-language Profile C and SignedKRLV1 conformance vectors** ✓ RESOLVED for Profile C state-hash semantics and SignedKRLV1 cross-language coverage (Go + Python). Profile C Encoding B modes 006–008 remain TypeScript-only and are tracked separately.
+**P1-6: Add cross-language Profile C and SignedKRLV1 conformance vectors** ✓ RESOLVED for all Profile C modes and SignedKRLV1 (Go + Python). #120 closed Profile C Encoding B modes 006–008 with independent Encoding B signature verification in Go and Python (no domain prefix; base64url; reusable `ed25519_utils.py` shared helper).
 
 Go coverage (#119 Go PR):
 - `go-harness/profile_c_verify.go` validates Profile C state-hash semantics modes 001–005 independently.
@@ -489,7 +489,7 @@ Python coverage (#119 Python PR):
 - Cross-language byte-equivalence proven: duplicate-kids signature `+mwEd2QP5+tx...` verifies identically in Go and Python.
 
 Residual limitations:
-- Profile C Encoding B modes 006–008 remain TypeScript-only (require AuthorizationV1 Encoding B infrastructure; tracked separately).
+- Profile C Encoding B modes 006–008: closed by #120 — Go and Python now independently verify Encoding B signatures (preimage = `canonicalJson(signingPayload)`, no domain prefix).
 - State provider trust (RT-TRUST-1, P2-4) and independent security review remain open.
 - No full standardization readiness claim.
 
@@ -528,7 +528,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 | `MISSING` | 5 |
 | `RISK` | 4 |
 
-**Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 25 Go harness assertions (11 canonicalization + 5 Profile C state-hash + 9 SignedKRLV1) + 25 Python harness assertions (same coverage as Go). All P0 and P1 items resolved; P1-6 cross-language coverage complete for state-hash semantics (Encoding B modes remain TS-only).
+**Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 28 Go harness assertions (11 canonicalization + 8 Profile C all modes + 9 SignedKRLV1) + 28 Python harness assertions (same coverage as Go). All P0 and P1 items resolved; P1-6 fully closed including Profile C Encoding B modes 006–008 (#120).
 
 **Follow-up issue counts:** P0: 0 open · P1: 0 open · P2: 4 · Total: 4 open
 
