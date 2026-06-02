@@ -62,3 +62,8 @@ export {
 export type { KrlWatermarkStore } from "./krlWatermarkStore.js";
 export { createInMemoryKrlWatermarkStore } from "./krlWatermarkStore.js";
 export { createFileBackedKrlWatermarkStore } from "./krlWatermarkStore.file.js";
+
+// Signed KRL cache (last-known-good cache for cold-start / fetch-failure resilience)
+export type { SignedKrlCache } from "./signedKrlCache.js";
+export { createInMemorySignedKrlCache } from "./signedKrlCache.js";
+export { createFileBackedSignedKrlCache } from "./signedKrlCache.file.js";

@@ -407,6 +407,54 @@ const store = new SiftHttpKeyStore({
 
 **Single-node / single-writer.** `createFileBackedKrlWatermarkStore` uses read-modify-write and is NOT safe for concurrent writes from multiple processes. Multi-node deployments should implement `KrlWatermarkStore` backed by a database with atomic compare-and-set.
 
+**Last-known-good (LKG) signed-KRL cache.** Opt-in cache that improves cold-start and fetch-failure resilience. When configured, `SiftHttpKeyStore` writes the signed KRL payload to the cache after every successful signed verification + durable watermark persistence. On subsequent fetch failures, the cache provides a fallback — but **only after full re-verification through `verifyKrl`**. A cached payload is never trusted without re-verification.
+
+```ts
+import {
+  SiftHttpKeyStore,
+  createFileBackedSignedKrlCache,
+  createFileBackedKrlWatermarkStore,
+} from "@oxdeai/sift";
+import { verifySignedKrl } from "@oxdeai/core";
+
+const store = new SiftHttpKeyStore({
+  jwksUrl, krlUrl,
+  krlMode: "signed_required",
+  verifyKrl: (payload, ctx) => {
+    const result = verifySignedKrl(payload, { trustedKeySets: myKrlKeys, ...ctx });
+    if (!result.ok) return result;
+    const krl = payload as { issuer: string; krl_version: number };
+    return { ...result, accepted: { issuer: krl.issuer, krl_version: krl.krl_version } };
+  },
+  krlWatermarkStore: createFileBackedKrlWatermarkStore("/var/app/krl-watermark.json"),
+  // Phase B: last-known-good cache
+  signedKrlCache: createFileBackedSignedKrlCache("/var/app/krl-lkg.json"),
+});
+```
+
+| Interface | Description |
+|-----------|-------------|
+| `SignedKrlCache` | Pluggable interface: `get()`, `set(payload, verifiedAt)` |
+| `createInMemorySignedKrlCache()` | In-process cache (lost on restart) |
+| `createFileBackedSignedKrlCache(path)` | Persistent single-node cache; atomic write |
+
+**Mode behavior:**
+- `signed_required` — valid LKG may be used after re-verification on fetch failure; invalid/expired/malformed LKG fails closed.
+- `signed_preferred` — LKG fallback attempted; if LKG is invalid or absent, preserves existing compatibility behavior.
+- `unsigned_legacy` — LKG is never read or written.
+
+**No constructor I/O.** LKG is never accessed at construction time. Cache access happens exclusively inside `refresh()`.
+
+**LKG is never trusted without re-verification.** Every load runs the payload through `verifyKrl` with the current `now` and the current persisted watermark before any `revoked_kids` derived from it enter the store.
+
+**LKG write sequencing.** Written only after signed verification succeeds AND watermark persistence succeeds. Unsigned fallback KRLs are never written to LKG.
+
+**LKG write failure is non-fatal.** After durable watermark persistence, a failing LKG write does not invalidate the accepted KRL. The failure is logged via `console.warn`.
+
+**Status fields:** `lkgCacheActive: boolean` (true when active `revokedKids` came from LKG), `lkgVerifiedAt?: number` (unix seconds of the LKG entry's `verifiedAt`). No payload, signature bytes, or key material is ever exposed in status.
+
+**Closing RT-TRUST-2.** The KRL transport-integrity gap is closeable for a given deployment when all three are configured: `signed_required` + `KrlWatermarkStore` + `SignedKrlCache`. Without all three, residual risks remain (see `docs/audits/protocol-audit-post-interoperability.md`).
+
 **Deprecation trajectory:**
 
 | Release | Change |
