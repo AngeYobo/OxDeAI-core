@@ -258,7 +258,7 @@ The following areas still have **no portable conformance vector**:
 | Both `expiry` and `expires_at` present simultaneously | ~~**Medium**~~ | ✓ Resolved: vector `auth-expiry-wins-over-expires-at` locks the precedence rule - `expiry` expired + `expires_at` valid → DENY/EXPIRED. Resolved in #106. |
 | Intent hash mismatch → DENY (cross-language) | ~~**Medium**~~ | ✓ Resolved: `authorization-v1.json` now includes `proposed_action` field enabling independent hash derivation. Portable ALLOW case `auth-intent-action-match-1` and `portable-key-1` fixture key added. Go/Python authorization harness integration remains a future item. Resolved in #105. |
 | Profile B trust separation vector | ~~**Medium**~~ | ✓ Resolved: `pb-trust-oxdeai-key-allow` proves OxDeAI key (in trustedKeySets) verifies correctly; `pb-trust-provider-key-rejected` proves provider receipt key absent from trustedKeySets returns DENY/UNKNOWN_KID. Resolved in #108. |
-| Profile C cross-language vectors | **Medium** | Profile C vectors are TypeScript-only. `computeStateHash` requires adapter integration. |
+| Profile C cross-language vectors | ~~**Medium**~~ | ✓ Resolved: Go and Python now validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification (`canonicalJson(signingPayload)`, no domain prefix). Resolved by #119 and #120. |
 | Replay TTL failure scenarios | **Low** | RT-1–RT-10 documented; none executable as portable conformance vectors. |
 | Malformed canonicalization (float, duplicate key) cross-language | **Low** | TypeScript unit tests exist. No cross-language conformance vectors for error cases. |
 | Clock skew behavior | ~~**Low**~~ | ✓ Resolved: strict zero-tolerance specified (`authorization-v1.md §17`) + 10 conformance vectors added. |
@@ -384,7 +384,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 - Key custody and rotation guide covers KC-1–KC-8 compromise scenarios.
 - No formal STRIDE analysis or independent cryptographic review.
 - KRL transport risk is a known open item.
-- State provider trust is a known open item.
+- State provider trust is specified with residual: minimum integrity requirements are defined in `docs/spec/state-provider-requirements.md` (#130), but deployment compliance remains operator responsibility. Non-compliant or compromised state providers retain RT-TRUST-1 risk.
 - No security advisory process defined.
 
 ### 7.6 Standard Adoption Readiness
@@ -542,7 +542,7 @@ Resolution: `docs/spec/state-provider-requirements.md` added. Defines minimum in
 5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved - portable `AuthorizationV1` vector added for `proposed_action` mismatch
 6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
 7. ~~HMAC-SHA256 deprecation (P1-5)~~ ✓ resolved - spec deprecation notice added; `@deprecated` JSDoc on `legacyHmacSecret` and `authorization_signing_alg`
-8. Cross-language Profile C vectors (P1-6)
+8. ~~Cross-language Profile C vectors (P1-6)~~ ✓ resolved — Go and Python validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification. Resolved by #119 and #120.
 
 **Protocol positioning:**
 
