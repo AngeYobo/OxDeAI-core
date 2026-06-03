@@ -187,9 +187,9 @@ A KRL (Key Revocation List) maintained by the provider records revoked `kid` val
 
 | Option | Integrity guarantee | Status |
 |--------|---------------------|--------|
-| `unsigned_legacy` | Transport security (HTTPS) only | **Deprecated** — emits `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)`; will be removed in a future release |
-| `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | **Transition mode** — not the permanent production posture; emits a once-per-instance `console.warn` when unsigned fallback is active |
-| `signed_required` | Cryptographic — `SignedKRLV1` verified via `verifySignedKrl` | **Production target** |
+| `unsigned_legacy` | Transport security (HTTPS) only | **Deprecated** - emits `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)`; will be removed in a future release |
+| `signed_preferred` with unsigned fallback | Transport security for unsigned KRLs; cryptographic for signed KRLs | **Transition mode** - not the permanent production posture; emits a once-per-instance `console.warn` when unsigned fallback is active |
+| `signed_required` | Cryptographic - `SignedKRLV1` verified via `verifySignedKrl` | **Production target** |
 
 **Migration.** `signed_required` is the production target. `signed_preferred` is a temporary migration bridge. `unsigned_legacy` is deprecated and will be removed. See `packages/sift/README.md` (Migration guide) for step-by-step migration instructions. Full RT-TRUST-2 closure requires `signed_required` + `verifyKrl` + `KrlWatermarkStore` + `SignedKrlCache`; compatibility modes retain residual transport-trust risk.
 
@@ -293,6 +293,8 @@ MISCONFIGURED (fail-closed, but blocks legitimate execution):
 The guard cannot detect whether a state_hash mismatch is due to actual state change or
 wrong hash strategy - both produce DENY. Deployers must ensure alignment.
 
+**Hash strategy alignment is necessary but not sufficient for Profile C compliance.** A deployment that correctly aligns `computeStateHash` but does not satisfy the minimum state provider integrity requirements defined in `docs/spec/state-provider-requirements.md` retains the RT-TRUST-1 residual risk: the guard verifies that the live state object hashes correctly against the authorization artifact, but cannot verify that the state provider is honest, current, or authoritative. State provider integrity requirements are minimum compliance for Profile C deployments.
+
 #### 2.3.4 Cross-language conformance
 
 Go and Python harnesses now validate **all 8 Profile C vectors** independently via
@@ -306,11 +308,11 @@ Go and Python harnesses now validate **all 8 Profile C vectors** independently v
 For Encoding B modes, each harness:
 1. Independently reconstructs the signing payload from the committed artifact
    (all fields + `signature.{alg,kid}`, excluding `signature.sig`)
-2. Computes `canonicalJson(signingPayload)` — no domain prefix (distinct from
+2. Computes `canonicalJson(signingPayload)` - no domain prefix (distinct from
    SignedKRLV1 which uses `OXDEAI_KRL_V1\n`)
 3. Verifies the Ed25519 signature (Go: `crypto/ed25519`; Python: `ctypes + libcrypto`)
 4. Cross-checks independently-computed `committedHash` against committed `auth.state_hash`
-   (byte-equivalence proof — any divergence is a harness canonicalization bug)
+   (byte-equivalence proof - any divergence is a harness canonicalization bug)
 5. Compares `liveHash` vs `committedHash` for the state-hash outcome
 
 No protocol semantics were changed. This is conformance coverage, not a runtime security change.

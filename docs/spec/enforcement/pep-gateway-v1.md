@@ -564,3 +564,23 @@ The specification MAY evolve into a multi-document standard:
 This separation would improve modularity, clarity, and independent evolution.
 
 ---
+
+## 27. State Provider Requirements
+
+### 27.1 Normative requirement
+
+Deployments using `OxDeAIGuard` with Profile C - live-state re-verification through `computeStateHash` - **MUST** satisfy the minimum state provider integrity requirements defined in `docs/spec/state-provider-requirements.md`.
+
+For Profile A/B deployments, these requirements are **best-practice guidance** unless the deployment introduces state-dependent enforcement equivalent to Profile C.
+
+### 27.2 Trust boundary
+
+`getState()` is trusted input to the guard. The PEP verifies:
+
+```
+computeStateHash(liveState) === authorization.state_hash
+```
+
+This proves hash consistency between the authorization artifact and the live state object. It does not prove that the state provider served honest state. See `docs/spec/state-provider-requirements.md §1` for the full trust boundary definition.
+
+---
