@@ -297,17 +297,17 @@ The following areas still have **no portable conformance vector**:
 | Sift KRL (Key Revocation List) | Trusted via HTTPS only | **High** | KRL payload is NOT cryptographically signature-verified. A compromised intermediary can omit revocations. Noted risk. |
 | PEP gateway (`OxDeAIGuard`) | Fully trusted; must be outside agent runtime | Low | Correctly positioned. Guard validates config at construction. |
 | Replay store | Trusted backend | Medium | In-memory default is not durable. Durable backends (Redis) are pluggable but not enforced. |
-| State provider (`getState()`) | Fully trusted | **High** | State is accepted without integrity verification. A compromised state provider can manufacture any `state_hash`. No integrity protocol exists for the state source. |
+| State provider (`getState()`) | Fully trusted | **High** | State is accepted without integrity verification. A compromised state provider can manufacture any `state_hash`. Minimum integrity requirements specified in `docs/spec/state-provider-requirements.md`; deployment compliance is operator responsibility. RT-TRUST-1 residual remains. |
 | Upstream executor (`execute()`) | Fully trusted | Low | By design. Guard decides admission; executor decides actuation. |
 | Offline verifier | No trust required | Low | `verifyAuthorization` is stateless. Can verify without network. |
 | External provider (full Profile C) | Trusted within adapter scope | Medium | `computeStateHash` strategy must match. Mismatch → deterministic fail-closed. Documented. |
 
 ### 5.3 Residual Trust Risks
 
-**RT-TRUST-1: State provider integrity**
-The state provider is unconditionally trusted. A compromised `getState()` implementation can return a state that produces a matching `state_hash` for an authorization, bypassing the semantic check. **No mitigation exists at the protocol layer.** Documented in `threat-model-external-providers.md` (T-8).
+**RT-TRUST-1: State provider integrity** *(SPECIFIED WITH RESIDUAL)*
+OxDeAI defines minimum state provider integrity requirements in `docs/spec/state-provider-requirements.md` (P2-4, #130). The protocol verifies state binding at the PEP: `computeStateHash(liveState) === authorization.state_hash`. This proves hash consistency between the authorization artifact and the live state object, but does not prove that the state provider served honest state. A compromised `getState()` implementation can still return manufactured state that produces a matching hash. **State-source compliance remains a deployment responsibility.** Non-compliant or compromised state providers retain the full RT-TRUST-1 risk. This specification moves the residual from "no requirements exist" to "requirements specified; deployment compliance is operator responsibility." RT-TRUST-1 is not closed.
 
-**RT-TRUST-2: KRL transport integrity** *(migration-tracked — closeable for deployments using signed_required + persistent stores)*
+**RT-TRUST-2: KRL transport integrity** *(migration-tracked - closeable for deployments using signed_required + persistent stores)*
 `SiftHttpKeyStore` supports three KRL integrity modes. `signed_required` closes the transport-integrity gap for deployments that configure it. **Phase A (#117):** persistent `KrlWatermarkStore` closes restart-and-replay downgrade window. **Phase B (#117):** `SignedKrlCache` LKG cache closes cold-start unrevoked window. **#116 v-next:** `unsigned_legacy` promoted to `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)` structured deprecation; `signed_preferred` unsigned fallback now emits once-per-instance `console.warn`; migration guide added to `packages/sift/README.md`. `RT-TRUST-2` is fully closeable when `signed_required` + `verifyKrl` + `KrlWatermarkStore` + `SignedKrlCache` are all configured. **Default path residual risk:** the current default (`signed_preferred`) retains transport-trust-only semantics for unsigned fallback cases. This will be resolved when the default flips to `signed_required` in a future breaking release (#116 v-after). `unsigned_legacy` is deprecated and will be removed in that same release. Full ecosystem closure depends on the v-after release timeline.
 
 **RT-TRUST-3: Replay store bootstrapping**
@@ -325,7 +325,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 | Redis replay store | `DONE` | Implemented, tested (`guard.replay-store.redis.test.ts`). |
 | Clock skew | `DONE` | Strict zero-tolerance specified (`authorization-v1.md §17`). `opts.now` injection required. NTP synchronization required; issuers build latency into expiry. Undefined behavior eliminated. |
 | Key rotation automation | `PARTIAL` | Manual procedures documented (dual-sign + TTL overlap). No automated rotation tooling. |
-| State-source integrity | `RISK` | See RT-TRUST-1. Protocol layer cannot verify state provider integrity. |
+| State-source integrity | `PARTIAL` | RT-TRUST-1 SPECIFIED WITH RESIDUAL. Minimum state provider integrity requirements defined in `docs/spec/state-provider-requirements.md` (P2-4). Protocol layer cannot enforce state-source compliance; deployment compliance is operator responsibility. Non-compliant providers retain the full residual risk. |
 | Monitoring / observability | `PARTIAL` | `onDecision` hook provides per-decision events. No structured event schema, no metrics contract, no alerting spec. |
 | Audit log durability | `PARTIAL` | `verifyAuditEvents` and `ReplayEngine` exist. Audit log persistence is caller responsibility. No storage spec. |
 | Network isolation of PEP | `PARTIAL` | `pep-production-guide.md` recommends isolation. No enforcement mechanism in the protocol. |
@@ -398,11 +398,11 @@ Prerequisites before external standard positioning:
 3. ~~Separate public `AuthorizationV1` artifact boundary from internal legacy shape~~ ✓ resolved - clean public artifact projection added; `DelegationV1` parent hashing no longer depends on internal legacy fields
 4. ~~Close intent hash mismatch portable vector gap~~ ✓ resolved - portable `AuthorizationV1` vector added with `proposed_action`
 5. ~~Close `expiry`/`expires_at` precedence vector gap~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
-6. Resolve or formally mitigate state provider trust risk
+6. ~~Resolve or formally mitigate state provider trust risk~~ ✓ Specified with residual - minimum requirements defined in `docs/spec/state-provider-requirements.md` (P2-4, #130). Deployment compliance is operator responsibility. RT-TRUST-1 remains a named residual; non-compliant deployments retain the full risk.
 7. Resolve or formally mitigate KRL transport integrity risk
 8. Independent security review
 9. Establish external feedback or co-author channel
-10. ~~Establish that execution-time authorization is a recognized architectural category~~ ✓ established — Meyman et al. (2026), "Execution-Time Authorization for AI Agents: A Formal Framework for Deterministic Governance Boundaries," DOI: 10.5281/zenodo.18764561 (CC-BY-4.0), formalizes the ETA framework independently. OxDeAI's convergent design maps to all six ETA §4 invariants. Alignment documented at `docs/standardization/execution-time-authorization-alignment.md`. This is external validation that the architectural category is recognized; it is not a claim that OxDeAI is standard-adoption-ready.
+10. ~~Establish that execution-time authorization is a recognized architectural category~~ ✓ established - Meyman et al. (2026), "Execution-Time Authorization for AI Agents: A Formal Framework for Deterministic Governance Boundaries," DOI: 10.5281/zenodo.18764561 (CC-BY-4.0), formalizes the ETA framework independently. OxDeAI's convergent design maps to all six ETA §4 invariants. Alignment documented at `docs/standardization/execution-time-authorization-alignment.md`. This is external validation that the architectural category is recognized; it is not a claim that OxDeAI is standard-adoption-ready.
 
 ---
 
@@ -490,8 +490,9 @@ Python coverage (#119 Python PR):
 - Cross-language byte-equivalence proven: duplicate-kids signature `+mwEd2QP5+tx...` verifies identically in Go and Python.
 
 Residual limitations:
-- Profile C Encoding B modes 006–008: closed by #120 — Go and Python now independently verify Encoding B signatures (preimage = `canonicalJson(signingPayload)`, no domain prefix).
-- State provider trust (RT-TRUST-1, P2-4) and independent security review remain open.
+- Profile C Encoding B modes 006–008: closed by #120 - Go and Python now independently verify Encoding B signatures (preimage = `canonicalJson(signingPayload)`, no domain prefix).
+- RT-TRUST-1 (state provider trust) is SPECIFIED WITH RESIDUAL - P2-4 resolved via spec, residual acknowledged.
+- Independent security review remains open.
 - No full standardization readiness claim.
 
 ---
@@ -510,9 +511,8 @@ Scope: New `replay-ttl-verification.json` vector set.
 Reason: `onDecision` hook exists but produces no specified schema. Observability tooling cannot be built reliably without a stable event format.
 Scope: `GuardDecisionRecord` type - finalize as a versioned schema; add to `pep-gateway-v1.md`.
 
-**P2-4: Specify state provider trust boundary**
-Reason: `getState()` is unconditionally trusted at the protocol layer. No minimum integrity requirements are specified for the state source. Specify access controls, CAS semantics, and audit expectations for compliant state provider implementations.
-Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
+**P2-4: Specify state provider trust boundary** ✓ SPECIFIED WITH RESIDUAL (#130)
+Resolution: `docs/spec/state-provider-requirements.md` added. Defines minimum integrity requirements covering: trust boundary and profile-specific applicability, read consistency and CAS requirements, state provenance, write access control, audit emission, replay/rollback expectations, compromise indicators, and compliance evidence. Pointer added to `pep-gateway-v1.md §27` and `external-provider-profile.md §2.3.3`. RT-TRUST-1 moves to SPECIFIED WITH RESIDUAL - not closed. The spec defines what compliant state providers must satisfy; deployment compliance remains operator responsibility. Non-compliant or compromised state providers retain the full RT-TRUST-1 residual risk.
 
 ---
 
@@ -523,15 +523,15 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 | Status | Count |
 |--------|-------|
 | `DONE` | 58 |
-| `PARTIAL` | 16 |
+| `PARTIAL` | 17 |
 | `SPECIFIED ONLY` | 5 |
 | `DOCUMENTED ONLY` | 6 |
 | `MISSING` | 5 |
-| `RISK` | 4 |
+| `RISK` | 3 |
 
-**Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 28 Go harness assertions (11 canonicalization + 8 Profile C all modes + 9 SignedKRLV1) + 28 Python harness assertions (same coverage as Go). All P0 and P1 items resolved; P1-6 fully closed including Profile C Encoding B modes 006–008 (#120).
+**Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 28 Go harness assertions (11 canonicalization + 8 Profile C all modes + 9 SignedKRLV1) + 28 Python harness assertions (same coverage as Go). All P0 and P1 items resolved; P1-6 fully closed including Profile C Encoding B modes 006–008 (#120). P2-4 specified with residual (#130).
 
-**Follow-up issue counts:** P0: 0 open · P1: 0 open · P2: 4 · Total: 4 open
+**Follow-up issue counts:** P0: 0 open · P1: 0 open · P2: 3 open (P2-4 specified) · Total: 3 open
 
 **Critical path to external adoption:**
 
@@ -548,7 +548,7 @@ Scope: `pep-gateway-v1.md` §7 or a new `state-provider-requirements.md`.
 
 OxDeAI is a working, tested execution authorization boundary protocol at the **interoperable protocol** maturity level. Core invariants are implemented and tested. AuthorizationV1, wire encodings, signature verification, replay protection, state binding, and delegation are all in solid shape. Profile A/B/C are specified; Profile A and C have executable conformance coverage.
 
-The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, expiry precedence, HMAC-SHA256 deprecation, KRL transport integrity (for `signed_required` mode deployments), and Profile C / SignedKRLV1 cross-language coverage (Go + Python) are now resolved. State provider trust (RT-TRUST-1) and independent security review remain open before that claim can be made honestly.
+The protocol is **not yet ready for standard adoption**. Key lifecycle, clock skew, parentScope type safety, public artifact boundary separation, intent hash mismatch portability, expiry precedence, HMAC-SHA256 deprecation, KRL transport integrity (for `signed_required` mode deployments), Profile C / SignedKRLV1 cross-language coverage (Go + Python), and state provider trust boundary (P2-4 specified with residual) have all been addressed. RT-TRUST-1 moves to SPECIFIED WITH RESIDUAL - minimum requirements defined, but deployment compliance is operator responsibility and non-compliant providers retain the full risk. Independent security review remains open before standard-adoption readiness can be claimed honestly.
 
 ---
 

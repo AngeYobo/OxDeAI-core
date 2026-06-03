@@ -2,7 +2,7 @@
 
 **Document type:** Standardization positioning artifact  
 **Status:** Working draft  
-**Scope:** Conceptual alignment mapping only — no protocol changes, no code changes, no conformance vector changes  
+**Scope:** Conceptual alignment mapping only - no protocol changes, no code changes, no conformance vector changes
 **Related audit:** `docs/audits/protocol-audit-post-interoperability.md`
 
 ---
@@ -38,7 +38,7 @@ The ETA framework formalizes a class of systems that enforce pre-execution autho
 | Invariant | Location | Core requirement |
 |-----------|----------|-----------------|
 | I1: Determinism | §3.2, §4.1 | Authorization outcomes are fully determined by inputs; identical inputs must produce identical outputs across implementations and executions |
-| I2: Fail-closed enforcement | §4.2 | Any verification failure or ambiguity produces non-execution — there is no path to execution through failure |
+| I2: Fail-closed enforcement | §4.2 | Any verification failure or ambiguity produces non-execution - there is no path to execution through failure |
 | I3: Non-bypassability | §4.3 | The enforcement boundary cannot be circumvented by actors within the agent runtime |
 | I4: Decision artifact completeness | §4.4 | The authorization decision is captured in a verifiable artifact that carries the full decision context |
 | I5: Replayability | §4.5 | Governance decisions are independently reproducible from committed evidence |
@@ -62,7 +62,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **AuthorizationV1 and signing domain prefixes** ([`docs/spec/artifacts/authorization-v1.md`](../spec/artifacts/authorization-v1.md)) bind each verification operation to a distinct domain (`OXDEAI_AUTH_V1\n`, `OXDEAI_DELEGATION_V1\n`, `OXDEAI_KRL_V1\n`) via `signatureInput()` in `packages/core/src/crypto/signatures.ts`. This prevents cross-artifact signature confusion without coordination between contexts.
 
-**The cross-language conformance suite** demonstrates that determinism holds across implementations. All three Encoding B Profile C vectors (modes 006–008) now have independent Go and Python verification (#120): the duplicate-kids SignedKRLV1 signature (`+mwEd2QP5+tx6pCKAiF8BKzMAHf1c28mcTQF575pDn/DwgRiJ+PkYnv+sasIdgj1S7E9mSZZK1pOTP43nlnsDA==`) serves as the cross-language byte-equivalence proof point — three independent implementations computing identical canonical bytes from the same input.
+**The cross-language conformance suite** demonstrates that determinism holds across implementations. All three Encoding B Profile C vectors (modes 006–008) now have independent Go and Python verification (#120): the duplicate-kids SignedKRLV1 signature (`+mwEd2QP5+tx6pCKAiF8BKzMAHf1c28mcTQF575pDn/DwgRiJ+PkYnv+sasIdgj1S7E9mSZZK1pOTP43nlnsDA==`) serves as the cross-language byte-equivalence proof point - three independent implementations computing identical canonical bytes from the same input.
 
 **Relevant conformance artifacts:** canonicalization vectors v1-object-key-ordering through i4-float-timestamp-rejected; authorization-sig-001 (Encoding A); authorization-sig-010 (Encoding B); profile-c-001 through profile-c-008; KRL_SIGNED_VALID through KRL_VERSION_REGRESSION (Go and Python).
 
@@ -82,7 +82,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **`signed_required` mode** closes the KRL transport-integrity gap: unsigned KRLs are rejected before `verifyKrl` is consulted (`KRL_UNSIGNED_IN_SIGNED_REQUIRED`), ensuring revocation data is never accepted via transport trust when the configuration mandates cryptographic verification.
 
-**Property tests** in `packages/guard/src/test/guard.pep-conformance.test.ts` (GPC-1 through GPC-11) explicitly verify that every failure mode — kill-switch DENY, invalid signature, audience mismatch, expiry, state hash mismatch, auth_id replay, CAS version conflict, missing auth artifact, missing required fields — blocks `execute()`, `setState()`, and `beforeExecute()`.
+**Property tests** in `packages/guard/src/test/guard.pep-conformance.test.ts` (GPC-1 through GPC-11) explicitly verify that every failure mode - kill-switch DENY, invalid signature, audience mismatch, expiry, state hash mismatch, auth_id replay, CAS version conflict, missing auth artifact, missing required fields - blocks `execute()`, `setState()`, and `beforeExecute()`.
 
 **Residual:** Fail-closed behavior is only as strong as the configuration. In `signed_preferred` mode with unsigned KRL fallback, the revocation data is transport-trusted rather than cryptographically verified. This is documented in `RT-TRUST-2` of the audit and explicitly surfaced in the status surface (`unsignedFallbackActive: true`, `DEP_OXDEAI_KRL_UNSIGNED_FALLBACK` warning). Callers who do not configure `signed_required` + `KrlWatermarkStore` + `SignedKrlCache` retain residual risk on the KRL path. The #116 v-next migration PR establishes the deprecation trajectory; the default flip to `signed_required` remains pending a versioned release.
 
@@ -94,7 +94,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **OxDeAI mechanisms:**
 
-**Guard placement.** `OxDeAIGuard` is a higher-order function that wraps `execute()`. The contract is structural: the guarded action is only reachable via the returned `guard(action, execute)` function, which enforces verification before forwarding. Agents within the OxDeAI execution boundary do not receive a direct reference to `execute()` — they receive the guarded closure. This is an architectural constraint, not a runtime check.
+**Guard placement.** `OxDeAIGuard` is a higher-order function that wraps `execute()`. The contract is structural: the guarded action is only reachable via the returned `guard(action, execute)` function, which enforces verification before forwarding. Agents within the OxDeAI execution boundary do not receive a direct reference to `execute()` - they receive the guarded closure. This is an architectural constraint, not a runtime check.
 
 **No bypass paths in the PEP.** The guard implementation in `guard.ts` has no escape hatch, no `trusted_caller` flag, and no backdoor that allows verification to be skipped. All 11 GPC conformance tests verify this under different failure conditions. Property test G1 (`engine DENY always prevents execute() and setState()`) and G5 (`successful ALLOW always calls setState() before execute()`) confirm the invariant holds across arbitrary `ProposedAction` inputs.
 
@@ -110,7 +110,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **OxDeAI mechanisms:**
 
-**AuthorizationV1** ([`docs/spec/artifacts/authorization-v1.md`](../spec/artifacts/authorization-v1.md)) is the primary decision artifact. It carries: `auth_id` (unique single-use identifier), `issuer`, `audience`, `intent_hash` (binds decision to the specific proposed action), `state_hash` (binds decision to the specific state snapshot at evaluation time), `policy_id`, `decision`, `issued_at`, `expiry`, `alg`, `kid`, and `signature`. The signed artifact is verifiable by any implementation with the correct `trustedKeySets` — no access to internal engine state is required.
+**AuthorizationV1** ([`docs/spec/artifacts/authorization-v1.md`](../spec/artifacts/authorization-v1.md)) is the primary decision artifact. It carries: `auth_id` (unique single-use identifier), `issuer`, `audience`, `intent_hash` (binds decision to the specific proposed action), `state_hash` (binds decision to the specific state snapshot at evaluation time), `policy_id`, `decision`, `issued_at`, `expiry`, `alg`, `kid`, and `signature`. The signed artifact is verifiable by any implementation with the correct `trustedKeySets` - no access to internal engine state is required.
 
 **`toPublicAuthorizationV1()`** ([`packages/core/src/verification/verifyAuthorization.ts`](../../packages/core/src/verification/verifyAuthorization.ts)) strips all engine-internal fields (`authorization_id`, `engine_signature`, `state_snapshot_hash`, `policy_version`, `expires_at`) from the signing and hashing surface, resolved in [P0-4](../audits/protocol-audit-post-interoperability.md). Independent implementations can reproduce the same hash and signature preimage without access to engine internals.
 
@@ -137,19 +137,19 @@ Attribution: the invariant names and section references above are drawn from the
 - Independently perform Ed25519 verification using platform-native crypto libraries
 - Independently compare results against committed expected verdicts
 
-**Byte-equivalence proof.** The `KRL_DUPLICATE_REVOKED_KIDS` vector signature (`+mwEd2QP5+tx...nlnsDA==`) and the Profile C mode 006–008 Encoding B artifact signature (`jMyip7h-GMgl2nV_q8Cz...JLThCA`) serve as concrete byte-equivalence proof points: three independent implementations (TypeScript, Go, Python) compute identical preimage bytes from identical inputs and verify identical signatures. This is not a claimed property — it is a mechanically verified fact with every run of `pnpm test:vectors:all`.
+**Byte-equivalence proof.** The `KRL_DUPLICATE_REVOKED_KIDS` vector signature (`+mwEd2QP5+tx...nlnsDA==`) and the Profile C mode 006–008 Encoding B artifact signature (`jMyip7h-GMgl2nV_q8Cz...JLThCA`) serve as concrete byte-equivalence proof points: three independent implementations (TypeScript, Go, Python) compute identical preimage bytes from identical inputs and verify identical signatures. This is not a claimed property - it is a mechanically verified fact with every run of `pnpm test:vectors:all`.
 
 **Cross-language harness assertion counts** as of #120: 209 TypeScript assertions, 28 Go assertions, 28 Python assertions, covering canonicalization, AuthorizationV1 verification, Profile C state-hash semantics, Profile C Encoding B, and SignedKRLV1.
 
 **Replayability of individual authorization decisions.** Any verifier holding the issuer's public key, the AuthorizationV1 artifact, and the proposed action can independently verify: signature validity, expiry, audience, issuer, intent hash binding, and (with the live state) state hash binding. The `verify-authorization-vectors.mjs` script demonstrates this for the portable authorization vectors.
 
-**Residual:** Replayability is verified for the cryptographic surfaces of AuthorizationV1. State provider behavior — whether the `state_hash` committed in an authorization accurately represents the state that was presented — is not verifiable from the artifact alone. This is the RT-TRUST-1 residual.
+**Residual:** Replayability is verified for the cryptographic surfaces of AuthorizationV1. State provider behavior - whether the `state_hash` committed in an authorization accurately represents the state that was presented - is not verifiable from the artifact alone. This is the RT-TRUST-1 residual.
 
 ---
 
 ### 3.6 I6: Time-Bounded Evaluation Without Fail-Open (ETA §4.6)
 
-**ETA requirement:** Evaluation is bounded in time. When an authorization's validity window expires, execution is blocked — there is no grace period, no implicit extension, and no silent fallthrough.
+**ETA requirement:** Evaluation is bounded in time. When an authorization's validity window expires, execution is blocked - there is no grace period, no implicit extension, and no silent fallthrough.
 
 **OxDeAI mechanisms:**
 
@@ -167,7 +167,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 ### 4.1 OxDeAI's binary gate
 
-OxDeAI v1 uses a binary execution gate. `AuthorizationV1.decision` is either `"ALLOW"` or excluded from the execution path entirely. A non-ALLOW outcome — including invalid artifacts, expired artifacts, audience mismatch, signature failure, state hash mismatch, or replay detection — produces `OxDeAIAuthorizationError` or `OxDeAIDenyError` before `execute()` is reached. There is no `"ABSTAIN"` verdict in `AuthorizationV1` v1.
+OxDeAI v1 uses a binary execution gate. `AuthorizationV1.decision` is either `"ALLOW"` or excluded from the execution path entirely. A non-ALLOW outcome - including invalid artifacts, expired artifacts, audience mismatch, signature failure, state hash mismatch, or replay detection - produces `OxDeAIAuthorizationError` or `OxDeAIDenyError` before `execute()` is reached. There is no `"ABSTAIN"` verdict in `AuthorizationV1` v1.
 
 ### 4.2 Why ABSTAIN is not a first-class protocol verdict in v1
 
@@ -177,13 +177,13 @@ OxDeAI deliberately separates two concerns that ABSTAIN would conflate:
 
 **Decision authority** belongs to the protocol layer. The PEP says ALLOW or non-ALLOW; that verdict is deterministic, bounded, and verifiable. Introducing ABSTAIN at the protocol level would make the authorization verdict non-deterministic in a way that cannot be mechanically tested: whether a given input produces ABSTAIN or a binary outcome becomes a function of policy state that varies by deployment.
 
-**Workflow continuation** belongs to the orchestration layer above the PEP. What happens when the PEP says no — whether the action is terminally refused, escalated to a human, retried with narrowed parameters, queued for out-of-band review, or delegated to a different agent — is an orchestration decision. OxDeAI does not prescribe orchestration behavior; it provides a reliable ALLOW/non-ALLOW signal that orchestration systems can act on.
+**Workflow continuation** belongs to the orchestration layer above the PEP. What happens when the PEP says no - whether the action is terminally refused, escalated to a human, retried with narrowed parameters, queued for out-of-band review, or delegated to a different agent - is an orchestration decision. OxDeAI does not prescribe orchestration behavior; it provides a reliable ALLOW/non-ALLOW signal that orchestration systems can act on.
 
-This separation keeps AuthorizationV1's semantics narrow, decidable, and independently verifiable. It is consistent with the ETA framework's requirement that enforcement boundaries be non-bypassable: a first-class ABSTAIN verdict, if improperly handled by an orchestration layer, could create a path to execution through unresolved authorization — precisely the failure mode I2 (fail-closed enforcement) is designed to prevent.
+This separation keeps AuthorizationV1's semantics narrow, decidable, and independently verifiable. It is consistent with the ETA framework's requirement that enforcement boundaries be non-bypassable: a first-class ABSTAIN verdict, if improperly handled by an orchestration layer, could create a path to execution through unresolved authorization - precisely the failure mode I2 (fail-closed enforcement) is designed to prevent.
 
 ### 4.3 ABSTAIN at the orchestration layer
 
-ABSTAIN-with-escalation is not precluded; it is simply out of scope for the protocol layer. An orchestration system consuming OxDeAI can implement any escalation behavior it chooses when it receives a non-ALLOW signal from the guard. The protocol makes no assumption about what the orchestration layer does with that signal — it only guarantees that execution did not occur.
+ABSTAIN-with-escalation is not precluded; it is simply out of scope for the protocol layer. An orchestration system consuming OxDeAI can implement any escalation behavior it chooses when it receives a non-ALLOW signal from the guard. The protocol makes no assumption about what the orchestration layer does with that signal - it only guarantees that execution did not occur.
 
 Future versions of the protocol may revisit this separation if escalation patterns prove to need first-class protocol support (e.g., multi-round authorization workflows, federated delegation with escalation paths). This is acknowledged as a potential future direction, not a current gap.
 
@@ -240,9 +240,9 @@ Issue #122 establishes the following pattern for attaching external observabilit
 
 External systems may attach metadata that audits, explains, or annotates agent behavior, provided that metadata:
 
-1. Is cryptographically isolated from `AuthorizationV1` — it does not appear in `intent_hash`, `state_hash`, or any field that influences the PEP's ALLOW/non-ALLOW decision
-2. Does not influence PEP enforcement — the guard's verification pipeline is not conditioned on the presence or content of the external metadata
-3. Follows its own versioned canonicalization, separate from canonicalization-v1 — external metadata schemas evolve independently without affecting the protocol's verification surfaces
+1. Is cryptographically isolated from `AuthorizationV1` - it does not appear in `intent_hash`, `state_hash`, or any field that influences the PEP's ALLOW/non-ALLOW decision
+2. Does not influence PEP enforcement - the guard's verification pipeline is not conditioned on the presence or content of the external metadata
+3. Follows its own versioned canonicalization, separate from canonicalization-v1 - external metadata schemas evolve independently without affecting the protocol's verification surfaces
 
 This pattern allows rich external observability (routing evidence, provenance attestations, cost attribution metadata) without creating a side-channel through which external actors could influence authorization outcomes. The metadata is evidence; the `AuthorizationV1` is authority.
 
@@ -258,21 +258,23 @@ The ETA paper (§10) identifies open research directions. OxDeAI has concrete ex
 
 **ETA framing:** How should authorization policies be composed across multiple policy engines, organizational boundaries, and trust contexts?
 
-**OxDeAI residual:** P2-4 (Specify state provider trust boundary) and RT-TRUST-1 (State provider integrity) in `docs/audits/protocol-audit-post-interoperability.md`.
+**OxDeAI status:** P2-4 ✓ SPECIFIED WITH RESIDUAL (#130). RT-TRUST-1 moves from RISK to SPECIFIED WITH RESIDUAL.
 
-`getState()` in `OxDeAIGuardConfig` is unconditionally trusted at the protocol layer. A compromised state provider can return a state that produces a matching `state_hash` for an authorization, bypassing the semantic check. No integrity protocol exists for the state source at the protocol layer.
+`docs/spec/state-provider-requirements.md` defines minimum integrity requirements for compliant OxDeAI state providers: read consistency and CAS semantics, state provenance, write access control, audit emission, replay/rollback expectations, compromise indicators, and compliance evidence. Pointers added to `pep-gateway-v1.md §27` and `external-provider-profile.md §2.3.3`.
 
-This is the concrete instantiation of ETA §10.1 policy composability: when authorization spans multiple components (the policy engine, the state provider, the PEP), the integrity of the overall authorization chain depends on the integrity of each component. OxDeAI has closed the boundary at the PEP and policy engine layers; the state provider boundary is a known open residual that requires a separate spec effort to close. This is not a protocol weakness that can be fixed with a one-liner — it requires a principled specification of minimum state provider integrity requirements, which is the scope of P2-4.
+The state provider boundary remains open as a named residual: **OxDeAI defines minimum requirements; the protocol cannot enforce state-source compliance at the wire level.** A compromised state provider that satisfies no requirement in the spec can still return manufactured state that produces a matching `state_hash`. `getState()` remains trusted input to the guard. Deployment compliance is operator responsibility.
+
+This is the concrete instantiation of ETA §10.1 policy composability: when authorization spans multiple components (the policy engine, the state provider, the PEP), the integrity of the overall authorization chain depends on the integrity of each component. OxDeAI has closed the boundary at the PEP and policy engine layers and has now specified what the state provider boundary must satisfy. The residual is bounded; it is not closed.
 
 ### 7.2 Cross-domain authorization (ETA §10.2)
 
 **ETA framing:** How should authorization be extended across organizational trust boundaries?
 
-**OxDeAI coverage:** Profile B ([`docs/spec/interoperability/external-provider-profile.md`](../spec/interoperability/external-provider-profile.md)) establishes the adapter trust model: an external provider (e.g., Sift) signs a receipt with its own key; the adapter re-signs an `AuthorizationV1` with an OxDeAI key from `trustedKeySets`. The external provider receipt key and the OxDeAI signing key are distinct trust domains — the cross-domain boundary is explicit and cryptographically enforced.
+**OxDeAI coverage:** Profile B ([`docs/spec/interoperability/external-provider-profile.md`](../spec/interoperability/external-provider-profile.md)) establishes the adapter trust model: an external provider (e.g., Sift) signs a receipt with its own key; the adapter re-signs an `AuthorizationV1` with an OxDeAI key from `trustedKeySets`. The external provider receipt key and the OxDeAI signing key are distinct trust domains - the cross-domain boundary is explicit and cryptographically enforced.
 
 DelegationV1 handles intra-agent cross-domain cases: a parent agent's authority can be narrowed and delegated to a child agent with explicit scope constraints, policy binding, and expiry enforcement.
 
-**Residual:** Full cross-organizational federation — where multiple independent policy engines from different organizations share a single execution boundary — is not in scope for v1. Profile B handles the specific case of an external governance layer (Sift) delegating to the OxDeAI enforcement layer; it does not handle arbitrary organizational federation.
+**Residual:** Full cross-organizational federation - where multiple independent policy engines from different organizations share a single execution boundary - is not in scope for v1. Profile B handles the specific case of an external governance layer (Sift) delegating to the OxDeAI enforcement layer; it does not handle arbitrary organizational federation.
 
 ### 7.3 Formal verification (ETA §10.4)
 
@@ -290,7 +292,7 @@ Out of scope for v1. OxDeAI operates at the TypeScript/Node.js layer. Non-bypass
 
 ## 8. Independent-Development Statement
 
-OxDeAI's core architecture — canonicalization-v1, AuthorizationV1, the PEP boundary and OxDeAIGuard implementation, DelegationV1, SignedKRLV1, the cross-language conformance vector suite (TypeScript, Go, Python), and the Sift/Profile B integration — was developed independently of the Meyman ETA paper and predates its February 2026 publication.
+OxDeAI's core architecture - canonicalization-v1, AuthorizationV1, the PEP boundary and OxDeAIGuard implementation, DelegationV1, SignedKRLV1, the cross-language conformance vector suite (TypeScript, Go, Python), and the Sift/Profile B integration - was developed independently of the Meyman ETA paper and predates its February 2026 publication.
 
 The alignment described in this document is **convergent design**: two independent efforts arriving at structurally similar conclusions because the underlying problem (deterministic pre-execution authorization for AI agents) constrains the solution space. Systems that must enforce a verifiable, non-bypassable, fail-closed boundary between agent decision-making and action execution are led by the problem structure toward similar architectural choices: canonical serialization, signed decision artifacts, replay protection, time-bounded validity, independent verifiability.
 
@@ -305,16 +307,16 @@ No FERZ-specific system names (LASO, DELIA, 4TS, Type-Level Policy Encoding) are
 ### What this alignment supports
 
 - OxDeAI can be accurately described as **an execution-time authorization system**, in the sense developed by Meyman et al. (2026) and consistent with prior work in the field
-- The six ETA invariants provide a vocabulary for describing OxDeAI's design choices to external audiences — policy makers, procurement, integrators — who may be familiar with the ETA framework or adjacent governance literature
+- The six ETA invariants provide a vocabulary for describing OxDeAI's design choices to external audiences - policy makers, procurement, integrators - who may be familiar with the ETA framework or adjacent governance literature
 - Cross-language independent verification (Go + Python) of all 8 Profile C modes and 9 SignedKRLV1 vectors provides external evidence of the determinism and replayability invariants that goes beyond self-attestation
 - The convergent independent design is itself a validation signal that the invariants OxDeAI implements are structurally necessary for the problem, not arbitrary design choices
 
 ### What this alignment does not claim
 
-- **Full standardization readiness.** The audit (`docs/audits/protocol-audit-post-interoperability.md §7.6`) marks this NOT READY. State provider trust (RT-TRUST-1), independent security review, and a formal external feedback channel remain prerequisites.
+- **Full standardization readiness.** The audit (`docs/audits/protocol-audit-post-interoperability.md §7.6`) marks this NOT READY. RT-TRUST-1 is now SPECIFIED WITH RESIDUAL - minimum requirements defined, deployment compliance is operator responsibility. Independent security review and a formal external feedback channel remain open prerequisites.
 - **Conformance with the ETA framework.** No formal conformance process exists. This document is a mapping artifact, not a certification.
-- **Closure of the open problems in ETA §10.** Policy composability (RT-TRUST-1 / P2-4), cross-domain federation beyond Profile B, formal verification, semantic stability, and hardware-bound enforcement all remain open.
-- **Resolution of audit residuals.** The residuals enumerated in §3 of this document (unsigned fallback KRL, state provider trust, independent security review) remain open. This document does not change those.
+- **Closure of the open problems in ETA §10.** Policy composability (ETA §10.1) is partially addressed: P2-4 is specified with residual; the state provider boundary is bounded, not closed. Cross-domain federation beyond Profile B, formal verification, semantic stability, and hardware-bound enforcement all remain open.
+- **Resolution of audit residuals.** State provider trust (RT-TRUST-1) moves from RISK to SPECIFIED WITH RESIDUAL (#130). KRL unsigned fallback risk and independent security review remain open. The ETA alignment mapping in §3 accurately describes residuals; this document does not retroactively close them.
 - **Any claim of regulatory compliance or legal certification.** This is a technical mapping document.
 
 ### Re-read commitment
@@ -323,4 +325,4 @@ Per the acceptance criteria for this document, it should be re-read with at leas
 
 ---
 
-*This document was added alongside the completion of Profile C Encoding B cross-language conformance coverage (#120). It should be revisited when RT-TRUST-1 / P2-4 is addressed and when an independent security review is commissioned.*
+*This document was added alongside the completion of Profile C Encoding B cross-language conformance coverage (#120). RT-TRUST-1 / P2-4 was addressed in #130 (state provider trust boundary specified with residual). This document should be revisited when an independent security review is commissioned.*
