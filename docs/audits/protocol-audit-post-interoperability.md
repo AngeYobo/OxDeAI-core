@@ -402,6 +402,7 @@ Prerequisites before external standard positioning:
 7. Resolve or formally mitigate KRL transport integrity risk
 8. Independent security review
 9. Establish external feedback or co-author channel
+10. ~~Establish that execution-time authorization is a recognized architectural category~~ ✓ established — Meyman et al. (2026), "Execution-Time Authorization for AI Agents: A Formal Framework for Deterministic Governance Boundaries," DOI: 10.5281/zenodo.18764561 (CC-BY-4.0), formalizes the ETA framework independently. OxDeAI's convergent design maps to all six ETA §4 invariants. Alignment documented at `docs/standardization/execution-time-authorization-alignment.md`. This is external validation that the architectural category is recognized; it is not a claim that OxDeAI is standard-adoption-ready.
 
 ---
 
