@@ -226,7 +226,10 @@
 
 ## 4. Conformance Coverage Audit
 
-**Current total:** 181 assertions across 15 vector files.
+**Current total:** 265 assertions:
+- 209 TypeScript conformance assertions
+- 28 Go harness assertions (11 canonicalization + 8 Profile C all modes + 9 SignedKRLV1)
+- 28 Python harness assertions (same coverage as Go)
 
 ### 4.1 Covered Areas
 
@@ -236,10 +239,11 @@
 | `authorization-payload.json` | 9 | Payload field checks, expiry, canonical signing payload, signature |
 | `authorization-verification.json` | 20 | Field validation, expiry, audience, replay, Encoding B structural |
 | `authorization-signature-verification.json` | 24 | Encoding A/B, tamper, wrong kid, audience, replay, alg rejection |
+| `clock-semantics-verification.json` | 10 | Clock skew zero-tolerance: last-valid-second, one-past-expiry, verifier-clock-behind, Encoding B time variants |
 | `snapshot-hash.json` | 5 | State snapshot hash computation |
-| `audit-chain.json` | 7 | Audit chain hash integrity |
+| `audit-chain.json` | 8 | Audit chain hash integrity |
 | `audit-verification.json` | 10 | Audit event verification |
-| `envelope-verification.json` | 9 | Envelope structural checks |
+| `envelope-verification.json` | 13 | Envelope structural checks, policy ID, state hash, audit head hash |
 | `envelope-signature-verification.json` | 10 | Envelope Ed25519 signature path |
 | `delegation-parent-hash.json` | 3 | SHA256 of canonical auth, key-order invariance |
 | `delegation-verification.json` | 18 | Delegation field checks, scope, replay, trust |
@@ -247,6 +251,7 @@
 | `delegation-signature-verification.json` | 10 | Delegation Ed25519 path |
 | `key-lifecycle-verification.json` | 20 | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection |
 | `profile-c-state-verification.json` | 12 | Semantic state verification, strategies, TOCTOU, Encoding B |
+| `signed-krl-verification.json` | 18 | SignedKRLV1 validity, signature, expiry, malformed, duplicate kids, unknown kid, inactive key, unsupported alg, version regression |
 
 ### 4.2 Missing or Weak Coverage
 
@@ -337,7 +342,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 ### 7.1 External Implementer Readiness
 
-**Status: PARTIAL**
+**Status: PARTIAL** — Status remains PARTIAL because external implementer readiness still depends on independent security review and establishing an external feedback / co-author channel. Profile C cross-language coverage is no longer the blocker; it was resolved by #119 and #120.
 
 - `AuthorizationV1` is well-specified and has cross-language conformance vectors (Go harness).
 - Canonicalization-v1 is fully specified with cross-language vectors.

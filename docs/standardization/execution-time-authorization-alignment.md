@@ -137,7 +137,7 @@ Attribution: the invariant names and section references above are drawn from the
 - Independently perform Ed25519 verification using platform-native crypto libraries
 - Independently compare results against committed expected verdicts
 
-**Byte-equivalence proof.** The `KRL_DUPLICATE_REVOKED_KIDS` vector signature (`+mwEd2QP5+tx...nlnsDA==`) and the Profile C mode 006–008 Encoding B artifact signature (`jMyip7h-GMgl2nV_q8Cz...JLThCA`) serve as concrete byte-equivalence proof points: three independent implementations (TypeScript, Go, Python) compute identical preimage bytes from identical inputs and verify identical signatures. This is not a claimed property - it is a mechanically verified fact with every run of `pnpm test:vectors:all`.
+**Byte-equivalence proof.** The `KRL_DUPLICATE_REVOKED_KIDS` vector signature (`+mwEd2QP5+tx6pCKAiF8BKzMAHf1c28mcTQF575pDn/DwgRiJ+PkYnv+sasIdgj1S7E9mSZZK1pOTP43nlnsDA==`) and the Profile C mode 006–008 Encoding B artifact signature (`jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA`) serve as concrete byte-equivalence proof points: three independent implementations (TypeScript, Go, Python) compute identical preimage bytes from identical inputs and verify identical signatures. This is not a claimed property - it is a mechanically verified fact with every run of `pnpm test:vectors:all`.
 
 **Cross-language harness assertion counts** as of #120: 209 TypeScript assertions, 28 Go assertions, 28 Python assertions, covering canonicalization, AuthorizationV1 verification, Profile C state-hash semantics, Profile C Encoding B, and SignedKRLV1.
 
