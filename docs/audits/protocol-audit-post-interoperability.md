@@ -1,6 +1,6 @@
 # Protocol Audit - Post-Interoperability Hardening
 
-**Date:** 2026-06-02
+**Date:** 2026-06-04
 **Scope:** OxDeAI execution authorization boundary protocol, after completion of the external-provider interoperability hardening sequence
 **Auditor:** Internal protocol audit (Ange)
 **Protocol invariant under audit:**
@@ -214,8 +214,8 @@
 | Expired authorization → DENY | Yes | Yes | Yes | Yes | Yes (conformance vector AUTH_EXPIRED) |
 | Replay → DENY | Yes | Yes | Yes | Yes | **Partial** (conformance vector AUTH_REPLAY; durable store semantics not cross-language verified) |
 | Intent mismatch → DENY | Yes | Yes | Yes (portable `authorization-v1.json` vector with `proposed_action`) | Yes | **Partial** (portable vector with independent hash derivation; Go/Python auth harness not yet integrated) |
-| State mismatch → DENY | Yes | Yes | Profile C spec | Yes | **No** (Profile C vectors TypeScript-only) |
-| Hash strategy ambiguity → DENY | Yes | Yes (SB-12, PC-003) | Yes (Profile C spec) | Yes | **No** (TypeScript-only) |
+| State mismatch → DENY | Yes | Yes | Profile C spec | Yes | Yes (#119/#120; Go + Python validate all 8 Profile C vectors) |
+| Hash strategy ambiguity → DENY | Yes | Yes (SB-12, PC-003) | Yes (Profile C spec) | Yes | Yes (#119/#120; Go + Python validate all 8 Profile C vectors) |
 | Replay-store unavailability → DENY | Yes | Yes (guard test) | Yes (ReplayStore JSDoc) | Yes | **No** (no cross-language conformance vector) |
 | Provider ambiguity → DENY | Yes | Partial | Yes (Profile C spec) | Yes (threat model) | **No** (TypeScript-only) |
 | Revoked key → DENY | Yes (`keyIsActiveAt`) | Yes (`key-lifecycle-002`, `key-lifecycle-009`) | Yes (key-lifecycle vectors) | Yes (key-custody doc) | Yes (portable vector) |
@@ -344,8 +344,8 @@ New deployments start with an empty replay store. Authorization artifacts issued
 - `DelegationV1` has cross-language vectors.
 - ~~**Gap:** Key lifecycle (`revoked`, `not_before`, `not_after`) has no portable conformance vectors.~~ ✓ resolved - `key-lifecycle-verification.json` added (P0-1).
 - ~~**Gap:** Intent hash mismatch has no cross-language vector.~~ ✓ resolved - portable `authorization-v1.json` vector with `proposed_action` added (P1-1).
-- **Gap:** State hash mismatch has no cross-language vector.
-- **Gap:** Profile C is TypeScript-only; `computeStateHash` integration requires external harness work.
+- ~~**Gap:** State hash mismatch has no cross-language vector.~~ ✓ Resolved - Go and Python validate all 8 Profile C vectors, including hash-strategy-mismatch (modes 003 and 008). Resolved by #119 and #120.
+- ~~**Gap:** Profile C is TypeScript-only; `computeStateHash` integration requires external harness work.~~ ✓ Resolved - Go and Python harnesses independently verify Profile C state-hash semantics and Encoding B modes. Resolved by #119 and #120.
 
 ### 7.2 Independent Verifier Readiness
 
@@ -361,20 +361,20 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 **Status: PARTIAL**
 
-191 assertions across 15 vector files + 10 portable `authorization-v1.json` vectors. Key lifecycle, intent hash mismatch, and expiry precedence coverage resolved. Remaining gaps:
+209 TypeScript assertions + 28 Go harness assertions (11 canonicalization + 8 Profile C + 9 SignedKRLV1) + 28 Python harness assertions (same coverage as Go). All prior gaps resolved.
 
 1. ~~Key lifecycle vectors (revoked, not_before, not_after)~~ ✓ resolved - `key-lifecycle-verification.json`
 2. ~~Intent hash mismatch portable vector~~ ✓ resolved - `authorization-v1.json` vectors include `proposed_action` mismatch case and portable ALLOW case; Go/Python auth harness integration is a future item
 3. ~~`expiry`/`expires_at` simultaneous presence precedence vector~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
-4. Cross-language Profile C vectors - important for Profile C adoption
+4. ~~Cross-language Profile C vectors~~ ✓ resolved - Go and Python validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification. Resolved by #119 and #120.
 
 ### 7.4 Interoperability Profile Readiness
 
-**Status: READY (Profile A/B), PARTIAL (Profile C)**
+**Status: READY (Profile A/B/C)**
 
 - Profile A: fully specified, conformance covered.
 - Profile B: specified, Encoding B conformance covered, trust separation vectorized (`pb-trust-oxdeai-key-allow`, `pb-trust-provider-key-rejected`). Resolved in #108.
-- Profile C: specified, 12 executable assertions. Cross-language portability requires additional harness work.
+- Profile C: specified, 12 TypeScript executable conformance assertions. Go and Python harnesses validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification (`canonicalJson(signingPayload)`, no domain prefix). Resolved by #119 and #120.
 
 ### 7.5 Security Review Readiness
 
@@ -522,12 +522,12 @@ Resolution: `docs/spec/state-provider-requirements.md` added. Defines minimum in
 
 | Status | Count |
 |--------|-------|
-| `DONE` | 58 |
-| `PARTIAL` | 17 |
-| `SPECIFIED ONLY` | 5 |
-| `DOCUMENTED ONLY` | 6 |
-| `MISSING` | 5 |
-| `RISK` | 3 |
+| `DONE` | 74 |
+| `PARTIAL` | 11 |
+| `SPECIFIED ONLY` | 1 |
+| `DOCUMENTED ONLY` | 5 |
+| `MISSING` | 4 |
+| `RISK` | 4 |
 
 **Conformance:** 209 TypeScript assertions (16 TS vector files + 12 portable `authorization-v1.json` vectors) + 28 Go harness assertions (11 canonicalization + 8 Profile C all modes + 9 SignedKRLV1) + 28 Python harness assertions (same coverage as Go). All P0 and P1 items resolved; P1-6 fully closed including Profile C Encoding B modes 006–008 (#120). P2-4 specified with residual (#130).
 
@@ -542,7 +542,7 @@ Resolution: `docs/spec/state-provider-requirements.md` added. Defines minimum in
 5. ~~Intent hash mismatch portable vector (P1-1)~~ ✓ resolved - portable `AuthorizationV1` vector added for `proposed_action` mismatch
 6. ~~`expiry`/`expires_at` precedence vector (P1-2)~~ ✓ resolved - `auth-expiry-wins-over-expires-at` vector locks precedence rule
 7. ~~HMAC-SHA256 deprecation (P1-5)~~ ✓ resolved - spec deprecation notice added; `@deprecated` JSDoc on `legacyHmacSecret` and `authorization_signing_alg`
-8. ~~Cross-language Profile C vectors (P1-6)~~ ✓ resolved — Go and Python validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification. Resolved by #119 and #120.
+8. ~~Cross-language Profile C vectors (P1-6)~~ ✓ resolved - Go and Python validate all 8 Profile C vectors, including Encoding B modes 006–008 with independent Ed25519 signature verification. Resolved by #119 and #120.
 
 **Protocol positioning:**
 
@@ -552,4 +552,4 @@ The protocol is **not yet ready for standard adoption**. Key lifecycle, clock sk
 
 ---
 
-*This document reflects the protocol state as of 2026-06-02. It should be revisited after each significant milestone.*
+*This document reflects the protocol state as of 2026-06-04. It should be revisited after each significant milestone.*
