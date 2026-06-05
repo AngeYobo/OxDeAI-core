@@ -248,11 +248,45 @@ pnpm install
 pnpm build
 
 export OXDEAI_ENGINE_SECRET='test-secret-must-be-at-least-32-chars!!'
-pnpm -C examples/openclaw start
+pnpm -C examples/execution-boundary-demo terminal
+````
+
+Expected result:
+
+```text
+first proposal: ALLOW · executed
+retry proposal: DENY · state inconsistent · blocked before execution
+```
+
+This demo shows state-dependent authorization:
+
+```text
+same intent
+same tool
+same agent
+state changed
+→ DENY before execution
+```
 
 ---
 
-Runs an OpenClaw agent with enforced execution authorization.
+## Additional Example
+
+```bash
+export OXDEAI_ENGINE_SECRET='test-secret-must-be-at-least-32-chars!!'
+pnpm -C examples/openclaw start
+```
+
+Expected result:
+
+```text
+decision 1: ALLOW
+decision 2: ALLOW
+decision 3: DENY
+verifyEnvelope() => ok
+```
+
+This runs an OpenClaw agent with enforced execution authorization.
 
 ## Delegated Authorization
 
