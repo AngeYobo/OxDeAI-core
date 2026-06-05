@@ -23,7 +23,7 @@
 
 import type { AuthorizationV1, State } from "@oxdeai/core";
 import { OxDeAIGuard, OxDeAIDenyError } from "@oxdeai/guard";
-import { engine, makeState, buildChargeIntent, AGENT_ID, WALLET_START } from "./policy.js";
+import { engine, makeState, buildChargeIntent, AGENT_ID, TRUSTED_KEYSETS, WALLET_START } from "./policy.js";
 
 // ── Step types ────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     getState: () => ({ state, version: 0 }),
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_ID,
+    trustedKeySets: TRUSTED_KEYSETS,
     // chargeIntent is identical for both calls — only state differs
     mapActionToIntent: () => chargeIntent,
     beforeExecute(_action: unknown, authorization: AuthorizationV1) {
@@ -171,6 +172,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     getState: () => ({ state, version: 0 }),
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_ID,
+    trustedKeySets: TRUSTED_KEYSETS,
     mapActionToIntent: () => chargeIntent,
     beforeExecute() {
       secondDecision = "ALLOW"; // should not be reached

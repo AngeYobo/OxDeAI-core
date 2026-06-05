@@ -7,13 +7,36 @@
  * on the allowlist — only the execution state changes between evaluations.
  */
 
+import { generateKeyPairSync } from "node:crypto";
 import { PolicyEngine } from "@oxdeai/core";
-import type { Intent, State } from "@oxdeai/core";
+import type { Intent, KeySet, State } from "@oxdeai/core";
 
 export const POLICY_ID =
   "demo-execution-boundary-0000000000000000000000000000000000000000000000";
 
 export const AGENT_ID = "payment-agent-1";
+
+export const AUTH_ISSUER = "execution-boundary-demo-issuer";
+export const AUTH_KID = "execution-boundary-demo-k1";
+
+const DEMO_AUTH_KEYPAIR = generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { format: "pem", type: "pkcs8" },
+  publicKeyEncoding: { format: "pem", type: "spki" },
+});
+
+export const TRUSTED_KEYSETS: KeySet[] = [
+  {
+    issuer: AUTH_ISSUER,
+    version: "1",
+    keys: [
+      {
+        kid: AUTH_KID,
+        alg: "Ed25519",
+        public_key: DEMO_AUTH_KEYPAIR.publicKey.toString(),
+      },
+    ],
+  },
+];
 
 // Fixed nonce - same value across both calls, making the intent structurally identical.
 export const CHARGE_NONCE = 42n;
@@ -37,6 +60,10 @@ export const engine = new PolicyEngine({
   engine_secret: _engineSecret,
   authorization_ttl_seconds: 60,
   authorization_audience: AGENT_ID,
+  authorization_issuer: AUTH_ISSUER,
+  authorization_signing_alg: "Ed25519",
+  authorization_signing_kid: AUTH_KID,
+  authorization_private_key_pem: DEMO_AUTH_KEYPAIR.privateKey.toString(),
   policyId: POLICY_ID,
 });
 
