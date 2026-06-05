@@ -234,9 +234,12 @@ The gate can emit a **verifiable decision artifact** (integrity proof).
 
 ---
 
-## Quick Start (2 min)
+## Quick Start
 
-**Prereqs:** Node.js 20+, pnpm 9+
+Prerequisites:
+
+- Node.js 20+
+- pnpm 9+
 
 ```bash
 git clone https://github.com/oxdeai/oxdeai.git
@@ -244,24 +247,12 @@ cd oxdeai
 pnpm install
 pnpm build
 
-export OXDEAI_ENGINE_SECRET=test-secret-must-be-at-least-32-chars!!
-pnpm -C examples/execution-boundary-demo start
-```
-
-Open: [http://localhost:3001](http://localhost:3001)
+export OXDEAI_ENGINE_SECRET='test-secret-must-be-at-least-32-chars!!'
+pnpm -C examples/openclaw start
 
 ---
-
-## Additional Example
-
-```bash
-export OXDEAI_ENGINE_SECRET=test-secret-must-be-at-least-32-chars!!
-pnpm -C examples/openclaw start
-```
 
 Runs an OpenClaw agent with enforced execution authorization.
-
----
 
 ## Delegated Authorization
 
