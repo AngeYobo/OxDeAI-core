@@ -1,0 +1,36 @@
+# Root .dockerignore for OxDeAI-core
+# Applies when Docker build context is the repo root.
+
+.git
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Secrets and credentials — never include in build context
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.der
+audit.json
+
+# Allow committable example templates back in
+!.env.example
+!**/.env.example
+!.env.live.example
+!**/.env.live.example
+
+# Heavy directories not needed in container builds
+bench
+website
+go-harness
+python-harness
+security
+scripts
+docs
+.claude
+.codex
+.local

@@ -52,7 +52,10 @@ export function loadConfig(): PepConfig {
     throw new Error(`Unsupported REPLAY_STORE: "${replayStoreType}". Only "memory" is supported in this PoC.`);
   }
 
-  const privateKeyPem = requireEnv("SIGNING_PRIVATE_KEY_PEM");
+  const rawPem = requireEnv("SIGNING_PRIVATE_KEY_PEM");
+  // Support both real newlines (docker run -e "VAR=$(cat file)") and
+  // escaped literal \n sequences (docker --env-file).
+  const privateKeyPem = rawPem.includes("\\n") ? rawPem.replace(/\\n/g, "\n") : rawPem;
   const signingPrivateKey = createPrivateKey(privateKeyPem);
   const signingPublicKeyPem = createPublicKey(signingPrivateKey)
     .export({ type: "spki", format: "pem" }) as string;
