@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Boundary test matrix — 11 adversarial scenarios.
+ * Boundary test matrix - 11 adversarial scenarios.
  *
  * Invariant under test: No valid AuthorizationV1 → no execution.
  *
@@ -9,21 +9,23 @@
  *   - Frappe adapter never called
  *
  * Test matrix:
- *   1.  ALLOW (enforce, Low)       — happy path, Frappe called
- *   2.  ALLOW (enforce, Medium)    — second allowed priority, Frappe called
- *   3.  ALLOW (observe)            — would-ALLOW, Frappe NOT called
- *   4.  DENY (policy, Urgent)      — policy-denied priority
- *   5.  DENY (missing auth)        — no authorization on /execute
- *   6.  DENY (invalid signature)   — tampered signature
- *   7.  DENY (expired)             — expired authorization
- *   8.  DENY (replay)              — auth_id reused
- *   9.  DENY (wrong audience)      — audience mismatch
- *   10. DENY (modified payload)    — intent hash mismatch
- *   11. DENY (unsupported action)  — wrong tool name
+ *   1.  ALLOW (enforce, Low)       - happy path, Frappe called
+ *   2.  ALLOW (enforce, Medium)    - second allowed priority, Frappe called
+ *   3.  ALLOW (observe)            - would-ALLOW, Frappe NOT called
+ *   4.  DENY (policy, Urgent)      - policy-denied priority
+ *   5.  DENY (missing auth)        - no authorization on /execute
+ *   6.  DENY (invalid signature)   - tampered signature
+ *   7.  DENY (expired)             - expired authorization
+ *   8.  DENY (replay)              - auth_id reused
+ *   9.  DENY (wrong audience)      - audience mismatch
+ *   10. DENY (modified payload)    - intent hash mismatch
+ *   11. DENY (unsupported action)  - wrong tool name
  */
 
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { createServer as createHttpServer } from "node:http";
+import type { Server as HttpServer } from "node:http";
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { sha256HexFromJson, signAuthorizationEd25519 } from "@oxdeai/core";
@@ -32,6 +34,7 @@ import { createInMemoryReplayStore } from "@oxdeai/guard";
 import type { PepConfig } from "../src/config.js";
 import type { FrappeAdapter, FrappeCreateTicketParams, ActionEnvelope } from "../src/types.js";
 import { createPepServer } from "../src/server.js";
+import { createFrappeHttpAdapter } from "../src/frappe.js";
 import { POLICY_ID } from "../src/policy.js";
 
 // ─── Test infrastructure ────────────────────────────────────────────────────
@@ -301,12 +304,12 @@ describe("LGF Frappe PEP boundary", () => {
     const authorization = issueAuthorization(envelope, h.privateKeyPem);
 
     const first = await postJson(`${h.baseUrl}/execute`, { envelope, authorization });
-    assert.equal(first.status, 200, `First use must succeed — got ${first.status}`);
+    assert.equal(first.status, 200, `First use must succeed - got ${first.status}`);
     assert.equal(h.frappeCallCount(), 1, "First use must call Frappe");
 
     h.resetFrappe();
     const second = await postJson(`${h.baseUrl}/execute`, { envelope, authorization });
-    assert.equal(second.status, 403, `Replay must return 403 — got ${second.status}`);
+    assert.equal(second.status, 403, `Replay must return 403 - got ${second.status}`);
 
     const body = second.body as Record<string, unknown>;
     assert.equal(body["ok"], false);
@@ -590,6 +593,133 @@ describe("LGF Frappe PEP upstream error handling", () => {
       (body["reason"] as string).includes("content-type"),
       false,
       "Internal error detail must not leak to caller",
+    );
+  });
+});
+
+// ─── Frappe adapter unit tests ───────────────────────────────────────────────
+
+describe("Frappe adapter response parsing", () => {
+  let mockFrappeServer: HttpServer;
+  let mockFrappeUrl: string;
+  let nextResponse: { status: number; contentType: string; body: string };
+
+  before(async () => {
+    nextResponse = { status: 200, contentType: "application/json", body: "{}" };
+
+    mockFrappeServer = createHttpServer((req, res) => {
+      res.writeHead(nextResponse.status, { "Content-Type": nextResponse.contentType });
+      res.end(nextResponse.body);
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      mockFrappeServer.on("error", reject);
+      mockFrappeServer.listen(0, "127.0.0.1", () => resolve());
+    });
+
+    const addr = mockFrappeServer.address();
+    if (!addr || typeof addr === "string") throw new Error("Unexpected address");
+    mockFrappeUrl = `http://127.0.0.1:${(addr as { port: number }).port}`;
+  });
+
+  after(async () => {
+    mockFrappeServer.closeAllConnections();
+    await new Promise<void>((res, rej) => mockFrappeServer.close((e) => (e ? rej(e) : res())));
+  });
+
+  test("numeric data.name is normalized to string", async () => {
+    nextResponse = {
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: { name: 3, subject: "OxDeAI live validation ticket", priority: "Low" },
+      }),
+    };
+
+    const adapter = createFrappeHttpAdapter({
+      baseUrl: mockFrappeUrl,
+      apiKey: "test-key",
+      apiSecret: "test-secret",
+    });
+
+    const result = await adapter.createTicket({
+      subject: "test",
+      description: "test",
+      priority: "Low",
+    });
+
+    assert.equal(result.ticket_id, "3");
+    assert.equal(result.name, "3");
+  });
+
+  test("string data.name is returned as-is", async () => {
+    nextResponse = {
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: { name: "HD-TICKET-00042", subject: "test", priority: "Low" },
+      }),
+    };
+
+    const adapter = createFrappeHttpAdapter({
+      baseUrl: mockFrappeUrl,
+      apiKey: "test-key",
+      apiSecret: "test-secret",
+    });
+
+    const result = await adapter.createTicket({
+      subject: "test",
+      description: "test",
+      priority: "Low",
+    });
+
+    assert.equal(result.ticket_id, "HD-TICKET-00042");
+    assert.equal(result.name, "HD-TICKET-00042");
+  });
+
+  test("non-JSON response throws with content-type detail", async () => {
+    nextResponse = {
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      body: "<html><body>Login</body></html>",
+    };
+
+    const adapter = createFrappeHttpAdapter({
+      baseUrl: mockFrappeUrl,
+      apiKey: "test-key",
+      apiSecret: "test-secret",
+    });
+
+    await assert.rejects(
+      () => adapter.createTicket({ subject: "t", description: "t", priority: "Low" }),
+      (err: Error) => {
+        assert.match(err.message, /non-JSON/);
+        assert.match(err.message, /text\/html/);
+        return true;
+      },
+    );
+  });
+
+  test("missing data.name throws with top-level keys", async () => {
+    nextResponse = {
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "ok" }),
+    };
+
+    const adapter = createFrappeHttpAdapter({
+      baseUrl: mockFrappeUrl,
+      apiKey: "test-key",
+      apiSecret: "test-secret",
+    });
+
+    await assert.rejects(
+      () => adapter.createTicket({ subject: "t", description: "t", priority: "Low" }),
+      (err: Error) => {
+        assert.match(err.message, /unexpected response shape/);
+        assert.match(err.message, /message/);
+        return true;
+      },
     );
   });
 });

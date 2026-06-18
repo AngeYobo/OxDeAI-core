@@ -40,12 +40,14 @@ export function createFrappeHttpAdapter(options: FrappeHttpAdapterOptions): Frap
 
       const result = await response.json() as Record<string, unknown>;
       const data = result["data"] as Record<string, unknown> | undefined;
-      const name = data?.["name"];
-      if (typeof name !== "string") {
+      const rawName = data?.["name"];
+
+      if (typeof rawName !== "string" && typeof rawName !== "number") {
         const keys = Object.keys(result).join(",");
         throw new Error(`Frappe API unexpected response shape: top-level keys=[${keys}]`);
       }
 
+      const name = String(rawName);
       return { ticket_id: name, name };
     },
   };
