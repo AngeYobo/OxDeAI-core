@@ -36,8 +36,10 @@ RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
 WORKDIR /app
 
 COPY --from=build /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/package.json ./
-COPY --from=build /app/packages/core/package.json /app/packages/core/dist/ packages/core/
-COPY --from=build /app/packages/guard/package.json /app/packages/guard/dist/ packages/guard/
+COPY --from=build /app/packages/core/package.json packages/core/package.json
+COPY --from=build /app/packages/core/dist/ packages/core/dist/
+COPY --from=build /app/packages/guard/package.json packages/guard/package.json
+COPY --from=build /app/packages/guard/dist/ packages/guard/dist/
 COPY --from=build /app/examples/lgf-frappe-pep/package.json examples/lgf-frappe-pep/
 COPY --from=build /app/examples/lgf-frappe-pep/dist/ examples/lgf-frappe-pep/dist/
 COPY --from=build /app/node_modules/ node_modules/
