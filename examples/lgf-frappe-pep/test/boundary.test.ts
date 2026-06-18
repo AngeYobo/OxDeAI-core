@@ -515,3 +515,81 @@ describe("LGF Frappe PEP observe mode", () => {
     assert.equal(body["mode"], "observe");
   });
 });
+
+// ─── Frappe upstream error diagnostic suite ──────────────────────────────────
+
+describe("LGF Frappe PEP upstream error handling", () => {
+  let baseUrl: string;
+  let privateKeyPem: string;
+  let close: () => Promise<void>;
+
+  before(async () => {
+    const keyPair = generateKeyPairSync("ed25519");
+    privateKeyPem = keyPair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
+
+    const failingFrappe: FrappeAdapter = {
+      async createTicket() {
+        throw new Error("Frappe API returned non-JSON content-type=text/html status=200");
+      },
+    };
+
+    const config: PepConfig = {
+      mode: "enforce",
+      expectedAudience: "PEP-frappe.lgf.oxdeai.dev",
+      frappeBaseUrl: "https://frappe.lgf.oxdeai.dev",
+      frappeApiKey: "test-key",
+      frappeApiSecret: "test-secret",
+      replayStore: "memory",
+      port: 0,
+      signingPrivateKey: keyPair.privateKey,
+      signingPublicKeyPem: publicKeyPem,
+      signingKid: "test-key-1",
+      issuer: "oxdeai.lgf-frappe-pep",
+      authorizationTtlSeconds: 60,
+    };
+
+    const server = createPepServer({
+      config,
+      replayStore: createInMemoryReplayStore(),
+      frappeAdapter: failingFrappe,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("Unexpected address");
+
+    baseUrl = `http://127.0.0.1:${(addr as { port: number }).port}`;
+    close = () => {
+      server.closeAllConnections();
+      return new Promise((res, rej) => server.close((e) => (e ? rej(e) : res())));
+    };
+  });
+
+  after(async () => {
+    await close();
+  });
+
+  test("upstream error returns 502 DENY with FRAPPE_UPSTREAM_ERROR and does not leak error detail to caller", async () => {
+    const envelope = makeEnvelope({ priority: "Low" });
+    const authorization = issueAuthorization(envelope, privateKeyPem);
+
+    const result = await postJson(`${baseUrl}/execute`, { envelope, authorization });
+    assert.equal(result.status, 502, `Expected 502, got ${result.status}`);
+
+    const body = result.body as Record<string, unknown>;
+    assert.equal(body["ok"], false);
+    assert.equal(body["decision"], "DENY");
+    assert.equal(body["reason"], "FRAPPE_UPSTREAM_ERROR");
+    // The HTTP response must NOT contain the internal error detail
+    assert.equal(
+      (body["reason"] as string).includes("content-type"),
+      false,
+      "Internal error detail must not leak to caller",
+    );
+  });
+});

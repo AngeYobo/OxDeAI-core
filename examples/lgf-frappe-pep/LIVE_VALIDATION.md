@@ -1,4 +1,4 @@
-# Live Validation Guide — LGF Frappe Helpdesk PEP
+# Live Validation Guide - LGF Frappe Helpdesk PEP
 
 Protected action: `frappe.helpdesk.create_ticket`
 
@@ -52,10 +52,10 @@ cp examples/lgf-frappe-pep/.env.live.example /tmp/.env.pep.live
 
 Edit `/tmp/.env.pep.live` and fill in:
 
-- `FRAPPE_API_KEY` — your real Frappe API key
-- `FRAPPE_API_SECRET` — your real Frappe API secret
+- `FRAPPE_API_KEY` - your real Frappe API key
+- `FRAPPE_API_SECRET` - your real Frappe API secret
 
-Remove the `SIGNING_PRIVATE_KEY_PEM` line from the env file — the signing key
+Remove the `SIGNING_PRIVATE_KEY_PEM` line from the env file - the signing key
 will be passed separately via `docker run -e` to preserve real newlines.
 
 **Never commit `/tmp/.env.pep.live` or any file containing real credentials.**
@@ -110,7 +110,7 @@ echo "$AUTH_RESPONSE" | jq '{ ok, decision, mode, auth_id, intent_hash, policy_i
 
 Expected: `decision: "ALLOW"`, `authorization` present in full response.
 
-Confirm no ticket was created — `/authorize` never calls Frappe.
+Confirm no ticket was created - `/authorize` never calls Frappe.
 
 ## 7. Execute with valid authorization
 
@@ -146,7 +146,7 @@ Expected: `decision: "ALLOW"`, `frappe_ticket_id` present (e.g., `"HD-TICKET-000
 
 **This is the only step that creates a Frappe ticket.**
 
-## 8. DENY — policy-denied priority (Urgent)
+## 8. DENY - policy-denied priority (Urgent)
 
 ```bash
 curl -s -X POST http://localhost:3000/authorize \
@@ -171,7 +171,7 @@ curl -s -X POST http://localhost:3000/authorize \
 
 Expected: HTTP 403, `decision: "DENY"`, `reason: "POLICY_DENIED_PRIORITY"`, no `authorization`.
 
-## 9. DENY — missing authorization
+## 9. DENY - missing authorization
 
 ```bash
 curl -s -X POST http://localhost:3000/execute \
@@ -198,7 +198,7 @@ curl -s -X POST http://localhost:3000/execute \
 
 Expected: HTTP 403, `decision: "DENY"`, `reason: "INVALID_REQUEST"`.
 
-## 10. DENY — replayed authorization
+## 10. DENY - replayed authorization
 
 Re-run the exact same `/execute` call from step 7 (same `$AUTHORIZATION`):
 
@@ -212,7 +212,7 @@ curl -s -X POST http://localhost:3000/execute \
 
 Expected: HTTP 403, `reason` contains `AUTH_REPLAY`.
 
-## 11. DENY — modified payload (intent hash mismatch)
+## 11. DENY - modified payload (intent hash mismatch)
 
 Get a fresh authorization, then modify the envelope before executing:
 
@@ -357,7 +357,7 @@ Safe to include:
 | `/authorize` summary | `{ "ok": true, "decision": "ALLOW", "auth_id": "...", "policy_id": "..." }` |
 | `/execute` summary | `{ "ok": true, "decision": "ALLOW", "frappe_ticket_id": "HD-TICKET-00001" }` |
 | DENY responses (full body) | `{ "ok": false, "decision": "DENY", "reason": "..." }` |
-| Container startup log | Redacted config — credentials shown as `***` |
+| Container startup log | Redacted config - credentials shown as `***` |
 | Decision log lines | No secrets by design |
 | Frappe ticket name/count | Ticket name is not a secret |
 | Final ticket count | Just a number |

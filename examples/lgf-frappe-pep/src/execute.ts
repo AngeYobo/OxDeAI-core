@@ -229,6 +229,7 @@ export function handleExecute(
         log,
       };
     } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       const log: DecisionLog = {
         correlation_id: correlationId,
         action: envelope.action.tool,
@@ -238,7 +239,7 @@ export function handleExecute(
         policy_id: POLICY_ID,
         mode: "enforce",
         decision: "DENY",
-        reason: "FRAPPE_UPSTREAM_ERROR",
+        reason: `FRAPPE_UPSTREAM_ERROR: ${detail.slice(0, 300)}`,
         executed: false,
         frappe_ticket_id: null,
         timestamp: new Date(now * 1000).toISOString(),
