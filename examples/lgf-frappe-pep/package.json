@@ -1,0 +1,20 @@
+{
+  "name": "@oxdeai/example-lgf-frappe-pep",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OxDeAI PEP runtime for LGF-managed Frappe Helpdesk PoC",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "pnpm build && node dist/server.js",
+    "test": "pnpm build && node --test dist/test/boundary.test.js"
+  },
+  "dependencies": {
+    "@oxdeai/core": "workspace:*",
+    "@oxdeai/guard": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.0.0"
+  }
+}
