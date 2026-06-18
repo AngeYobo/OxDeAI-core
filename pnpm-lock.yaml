@@ -172,6 +172,22 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
+  examples/lgf-frappe-pep:
+    dependencies:
+      '@oxdeai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@oxdeai/guard':
+        specifier: workspace:*
+        version: link:../../packages/guard
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   examples/non-bypassable-demo: {}
 
   examples/non-bypassable-openclaw:
