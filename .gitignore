@@ -6,6 +6,10 @@ dist/
 *.d.ts.map
 .env
 .env.local
+.env.live
+.env.*
+!.env.example
+!.env.live.example
 *.tgz
 
 packages/cli/.oxdeai/
