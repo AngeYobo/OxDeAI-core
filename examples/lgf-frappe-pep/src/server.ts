@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse, Server } from "node:http";
-import { createInMemoryReplayStore } from "@oxdeai/guard";
 import type { ReplayStore } from "@oxdeai/guard";
 import { loadConfig, redactedConfigSummary } from "./config.js";
 import type { PepConfig } from "./config.js";
@@ -9,6 +8,7 @@ import type { FrappeAdapter, DecisionLog } from "./types.js";
 import { handleAuthorize } from "./authorize.js";
 import { handleExecute } from "./execute.js";
 import { createFrappeHttpAdapter } from "./frappe.js";
+import { createReplayStoreHandle } from "./replay.js";
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const data = JSON.stringify(body);
@@ -47,9 +47,22 @@ export type PepServerOptions = {
   frappeAdapter?: FrappeAdapter;
 };
 
-export function createPepServer(options: PepServerOptions): Server {
+export function createPepServer(options: PepServerOptions): Server & { shutdown: () => Promise<void> } {
   const { config } = options;
-  const replayStore = options.replayStore ?? createInMemoryReplayStore();
+  let replayDisconnect: () => Promise<void> = async () => {};
+  let replayStore: import("@oxdeai/guard").ReplayStore;
+  if (options.replayStore) {
+    replayStore = options.replayStore;
+  } else {
+    const handle = createReplayStoreHandle({
+      config: config.replayStore,
+      issuer: config.issuer,
+      audience: config.expectedAudience,
+      authorizationTtlSeconds: config.authorizationTtlSeconds,
+    });
+    replayStore = handle.store;
+    replayDisconnect = handle.disconnect;
+  }
   const frappeAdapter =
     options.frappeAdapter ??
     createFrappeHttpAdapter({
@@ -61,7 +74,7 @@ export function createPepServer(options: PepServerOptions): Server {
   const authorize = handleAuthorize(config);
   const execute = handleExecute(config, replayStore, frappeAdapter);
 
-  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === "GET" && req.url === "/healthz") {
       return sendJson(res, 200, { ok: true, status: "healthy", mode: config.mode });
     }
@@ -101,7 +114,15 @@ export function createPepServer(options: PepServerOptions): Server {
     }
 
     return sendJson(res, 404, { ok: false, error: "not found" });
-  });
+  }) as Server & { shutdown: () => Promise<void> };
+
+  server.shutdown = async () => {
+    await replayDisconnect();
+    server.closeAllConnections();
+    await new Promise<void>((res, rej) => server.close((e) => (e ? rej(e) : res())));
+  };
+
+  return server;
 }
 
 // Main entry point — only runs when executed directly

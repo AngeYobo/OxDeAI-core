@@ -31,10 +31,14 @@ import type { KeyObject } from "node:crypto";
 import { sha256HexFromJson, signAuthorizationEd25519 } from "@oxdeai/core";
 import type { AuthorizationV1 } from "@oxdeai/core";
 import { createInMemoryReplayStore } from "@oxdeai/guard";
+import type { ReplayStore } from "@oxdeai/guard";
 import type { PepConfig } from "../src/config.js";
+import { redactedConfigSummary } from "../src/config.js";
 import type { FrappeAdapter, FrappeCreateTicketParams, ActionEnvelope } from "../src/types.js";
 import { createPepServer } from "../src/server.js";
 import { createFrappeHttpAdapter } from "../src/frappe.js";
+import { createReplayStore, createReplayStoreHandle } from "../src/replay.js";
+import type { RedisClientLike } from "../src/replay.js";
 import { POLICY_ID } from "../src/policy.js";
 
 // ─── Test infrastructure ────────────────────────────────────────────────────
@@ -94,7 +98,7 @@ async function startHarness(modeOverride?: "enforce" | "observe"): Promise<TestH
     frappeBaseUrl: "https://frappe.lgf.oxdeai.dev",
     frappeApiKey: "test-key",
     frappeApiSecret: "test-secret",
-    replayStore: "memory",
+    replayStore: { type: "memory" },
     port: 0,
     signingPrivateKey: keyPair.privateKey,
     signingPublicKeyPem: publicKeyPem,
@@ -543,7 +547,7 @@ describe("LGF Frappe PEP upstream error handling", () => {
       frappeBaseUrl: "https://frappe.lgf.oxdeai.dev",
       frappeApiKey: "test-key",
       frappeApiSecret: "test-secret",
-      replayStore: "memory",
+      replayStore: { type: "memory" },
       port: 0,
       signingPrivateKey: keyPair.privateKey,
       signingPublicKeyPem: publicKeyPem,
@@ -721,5 +725,369 @@ describe("Frappe adapter response parsing", () => {
         return true;
       },
     );
+  });
+});
+
+// ─── Replay persistence backend tests ────────────────────────────────────────
+
+function createMockRedisClient(): RedisClientLike & {
+  store: Map<string, { value: string; ttl: number }>;
+  lastKey: () => string | undefined;
+  lastTtl: () => number | undefined;
+} {
+  const store = new Map<string, { value: string; ttl: number }>();
+  let _lastKey: string | undefined;
+  let _lastTtl: number | undefined;
+
+  return {
+    store,
+    lastKey: () => _lastKey,
+    lastTtl: () => _lastTtl,
+    async set(key: string, value: string, _nx: "NX", _ex: "EX", seconds: number) {
+      _lastKey = key;
+      _lastTtl = seconds;
+      if (store.has(key)) return null;
+      store.set(key, { value, ttl: seconds });
+      return "OK" as const;
+    },
+  };
+}
+
+function createFailingRedisClient(): RedisClientLike {
+  return {
+    async set() {
+      throw new Error("REDIS_CONNECTION_REFUSED");
+    },
+  };
+}
+
+describe("Replay persistence backends", () => {
+  test("memory store: first claim succeeds, second claim denies", async () => {
+    const store = createReplayStore({
+      config: { type: "memory" },
+      issuer: "test-issuer",
+      audience: "test-audience",
+      authorizationTtlSeconds: 60,
+    });
+
+    const expiry = Math.floor(Date.now() / 1000) + 60;
+    const first = await store.consumeAuthId("auth-1", { expiry });
+    assert.equal(first, true, "First claim must succeed");
+
+    const second = await store.consumeAuthId("auth-1", { expiry });
+    assert.equal(second, false, "Second claim must fail (replay)");
+  });
+
+  test("redis store: first claim succeeds via SET NX EX", async () => {
+    const redis = createMockRedisClient();
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "oxdeai:pep:replay", ttlSkewSeconds: 60 },
+      issuer: "test-issuer",
+      audience: "test-audience",
+      authorizationTtlSeconds: 60,
+      redisClient: redis,
+    });
+
+    const expiry = Math.floor(Date.now() / 1000) + 60;
+    const result = await store.consumeAuthId("auth-redis-1", { expiry });
+    assert.equal(result, true, "First claim must succeed");
+    assert.ok(redis.lastKey()?.startsWith("oxdeai:pep:replay:test-issuer:test-audience:auth-redis-1"));
+    assert.ok((redis.lastTtl() ?? 0) > 60, "TTL must include skew");
+  });
+
+  test("redis store: second claim denies with replay", async () => {
+    const redis = createMockRedisClient();
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "oxdeai:pep:replay", ttlSkewSeconds: 60 },
+      issuer: "test-issuer",
+      audience: "test-audience",
+      authorizationTtlSeconds: 60,
+      redisClient: redis,
+    });
+
+    const expiry = Math.floor(Date.now() / 1000) + 60;
+    await store.consumeAuthId("auth-redis-2", { expiry });
+    const second = await store.consumeAuthId("auth-redis-2", { expiry });
+    assert.equal(second, false, "Replay must be denied");
+  });
+
+  test("redis store: TTL includes skew", async () => {
+    const redis = createMockRedisClient();
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "test", ttlSkewSeconds: 30 },
+      issuer: "i",
+      audience: "a",
+      authorizationTtlSeconds: 60,
+      redisClient: redis,
+    });
+
+    const now = Math.floor(Date.now() / 1000);
+    await store.consumeAuthId("ttl-test", { expiry: now + 60 });
+    const ttl = redis.lastTtl() ?? 0;
+    assert.ok(ttl >= 60 && ttl <= 95, `TTL must be ~90 (60 remaining + 30 skew), got ${ttl}`);
+  });
+
+  test("redis store: key uses namespaced format", async () => {
+    const redis = createMockRedisClient();
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "myprefix", ttlSkewSeconds: 0 },
+      issuer: "my-issuer",
+      audience: "my-audience",
+      authorizationTtlSeconds: 60,
+      redisClient: redis,
+    });
+
+    await store.consumeAuthId("key-format-test", { expiry: Math.floor(Date.now() / 1000) + 60 });
+    assert.equal(redis.lastKey(), "myprefix:my-issuer:my-audience:key-format-test");
+  });
+
+  test("redis store: stored value contains only non-secret metadata", async () => {
+    const redis = createMockRedisClient();
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "p", ttlSkewSeconds: 0 },
+      issuer: "safe-issuer",
+      audience: "safe-audience",
+      authorizationTtlSeconds: 60,
+      redisClient: redis,
+    });
+
+    await store.consumeAuthId("value-test", { expiry: Math.floor(Date.now() / 1000) + 60 });
+    const entry = redis.store.get("p:safe-issuer:safe-audience:value-test");
+    assert.ok(entry, "Entry must exist");
+    const parsed = JSON.parse(entry.value);
+    assert.equal(typeof parsed.claimed_at, "string");
+    assert.equal(parsed.issuer, "safe-issuer");
+    assert.equal(parsed.audience, "safe-audience");
+    assert.equal(parsed.signing_key, undefined, "Must not store signing key");
+    assert.equal(parsed.api_key, undefined, "Must not store API key");
+    assert.equal(parsed.api_secret, undefined, "Must not store API secret");
+  });
+
+  test("redis unavailable: consumeAuthId throws (fail-closed)", async () => {
+    const store = createReplayStore({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "p", ttlSkewSeconds: 0 },
+      issuer: "i",
+      audience: "a",
+      authorizationTtlSeconds: 60,
+      redisClient: createFailingRedisClient(),
+    });
+
+    await assert.rejects(
+      () => store.consumeAuthId("fail-test", { expiry: Math.floor(Date.now() / 1000) + 60 }),
+      (err: Error) => {
+        assert.match(err.message, /REDIS_CONNECTION_REFUSED/);
+        return true;
+      },
+    );
+  });
+});
+
+describe("Redis unavailable PEP integration", () => {
+  let baseUrl: string;
+  let privateKeyPem: string;
+  let frappeCallCount: number;
+  let close: () => Promise<void>;
+
+  before(async () => {
+    const keyPair = generateKeyPairSync("ed25519");
+    privateKeyPem = keyPair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
+
+    frappeCallCount = 0;
+    const mockFrappe: FrappeAdapter = {
+      async createTicket() {
+        frappeCallCount++;
+        return { ticket_id: "should-not-reach", name: "should-not-reach" };
+      },
+    };
+
+    const failingStore: ReplayStore = {
+      async consumeAuthId() {
+        throw new Error("REDIS_CONNECTION_REFUSED");
+      },
+    };
+
+    const config: PepConfig = {
+      mode: "enforce",
+      expectedAudience: "PEP-frappe.lgf.oxdeai.dev",
+      frappeBaseUrl: "https://frappe.lgf.oxdeai.dev",
+      frappeApiKey: "test-key",
+      frappeApiSecret: "test-secret",
+      replayStore: { type: "memory" },
+      port: 0,
+      signingPrivateKey: keyPair.privateKey,
+      signingPublicKeyPem: publicKeyPem,
+      signingKid: "test-key-1",
+      issuer: "oxdeai.lgf-frappe-pep",
+      authorizationTtlSeconds: 60,
+    };
+
+    const server = createPepServer({
+      config,
+      replayStore: failingStore,
+      frappeAdapter: mockFrappe,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("Unexpected address");
+    baseUrl = `http://127.0.0.1:${(addr as { port: number }).port}`;
+    close = () => {
+      server.closeAllConnections();
+      return new Promise((res, rej) => server.close((e) => (e ? rej(e) : res())));
+    };
+  });
+
+  after(async () => {
+    await close();
+  });
+
+  test("replay store unavailable denies execution and never calls Frappe", async () => {
+    frappeCallCount = 0;
+    const envelope = makeEnvelope({ priority: "Low" });
+    const authorization = issueAuthorization(envelope, privateKeyPem);
+
+    const result = await postJson(`${baseUrl}/execute`, { envelope, authorization });
+    assert.equal(result.status, 403, `Expected 403, got ${result.status}`);
+
+    const body = result.body as Record<string, unknown>;
+    assert.equal(body["ok"], false);
+    assert.equal(body["decision"], "DENY");
+    assert.match(body["reason"] as string, /REPLAY_STORE_UNAVAILABLE/);
+    assert.equal(frappeCallCount, 0, "Frappe must NOT be called when replay store is unavailable");
+  });
+});
+
+// ─── Redis runtime wiring tests ──────────────────────────────────────────────
+
+describe("Redis runtime wiring", () => {
+  test("createReplayStoreHandle creates a handle with disconnect for redis config", () => {
+    const mockClient: RedisClientLike = {
+      async set() { return "OK"; },
+    };
+    const handle = createReplayStoreHandle({
+      config: { type: "redis", redisUrl: "redis://localhost:6379", keyPrefix: "test", ttlSkewSeconds: 0 },
+      issuer: "i",
+      audience: "a",
+      authorizationTtlSeconds: 60,
+      redisClient: mockClient,
+    });
+    assert.ok(handle.store, "Must return a store");
+    assert.equal(typeof handle.disconnect, "function", "Must return a disconnect function");
+  });
+
+  test("createReplayStoreHandle returns no-op disconnect for memory config", async () => {
+    const handle = createReplayStoreHandle({
+      config: { type: "memory" },
+      issuer: "i",
+      audience: "a",
+      authorizationTtlSeconds: 60,
+    });
+    assert.ok(handle.store, "Must return a store");
+    await handle.disconnect();
+  });
+
+  test("redacted config summary masks Redis URL credentials", () => {
+    const keyPair = generateKeyPairSync("ed25519");
+    const config: PepConfig = {
+      mode: "enforce",
+      expectedAudience: "test",
+      frappeBaseUrl: "https://frappe.example.com",
+      frappeApiKey: "k",
+      frappeApiSecret: "s",
+      replayStore: { type: "redis", redisUrl: "redis://user:secret-password@redis.internal:6379/0", keyPrefix: "p", ttlSkewSeconds: 0 },
+      port: 3000,
+      signingPrivateKey: keyPair.privateKey,
+      signingPublicKeyPem: keyPair.publicKey.export({ type: "spki", format: "pem" }) as string,
+      signingKid: "k1",
+      issuer: "i",
+      authorizationTtlSeconds: 60,
+    };
+    const summary = redactedConfigSummary(config);
+    assert.equal(summary["replayStore"], "redis");
+    const redisUrl = summary["redisUrl"] as string;
+    assert.ok(redisUrl.includes("***"), "Redis URL credentials must be redacted");
+    assert.ok(!redisUrl.includes("secret-password"), "Password must not appear in redacted URL");
+  });
+
+  test("redacted config summary omits Redis URL for memory config", () => {
+    const keyPair = generateKeyPairSync("ed25519");
+    const config: PepConfig = {
+      mode: "enforce",
+      expectedAudience: "test",
+      frappeBaseUrl: "https://frappe.example.com",
+      frappeApiKey: "k",
+      frappeApiSecret: "s",
+      replayStore: { type: "memory" },
+      port: 3000,
+      signingPrivateKey: keyPair.privateKey,
+      signingPublicKeyPem: keyPair.publicKey.export({ type: "spki", format: "pem" }) as string,
+      signingKid: "k1",
+      issuer: "i",
+      authorizationTtlSeconds: 60,
+    };
+    const summary = redactedConfigSummary(config);
+    assert.equal(summary["replayStore"], "memory");
+    assert.equal(summary["redisUrl"], undefined);
+  });
+
+  test("server factory path uses replay store from config (not only injected)", async () => {
+    const keyPair = generateKeyPairSync("ed25519");
+    const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
+
+    let frappeCallCount = 0;
+    const mockFrappe: FrappeAdapter = {
+      async createTicket() {
+        frappeCallCount++;
+        return { ticket_id: "T1", name: "T1" };
+      },
+    };
+
+    const config: PepConfig = {
+      mode: "enforce",
+      expectedAudience: "PEP-frappe.lgf.oxdeai.dev",
+      frappeBaseUrl: "https://frappe.lgf.oxdeai.dev",
+      frappeApiKey: "test-key",
+      frappeApiSecret: "test-secret",
+      replayStore: { type: "memory" },
+      port: 0,
+      signingPrivateKey: keyPair.privateKey,
+      signingPublicKeyPem: publicKeyPem,
+      signingKid: "test-key-1",
+      issuer: "oxdeai.lgf-frappe-pep",
+      authorizationTtlSeconds: 60,
+    };
+
+    // Do NOT pass replayStore — force the factory path
+    const server = createPepServer({ config, frappeAdapter: mockFrappe });
+    await new Promise<void>((resolve, reject) => {
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("Unexpected address");
+    const baseUrl = `http://127.0.0.1:${(addr as { port: number }).port}`;
+
+    try {
+      const envelope = makeEnvelope({ priority: "Low" });
+      const privateKeyPem = keyPair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+      const authorization = issueAuthorization(envelope, privateKeyPem);
+
+      const result = await postJson(`${baseUrl}/execute`, { envelope, authorization });
+      assert.equal(result.status, 200, `Expected 200 from factory-path server, got ${result.status}`);
+      assert.equal(frappeCallCount, 1, "Frappe must be called via factory-path replay store");
+
+      // Replay must be denied (same auth, same factory-created store)
+      frappeCallCount = 0;
+      const replay = await postJson(`${baseUrl}/execute`, { envelope, authorization });
+      assert.equal(replay.status, 403, `Replay must return 403, got ${replay.status}`);
+      assert.equal(frappeCallCount, 0, "Frappe must not be called on replay via factory-path store");
+    } finally {
+      await server.shutdown();
+    }
   });
 });
