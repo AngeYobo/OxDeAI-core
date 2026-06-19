@@ -4,13 +4,24 @@ import type { KeyObject } from "node:crypto";
 
 export type PepMode = "enforce" | "observe";
 
+export type ReplayStoreType = "memory" | "redis";
+
+export type ReplayStoreConfig =
+  | { type: "memory" }
+  | {
+      type: "redis";
+      redisUrl: string;
+      keyPrefix: string;
+      ttlSkewSeconds: number;
+    };
+
 export type PepConfig = {
   mode: PepMode;
   expectedAudience: string;
   frappeBaseUrl: string;
   frappeApiKey: string;
   frappeApiSecret: string;
-  replayStore: "memory";
+  replayStore: ReplayStoreConfig;
   port: number;
   signingPrivateKey: KeyObject;
   signingPublicKeyPem: string;
@@ -47,9 +58,20 @@ export function loadConfig(): PepConfig {
     frappeApiSecret = process.env["FRAPPE_API_SECRET"] ?? "";
   }
 
-  const replayStoreType = process.env["REPLAY_STORE"] ?? "memory";
-  if (replayStoreType !== "memory") {
-    throw new Error(`Unsupported REPLAY_STORE: "${replayStoreType}". Only "memory" is supported in this PoC.`);
+  const rawReplayStore = process.env["REPLAY_STORE"] ?? "memory";
+  let replayStore: ReplayStoreConfig;
+  if (rawReplayStore === "memory") {
+    replayStore = { type: "memory" };
+  } else if (rawReplayStore === "redis") {
+    const redisUrl = requireEnv("REDIS_URL");
+    const keyPrefix = process.env["REPLAY_KEY_PREFIX"] ?? "oxdeai:pep:replay";
+    const ttlSkewSeconds = Number(process.env["REPLAY_TTL_SKEW_SECONDS"] ?? "60");
+    if (!Number.isFinite(ttlSkewSeconds) || ttlSkewSeconds < 0) {
+      throw new Error(`REPLAY_TTL_SKEW_SECONDS must be a non-negative integer, got "${process.env["REPLAY_TTL_SKEW_SECONDS"]}"`);
+    }
+    replayStore = { type: "redis", redisUrl, keyPrefix, ttlSkewSeconds };
+  } else {
+    throw new Error(`REPLAY_STORE must be "memory" or "redis", got "${rawReplayStore}"`);
   }
 
   const rawPem = requireEnv("SIGNING_PRIVATE_KEY_PEM");
@@ -79,7 +101,7 @@ export function loadConfig(): PepConfig {
     frappeBaseUrl,
     frappeApiKey,
     frappeApiSecret,
-    replayStore: "memory",
+    replayStore,
     port,
     signingPrivateKey,
     signingPublicKeyPem,
@@ -96,7 +118,8 @@ export function redactedConfigSummary(config: PepConfig): Record<string, unknown
     frappeBaseUrl: config.frappeBaseUrl,
     frappeApiKey: config.frappeApiKey ? "***" : "(not set)",
     frappeApiSecret: config.frappeApiSecret ? "***" : "(not set)",
-    replayStore: config.replayStore,
+    replayStore: config.replayStore.type,
+    redisUrl: config.replayStore.type === "redis" ? config.replayStore.redisUrl.replace(/:\/\/.*@/, "://***@") : undefined,
     port: config.port,
     signingKid: config.signingKid,
     issuer: config.issuer,

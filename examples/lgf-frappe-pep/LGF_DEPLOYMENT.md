@@ -213,20 +213,60 @@ Replay protection prevents a consumed AuthorizationV1 from being used a second t
 |---------|-------|-------------|---------------|----------|
 | `memory` | single process | no | no | local dev, single-process PoC |
 | `redis` | shared | yes | yes | multi-replica or restart-safe deployment |
-| `mounted` | single node | yes | no | single-node LGF bench without Redis |
+| `mounted` | single node | yes | no | single-node LGF bench without Redis (not yet implemented) |
 
 The replay backend is an implementation detail behind the PEP. It does not affect the authorization protocol or the decision semantics.
+
+### Configuration
+
+Memory (default):
+
+```env
+REPLAY_STORE=memory
+```
+
+Redis:
+
+```env
+REPLAY_STORE=redis
+REDIS_URL=redis://redis:6379
+REPLAY_KEY_PREFIX=oxdeai:pep:replay
+REPLAY_TTL_SKEW_SECONDS=60
+```
+
+When `REPLAY_STORE=redis`, `REDIS_URL` is required. The PEP will fail to start without it.
+
+The PEP creates an ioredis client from `REDIS_URL` on startup and disconnects it on shutdown. The Redis URL may contain credentials (`redis://user:password@host:port`); these are redacted in startup logs.
+
+### Key format
+
+Redis keys use a stable namespaced format:
+
+```text
+<REPLAY_KEY_PREFIX>:<issuer>:<audience>:<auth_id>
+```
+
+Stored values contain only non-secret metadata (`claimed_at`, `issuer`, `audience`). No signing keys, API credentials, or raw AuthorizationV1 artifacts are stored.
+
+### TTL
+
+Replay keys expire after the authorization validity window plus a configurable safety buffer:
+
+```text
+ttl = (expiry - now) + REPLAY_TTL_SKEW_SECONDS
+```
+
+Default skew: 60 seconds. Replay entries do not persist forever.
 
 ### Constraints
 
 * The PEP must fail closed if a required replay backend is unavailable.
 * The replay backend must support atomic check-and-consume to prevent race conditions.
+* Redis uses `SET key value NX EX ttl` for atomic single-use claiming.
 * The in-memory backend is acceptable only for local dev and single-process PoC scenarios. It loses state on restart.
-* Redis or mounted persistence is required for deployments where replay protection must survive restarts or span multiple replicas.
+* Redis or equivalent shared persistence is required for deployments where replay protection must survive restarts or span multiple replicas.
 
 The replay backend choice must not force platform-specific images. All backends are injected through configuration, not compiled into the image.
-
-See #148 for the pluggable replay persistence follow-up.
 
 ## Enforce vs Observe Mode
 
@@ -344,7 +384,7 @@ This documentation covers the sidecar deployment model validated by the LGF/Frap
 * One protected action: `frappe.helpdesk.create_ticket`
 * AuthorizationV1 issuance and verification
 * Intent hash binding
-* Replay protection (in-memory)
+* Replay protection (in-memory and Redis backends)
 * Enforce and observe modes
 * Fail-closed behavior on upstream errors
 * Frappe numeric ticket ID normalization
@@ -354,7 +394,7 @@ This documentation covers the sidecar deployment model validated by the LGF/Frap
 * Full Frappe governance
 * Full ERPNext governance
 * Production readiness
-* Redis or mounted replay persistence (#148)
+* Mounted-volume replay persistence
 * Kubernetes manifests or Helm charts
 * LGF production automation
 * Multi-action policy evaluation
