@@ -1,0 +1,372 @@
+# LGF Platform Layer - OxDeAI PEP Sidecar Deployment
+
+Status: Reference documentation
+Related issues: #141, #142, #143, #148, #149
+Scope: LGF sidecar deployment model for a generic OxDeAI PEP
+Validated action: `frappe.helpdesk.create_ticket`
+
+## Architecture Overview
+
+The OxDeAI PEP runs as a sidecar within the LGF Platform Layer. It sits between the caller (agent, OpenWebUI, or other client) and the target platform (Frappe, ERPNext, Nextcloud, OpenProject, or any platform LGF manages).
+
+```text
+[Agent / caller]
+      |
+      v
+[OxDeAI PEP sidecar]
+      |
+      | verifies AuthorizationV1
+      | verifies intent_hash
+      | checks policy result
+      | claims auth_id in replay backend
+      v
+[LGF-injected platform adapter / tooling]
+      |
+      v
+[Target platform: Frappe / ERPNext / Nextcloud / OpenProject / etc.]
+```
+
+The PEP enforces a single invariant:
+
+> No valid authorization → no execution path.
+
+The PEP does not know the target platform's internal semantics. Platform-specific adapter logic, credentials, and routing are injected by LGF at deployment time.
+
+## Responsibility Boundary
+
+### LGF owns
+
+* Container topology and orchestration
+* Ingress and routing rules
+* Secret injection and rotation
+* Runtime configuration files and environment variables
+* Service exposure (ports, TLS termination, network policy)
+* Image lifecycle (pull, tag, upgrade, rollback)
+* Mounted config volumes (`/etc/oxdeai/`, adapter config)
+* Platform adapter injection (Frappe tooling, Nextcloud tooling, etc.)
+* Replay backend provisioning (Redis, mounted persistence, etc.)
+* Network-level bypass prevention (ensuring callers cannot reach the target platform without passing through the PEP)
+
+### OxDeAI owns
+
+* AuthorizationV1 verification (Ed25519 signature, structural validation)
+* Issuer and audience validation
+* Expiration validation
+* Intent hash binding (canonicalization + SHA-256 comparison)
+* Policy result enforcement (ALLOW / DENY)
+* Replay protection (auth_id consumption via pluggable backend)
+* Enforce / observe mode behavior
+* Fail-closed execution guarantees
+* Decision logging (structured, secret-free)
+
+## Image Strategy
+
+### Generic OxDeAI PEP
+
+The long-term image is a generic OxDeAI PEP OCI artifact. It accepts platform-specific configuration through mounted files and environment variables. It does not embed platform-specific adapter code or credentials.
+
+The generic image is not yet published. Its design is informed by the Frappe PoC validation.
+
+### Frappe-specific PoC image
+
+The Frappe PoC image is a validated reference implementation:
+
+```text
+ghcr.io/oxdeai/oxdeai-pep-frappe:lgf-poc
+```
+
+This image embeds a minimal Frappe Helpdesk adapter that creates HD Ticket resources via the Frappe REST API. It was used to validate the OxDeAI boundary against a live LGF-managed Frappe bench.
+
+The Frappe PoC image is not the required long-term image shape. It demonstrates:
+
+* AuthorizationV1 issuance and verification
+* intent hash binding
+* replay protection
+* enforce / observe mode
+* fail-closed behavior on upstream errors
+* structured decision logging
+
+Future LGF deployments should use the generic PEP image with LGF-injected platform adapters, unless a Frappe-specific deployment is required.
+
+## Runtime Configuration Contract
+
+The PEP is configured through environment variables and optional mounted config files.
+
+### Environment variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `OXDEAI_MODE` | public | `enforce` or `observe` |
+| `OXDEAI_EXPECTED_AUDIENCE` | deployment-specific | Audience claim the PEP expects in AuthorizationV1 artifacts |
+| `OXDEAI_ISSUER` | deployment-specific | Issuer identity for AuthorizationV1 artifacts |
+| `OXDEAI_AUTHORIZATION_TTL_SECONDS` | public | TTL for issued authorizations (PoC default: `60`) |
+| `OXDEAI_REPLAY_STORE` | deployment-specific | Replay backend type: `memory`, `redis`, or `mounted` |
+| `OXDEAI_TRUSTED_KEYSETS_FILE` | deployment-specific | Path to mounted trusted keysets JSON |
+| `OXDEAI_POLICY_FILE` | deployment-specific | Path to mounted policy JSON |
+| `OXDEAI_ACTION_MAP_FILE` | deployment-specific | Path to mounted action map JSON |
+| `FRAPPE_BASE_URL` | deployment-specific | Frappe REST API base URL (Frappe PoC only) |
+| `FRAPPE_API_KEY` | **secret** | Frappe API key - runtime-injected only |
+| `FRAPPE_API_SECRET` | **secret** | Frappe API secret - runtime-injected only |
+| `SIGNING_PRIVATE_KEY_PEM` | **secret** | Ed25519 private key PEM - runtime-injected only |
+| `SIGNING_KID` | deployment-specific | Key identifier for the signing key |
+| `PORT` | public | HTTP listen port (default: `3000`) |
+
+### Configuration categories
+
+* **Public config**: safe to document and commit as defaults. Examples: `OXDEAI_MODE`, `OXDEAI_AUTHORIZATION_TTL_SECONDS`, `PORT`.
+* **Deployment-specific config**: varies per LGF bench or target platform. Examples: `OXDEAI_EXPECTED_AUDIENCE`, `FRAPPE_BASE_URL`, `SIGNING_KID`.
+* **Secrets**: must be injected at runtime only. Must never appear in images, repos, logs, or documentation. Examples: `FRAPPE_API_KEY`, `FRAPPE_API_SECRET`, `SIGNING_PRIVATE_KEY_PEM`.
+* **PoC defaults**: values used during validation but not necessarily appropriate for production. Examples: `OXDEAI_REPLAY_STORE=memory`, `OXDEAI_AUTHORIZATION_TTL_SECONDS=60`.
+* **Production-required settings**: values that must be explicitly set for production deployment. Examples: `OXDEAI_MODE=enforce`, a non-memory replay store, a trusted keyset file with rotatable keys.
+
+### Example env file shape (placeholders only)
+
+```env
+OXDEAI_MODE=enforce
+OXDEAI_EXPECTED_AUDIENCE=PEP-frappe.lgf.oxdeai.dev
+OXDEAI_ISSUER=oxdeai.lgf-frappe-pep
+OXDEAI_AUTHORIZATION_TTL_SECONDS=60
+OXDEAI_REPLAY_STORE=memory
+OXDEAI_TRUSTED_KEYSETS_FILE=/etc/oxdeai/trusted-keysets.json
+OXDEAI_POLICY_FILE=/etc/oxdeai/policy.json
+OXDEAI_ACTION_MAP_FILE=/etc/oxdeai/action-map.json
+FRAPPE_BASE_URL=<frappe-base-url>
+FRAPPE_API_KEY=<runtime-injected-secret>
+FRAPPE_API_SECRET=<runtime-injected-secret>
+SIGNING_PRIVATE_KEY_PEM=<runtime-injected-secret>
+SIGNING_KID=<signing-key-id>
+```
+
+## Mounted Runtime Config
+
+The generic PEP reads platform-agnostic config from mounted files. LGF mounts these at deployment time.
+
+```text
+/etc/oxdeai/
+  trusted-keysets.json    # Ed25519 public keys for AuthorizationV1 verification
+  policy.json             # Action-level policy rules (ALLOW / DENY conditions)
+  action-map.json         # Maps protected actions to platform adapter endpoints
+  runtime.json            # Optional runtime overrides (TTL, replay config, etc.)
+```
+
+### trusted-keysets.json
+
+Contains one or more KeySet objects. Each KeySet identifies an issuer and its public keys:
+
+```json
+[
+  {
+    "issuer": "oxdeai.lgf-frappe-pep",
+    "version": "1",
+    "keys": [
+      {
+        "kid": "lgf-frappe-pep-key-1",
+        "alg": "Ed25519",
+        "public_key": "<PEM-encoded-ed25519-public-key>",
+        "status": "active"
+      }
+    ]
+  }
+]
+```
+
+### policy.json
+
+Defines which actions are allowed or denied by policy:
+
+```json
+{
+  "name": "lgf-frappe-helpdesk-poc-v1",
+  "protected_action": "frappe.helpdesk.create_ticket",
+  "rules": [
+    { "field": "priority", "value": "Low", "decision": "ALLOW" },
+    { "field": "priority", "value": "Medium", "decision": "ALLOW" },
+    { "field": "priority", "value": "Urgent", "decision": "DENY" }
+  ],
+  "default": "DENY"
+}
+```
+
+### action-map.json
+
+Maps protected action names to platform adapter endpoints:
+
+```json
+{
+  "frappe.helpdesk.create_ticket": {
+    "adapter": "frappe-rest",
+    "endpoint": "/api/resource/HD%20Ticket",
+    "method": "POST"
+  }
+}
+```
+
+These files contain no secrets. They can be version-controlled in LGF deployment repos.
+
+## Replay Persistence
+
+Replay protection prevents a consumed AuthorizationV1 from being used a second time. The PEP delegates replay state to a pluggable backend.
+
+### Backend options
+
+| Backend | Scope | Restart-safe | Multi-replica | Use case |
+|---------|-------|-------------|---------------|----------|
+| `memory` | single process | no | no | local dev, single-process PoC |
+| `redis` | shared | yes | yes | multi-replica or restart-safe deployment |
+| `mounted` | single node | yes | no | single-node LGF bench without Redis |
+
+The replay backend is an implementation detail behind the PEP. It does not affect the authorization protocol or the decision semantics.
+
+### Constraints
+
+* The PEP must fail closed if a required replay backend is unavailable.
+* The replay backend must support atomic check-and-consume to prevent race conditions.
+* The in-memory backend is acceptable only for local dev and single-process PoC scenarios. It loses state on restart.
+* Redis or mounted persistence is required for deployments where replay protection must survive restarts or span multiple replicas.
+
+The replay backend choice must not force platform-specific images. All backends are injected through configuration, not compiled into the image.
+
+See #148 for the pluggable replay persistence follow-up.
+
+## Enforce vs Observe Mode
+
+### Enforce mode
+
+`OXDEAI_MODE=enforce`
+
+* Valid AuthorizationV1 with passing verification may execute the target-platform action.
+* Invalid AuthorizationV1 must deny. No execution occurs.
+* Replayed auth_id must deny. No execution occurs.
+* Replay backend unavailable must deny if replay is configured as required.
+* Target-platform side effects occur only after all verification steps pass.
+* Target-platform credentials are used only in enforce mode.
+
+### Observe mode
+
+`OXDEAI_MODE=observe`
+
+* The PEP evaluates the authorization and logs the decision.
+* The PEP does not call the target platform. No side effects occur.
+* Useful for integration rollout, config validation, and dry-run testing.
+* Observe mode must not be described as protected execution.
+
+The PEP startup log and healthz response always include the active mode.
+
+## Failure Behavior
+
+The PEP fails closed on all error conditions. No execution path exists without valid authorization.
+
+| Condition | Result | Side effect |
+|-----------|--------|-------------|
+| Invalid AuthorizationV1 (structural) | DENY | none |
+| Invalid Ed25519 signature | DENY | none |
+| Expired AuthorizationV1 | DENY | none |
+| Audience mismatch | DENY | none |
+| Issuer mismatch | DENY | none |
+| Intent hash mismatch | DENY | none |
+| Replay detected (auth_id already consumed) | DENY | none |
+| Required replay backend unavailable | DENY | none |
+| Target-platform upstream error | no false success | DENY with reason |
+| Malformed upstream response | no false success | DENY with reason |
+| Missing authorization on /execute | DENY | none |
+| Unsupported protected action | DENY | none |
+| Policy-denied action | DENY (at /authorize) | no authorization issued |
+
+Internal error details are logged to the container log only. They are never returned to the HTTP caller.
+
+## Pull and Run Examples
+
+### Pull the Frappe PoC image
+
+```bash
+docker pull ghcr.io/oxdeai/oxdeai-pep-frappe:lgf-poc
+```
+
+### Run the Frappe PoC image
+
+```bash
+docker run --rm -p 3099:3000 \
+  --env-file <runtime-env-file> \
+  -e "SIGNING_PRIVATE_KEY_PEM=<runtime-injected-private-key>" \
+  ghcr.io/oxdeai/oxdeai-pep-frappe:lgf-poc
+```
+
+Replace `<runtime-env-file>` with the path to your deployment env file (outside the repo tree). Replace `<runtime-injected-private-key>` with the Ed25519 private key PEM.
+
+### Health check
+
+```bash
+curl -s http://localhost:3099/healthz | jq .
+```
+
+### Authorize
+
+```bash
+curl -s -X POST http://localhost:3099/authorize \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source_bench": "openwebui-dev",
+    "target_bench": "frappe",
+    "agent_or_tool_context": "erp-assistant",
+    "user_identity": "user@example.com",
+    "session_id": "example-session",
+    "action": {
+      "type": "EXECUTE",
+      "tool": "frappe.helpdesk.create_ticket",
+      "params": {
+        "subject": "Example ticket",
+        "description": "Example description.",
+        "priority": "Low"
+      }
+    }
+  }' | jq '{ ok, decision, mode, auth_id, intent_hash, policy_id }'
+```
+
+### Execute
+
+```bash
+# Use the authorization artifact from the /authorize response.
+# Do not paste raw authorization artifacts into public locations.
+curl -s -X POST http://localhost:3099/execute \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "envelope": { ... },
+    "authorization": { ... }
+  }' | jq '{ ok, decision, mode, frappe_ticket_id }'
+```
+
+## Scope and Limitations
+
+This documentation covers the sidecar deployment model validated by the LGF/Frappe Helpdesk PoC.
+
+### Validated
+
+* One protected action: `frappe.helpdesk.create_ticket`
+* AuthorizationV1 issuance and verification
+* Intent hash binding
+* Replay protection (in-memory)
+* Enforce and observe modes
+* Fail-closed behavior on upstream errors
+* Frappe numeric ticket ID normalization
+
+### Not validated or claimed
+
+* Full Frappe governance
+* Full ERPNext governance
+* Production readiness
+* Redis or mounted replay persistence (#148)
+* Kubernetes manifests or Helm charts
+* LGF production automation
+* Multi-action policy evaluation
+* Issuer/verifier separation
+* Key rotation
+* Generic PEP image (not yet published)
+* Non-Frappe target platforms (Nextcloud, OpenProject, etc.)
+
+## Related
+
+* #141 - PoC definition (LGF/Frappe boundary exploration)
+* #142 - Boundary contract documentation
+* #143 - PEP container implementation
+* #148 - Pluggable replay persistence
+* #149 - LGF Platform Layer sidecar documentation (this document)
