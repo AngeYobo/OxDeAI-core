@@ -37,6 +37,7 @@ export function createReplayStoreHandle(options: CreateReplayStoreOptions): Repl
   if (config.type === "redis") {
     let client: RedisClientLike;
     let ownedRedis: Redis | undefined;
+    let connectPromise: Promise<void> | null = null;
 
     if (options.redisClient) {
       client = options.redisClient;
@@ -46,8 +47,20 @@ export function createReplayStoreHandle(options: CreateReplayStoreOptions): Repl
         maxRetriesPerRequest: 1,
         enableOfflineQueue: false,
       });
+      ownedRedis.on("error", () => {});
       client = ownedRedis as unknown as RedisClientLike;
     }
+
+    const ensureConnected = async (): Promise<void> => {
+      if (!ownedRedis) return;
+      if (ownedRedis.status === "ready") return;
+      if (!connectPromise) {
+        connectPromise = ownedRedis.connect().finally(() => {
+          connectPromise = null;
+        });
+      }
+      await connectPromise;
+    };
 
     const { keyPrefix, ttlSkewSeconds } = config;
     const issuer = options.issuer;
@@ -63,6 +76,7 @@ export function createReplayStoreHandle(options: CreateReplayStoreOptions): Repl
           issuer,
           audience,
         });
+        await ensureConnected();
         const result = await client.set(key, value, "NX", "EX", ttl);
         return result === "OK";
       },
