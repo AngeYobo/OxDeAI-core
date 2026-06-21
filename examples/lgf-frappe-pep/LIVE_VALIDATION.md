@@ -1,5 +1,15 @@
 # Live Validation Guide - LGF Frappe Helpdesk PEP
 
+Note: this guide is for live Frappe validation. It is separate from the local live Redis replay integration test, which does **not** require Frappe, LGF infrastructure, or secrets.
+
+For the Redis replay persistence test, use:
+
+```bash
+docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml up -d redis
+REDIS_URL=redis://127.0.0.1:6379 pnpm -C examples/lgf-frappe-pep test:redis
+docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml down
+```
+
 Protected action: `frappe.helpdesk.create_ticket`
 
 Core invariant: **No valid authorization → no execution path.**

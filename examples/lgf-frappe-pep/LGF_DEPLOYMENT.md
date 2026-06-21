@@ -217,6 +217,30 @@ Replay protection prevents a consumed AuthorizationV1 from being used a second t
 
 The replay backend is an implementation detail behind the PEP. It does not affect the authorization protocol or the decision semantics.
 
+### Live Redis test coverage
+
+This repository includes a live Redis integration test for the replay backend:
+
+```bash
+docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml up -d redis
+REDIS_URL=redis://127.0.0.1:6379 pnpm -C examples/lgf-frappe-pep test:redis
+docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml down
+```
+
+This test runs the real PEP server against a real Redis service and a fake target-platform adapter.
+
+It proves:
+
+* first execution claims the replay key and executes once
+* second submission of the same `AuthorizationV1` is denied with `AUTH_REPLAY`
+* replay keys use the configured prefix
+* replay keys have positive TTL
+* Redis outage fails closed with `REPLAY_STORE_UNAVAILABLE`
+
+It does **not** require live Frappe, LGF-managed infrastructure, or deployment secrets.
+
+Current CI note: this repository keeps the live Redis test runnable locally first. CI service-container wiring is a follow-up and does not change the runtime or replay contract being tested.
+
 ### Configuration
 
 Memory (default):
