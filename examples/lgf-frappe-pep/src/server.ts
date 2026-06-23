@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createServer } from "node:http";
-import type { IncomingMessage, ServerResponse, Server } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ReplayStore } from "@oxdeai/guard";
 import { loadConfig, redactedConfigSummary } from "./config.js";
 import type { PepConfig } from "./config.js";
@@ -41,20 +41,110 @@ function emitDecisionLog(log: DecisionLog): void {
   console.log(JSON.stringify(log));
 }
 
+type ShutdownSignal = "SIGTERM" | "SIGINT";
+
+export type ShutdownLog = {
+  mode: PepConfig["mode"];
+  replay_store_type: PepConfig["replayStore"]["type"];
+  port: number;
+  signal: ShutdownSignal;
+  shutdown_status: "requested" | "completed" | "failed";
+};
+
+export type ShutdownHandlerOptions = {
+  config: Pick<PepConfig, "mode" | "replayStore" | "port">;
+  server: { shutdown: () => Promise<void> };
+  logger?: (entry: ShutdownLog) => void;
+  exit?: (code: number) => void;
+  on?: (signal: ShutdownSignal, handler: () => void) => void;
+};
+
+function emitShutdownLog(entry: ShutdownLog): void {
+  console.log(JSON.stringify(entry));
+}
+
+export function installShutdownHandlers(options: ShutdownHandlerOptions): {
+  requestShutdown: (signal: ShutdownSignal) => Promise<void>;
+} {
+  const {
+    config,
+    server,
+    logger = emitShutdownLog,
+    exit = (code: number) => process.exit(code),
+    on = (signal, handler) => {
+      process.on(signal, handler);
+    },
+  } = options;
+
+  let shutdownPromise: Promise<void> | null = null;
+
+  const requestShutdown = (signal: ShutdownSignal): Promise<void> => {
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    logger({
+      mode: config.mode,
+      replay_store_type: config.replayStore.type,
+      port: config.port,
+      signal,
+      shutdown_status: "requested",
+    });
+
+    shutdownPromise = (async () => {
+      try {
+        await server.shutdown();
+        logger({
+          mode: config.mode,
+          replay_store_type: config.replayStore.type,
+          port: config.port,
+          signal,
+          shutdown_status: "completed",
+        });
+        exit(0);
+      } catch {
+        logger({
+          mode: config.mode,
+          replay_store_type: config.replayStore.type,
+          port: config.port,
+          signal,
+          shutdown_status: "failed",
+        });
+        exit(1);
+      }
+    })();
+
+    return shutdownPromise;
+  };
+
+  on("SIGTERM", () => {
+    void requestShutdown("SIGTERM");
+  });
+  on("SIGINT", () => {
+    void requestShutdown("SIGINT");
+  });
+
+  return { requestShutdown };
+}
+
 export type PepServerOptions = {
   config: PepConfig;
   replayStore?: ReplayStore;
   frappeAdapter?: FrappeAdapter;
+  replayStoreHandleFactory?: typeof createReplayStoreHandle;
 };
 
-export function createPepServer(options: PepServerOptions): Server & { shutdown: () => Promise<void> } {
+type PepHttpServer = ReturnType<typeof createServer> & { shutdown: () => Promise<void> };
+
+export function createPepServer(options: PepServerOptions): PepHttpServer {
   const { config } = options;
   let replayDisconnect: () => Promise<void> = async () => {};
   let replayStore: import("@oxdeai/guard").ReplayStore;
+  let shutdownPromise: Promise<void> | null = null;
   if (options.replayStore) {
     replayStore = options.replayStore;
   } else {
-    const handle = createReplayStoreHandle({
+    const handle = (options.replayStoreHandleFactory ?? createReplayStoreHandle)({
       config: config.replayStore,
       issuer: config.issuer,
       audience: config.expectedAudience,
@@ -114,12 +204,28 @@ export function createPepServer(options: PepServerOptions): Server & { shutdown:
     }
 
     return sendJson(res, 404, { ok: false, error: "not found" });
-  }) as Server & { shutdown: () => Promise<void> };
+  }) as PepHttpServer;
 
   server.shutdown = async () => {
-    await replayDisconnect();
-    server.closeAllConnections();
-    await new Promise<void>((res, rej) => server.close((e) => (e ? rej(e) : res())));
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+      if (!server.listening) {
+        await replayDisconnect();
+        return;
+      }
+
+      const closePromise = new Promise<void>((resolve, reject) => {
+        server.close((error?: Error) => (error ? reject(error) : resolve()));
+      });
+      server.closeAllConnections();
+      await closePromise;
+      await replayDisconnect();
+    })();
+
+    return shutdownPromise;
   };
 
   return server;
@@ -131,6 +237,7 @@ if (isMain) {
   const config = loadConfig();
   console.log("OxDeAI PEP starting", JSON.stringify(redactedConfigSummary(config)));
   const server = createPepServer({ config });
+  installShutdownHandlers({ config, server });
   server.listen(config.port, () => {
     console.log(`OxDeAI PEP listening on :${config.port} [mode=${config.mode}]`);
   });

@@ -12,6 +12,20 @@ Core invariant: **No valid authorization → no execution path.**
 * `POST /authorize` - evaluate policy, issue AuthorizationV1 for allowed actions
 * `POST /execute` - verify AuthorizationV1, call Frappe if valid (enforce mode only)
 
+## Graceful shutdown
+
+The runtime now installs explicit `SIGTERM` and `SIGINT` handlers.
+
+On shutdown request it:
+
+* logs a structured, non-secret shutdown event
+* stops accepting new HTTP connections
+* closes active HTTP connections through the existing `server.shutdown()` path
+* disconnects an owned Redis replay client when `REPLAY_STORE=redis`
+* exits cleanly on successful shutdown
+
+This is operational hardening for the sidecar runtime. It does not change authorization semantics.
+
 ## Quick start
 
 See [LIVE_VALIDATION.md](LIVE_VALIDATION.md) for local build, run, and validation instructions.
