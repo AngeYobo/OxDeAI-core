@@ -72,6 +72,12 @@ The current packaging target is:
 ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
 ```
 
+Published digest:
+
+```text
+ghcr.io/oxdeai/oxdeai-pep-sidecar@sha256:19086e7972484852efe998f8a3f0982125a16e3911ea068af52829b8ee746e53
+```
+
 Local build:
 
 ```bash
@@ -79,6 +85,12 @@ docker build -t oxdeai-pep-sidecar:local -f examples/lgf-frappe-pep/Dockerfile .
 ```
 
 The image is suitable for GHCR publishing, but GHCR push remains a manual release step.
+
+Published image pull command:
+
+```bash
+docker pull ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
 
 Current limitation: this is the first generic-sidecar packaging step. The implementation source still lives in `examples/lgf-frappe-pep`, and the runtime still expects Frappe-oriented adapter configuration such as `FRAPPE_BASE_URL`. That means the packaging is generic and secret-free, but full adapter extraction is still future work.
 
@@ -130,6 +142,12 @@ Health check:
 
 ```bash
 curl -fsS http://127.0.0.1:8080/healthz
+```
+
+Observed result from the pulled GHCR image:
+
+```json
+{"ok":true,"status":"healthy","mode":"observe"}
 ```
 
 ## Runtime Configuration Contract
