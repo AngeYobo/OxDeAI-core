@@ -62,7 +62,15 @@ docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml down
 
 The replay backend is one implementation detail behind the PEP boundary. Redis here is used only to validate replay persistence behavior.
 
-Current CI note: this live Redis test is designed to run locally today. Service-container or CI Compose wiring can be added later without changing the test contract.
+CI now runs this same test in the `pep-redis-replay` job in [.github/workflows/ci.yml](/home/ange/OxDeAI-core/.github/workflows/ci.yml:93) against a real `redis:7-alpine` service.
+
+That CI job:
+
+* uses a real Redis service, not mocks
+* runs the existing `pnpm --filter @oxdeai/example-lgf-frappe-pep test:redis` command
+* does not require live Frappe
+* does not require LGF infrastructure
+* does not require secrets
 
 ## LGF deployment
 

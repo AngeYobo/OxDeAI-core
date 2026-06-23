@@ -97,6 +97,63 @@ jobs:
         env:
           OXDEAI_ENGINE_SECRET: ci-adapter-validation-secret-testing!!
 
+  pep-redis-replay:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Wait for Redis
+        run: |
+          node -e '
+            const net = require("node:net");
+            const deadline = Date.now() + 30_000;
+            const tryConnect = () => {
+              const socket = net.connect({ host: "127.0.0.1", port: 6379 });
+              socket.once("connect", () => { socket.end(); process.exit(0); });
+              socket.once("error", () => {
+                socket.destroy();
+                if (Date.now() >= deadline) {
+                  console.error("Redis did not become ready on 127.0.0.1:6379");
+                  process.exit(1);
+                }
+                setTimeout(tryConnect, 500);
+              });
+            };
+            tryConnect();
+          '
+
+      - name: PEP live Redis replay integration
+        run: pnpm --filter @oxdeai/example-lgf-frappe-pep test:redis
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
