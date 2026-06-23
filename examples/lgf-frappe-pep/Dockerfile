@@ -1,5 +1,6 @@
-# OxDeAI PEP runtime for LGF Frappe Helpdesk PoC
-# No secrets baked in — all credentials injected at runtime.
+# Generic OxDeAI PEP sidecar OCI image
+# Implementation source currently comes from the LGF/Frappe example package,
+# but all runtime credentials and deployment-specific settings remain external.
 #
 # Build context must be the repo root:
 #   docker build -f examples/lgf-frappe-pep/Dockerfile .
@@ -8,7 +9,6 @@
 # The .dockerignore at examples/lgf-frappe-pep/ is NOT used when the
 # build context is the repo root.
 
-# ── Stage 1: build ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS build
 RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
 WORKDIR /app
@@ -30,10 +30,13 @@ RUN pnpm --filter @oxdeai/core build && \
     pnpm --filter @oxdeai/guard build && \
     pnpm --filter @oxdeai/example-lgf-frappe-pep build
 
-# ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM node:20-alpine
 RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
 WORKDIR /app
+
+LABEL org.opencontainers.image.title="OxDeAI PEP Sidecar"
+LABEL org.opencontainers.image.description="Generic OxDeAI PEP sidecar OCI image built from the LGF/Frappe example runtime with runtime-injected configuration."
+LABEL org.opencontainers.image.source="https://github.com/oxdeai/oxdeai"
 
 COPY --from=build /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/package.json ./
 COPY --from=build /app/packages/core/package.json packages/core/package.json
@@ -48,9 +51,12 @@ COPY --from=build /app/packages/guard/node_modules/ packages/guard/node_modules/
 COPY --from=build /app/examples/lgf-frappe-pep/node_modules/ examples/lgf-frappe-pep/node_modules/
 
 ENV OXDEAI_MODE=enforce
+ENV PORT=3000
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://localhost:3000/healthz || exit 1
+
+USER node
 
 CMD ["node", "examples/lgf-frappe-pep/dist/src/server.js"]

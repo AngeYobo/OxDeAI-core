@@ -30,6 +30,64 @@ This is operational hardening for the sidecar runtime. It does not change author
 
 See [LIVE_VALIDATION.md](LIVE_VALIDATION.md) for local build, run, and validation instructions.
 
+## Generic sidecar image
+
+This repository now packages the runtime as a generic-sidecar OCI image using:
+
+```text
+ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
+
+Local build:
+
+```bash
+docker build -t oxdeai-pep-sidecar:local -f examples/lgf-frappe-pep/Dockerfile .
+```
+
+Local run in memory replay mode:
+
+```bash
+SIGNING_PRIVATE_KEY_PEM="$(node -e "const { generateKeyPairSync } = require('node:crypto'); const { privateKey } = generateKeyPairSync('ed25519'); process.stdout.write(privateKey.export({ type: 'pkcs8', format: 'pem' }));")"
+
+docker run --rm -p 8080:3000 \
+  -e OXDEAI_MODE=observe \
+  -e EXPECTED_AUDIENCE=pep-sidecar.local \
+  -e FRAPPE_BASE_URL=https://example.invalid \
+  -e REPLAY_STORE=memory \
+  -e SIGNING_PRIVATE_KEY_PEM="$SIGNING_PRIVATE_KEY_PEM" \
+  -e PORT=3000 \
+  oxdeai-pep-sidecar:local
+```
+
+Health check:
+
+```bash
+curl -fsS http://127.0.0.1:8080/healthz
+```
+
+Redis replay mode is also runtime-configured:
+
+```bash
+docker run --rm -p 8080:3000 \
+  -e OXDEAI_MODE=observe \
+  -e EXPECTED_AUDIENCE=pep-sidecar.local \
+  -e FRAPPE_BASE_URL=https://example.invalid \
+  -e REPLAY_STORE=redis \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
+  -e SIGNING_PRIVATE_KEY_PEM="$SIGNING_PRIVATE_KEY_PEM" \
+  oxdeai-pep-sidecar:local
+```
+
+GHCR publish commands are prepared but not run automatically:
+
+```bash
+docker tag oxdeai-pep-sidecar:local ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+docker push ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+docker pull ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
+
+Current limitation: this is the first generic-sidecar packaging step. The packaged runtime still comes from the `examples/lgf-frappe-pep` implementation source and still expects Frappe-oriented adapter configuration such as `FRAPPE_BASE_URL`. No live Frappe credentials are baked into the image, but a fuller extraction of platform adapter configuration remains future work.
+
 ## Live Redis replay integration test
 
 This example includes a live Redis integration test for the PEP replay persistence path.

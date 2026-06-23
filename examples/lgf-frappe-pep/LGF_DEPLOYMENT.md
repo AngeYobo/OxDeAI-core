@@ -66,7 +66,21 @@ The PEP does not know the target platform's internal semantics. Platform-specifi
 
 The long-term image is a generic OxDeAI PEP OCI artifact. It accepts platform-specific configuration through mounted files and environment variables. It does not embed platform-specific adapter code or credentials.
 
-The generic image is not yet published. Its design is informed by the Frappe PoC validation.
+The current packaging target is:
+
+```text
+ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
+
+Local build:
+
+```bash
+docker build -t oxdeai-pep-sidecar:local -f examples/lgf-frappe-pep/Dockerfile .
+```
+
+The image is suitable for GHCR publishing, but GHCR push remains a manual release step.
+
+Current limitation: this is the first generic-sidecar packaging step. The implementation source still lives in `examples/lgf-frappe-pep`, and the runtime still expects Frappe-oriented adapter configuration such as `FRAPPE_BASE_URL`. That means the packaging is generic and secret-free, but full adapter extraction is still future work.
 
 ### Frappe-specific PoC image
 
@@ -88,6 +102,35 @@ The Frappe PoC image is not the required long-term image shape. It demonstrates:
 * structured decision logging
 
 Future LGF deployments should use the generic PEP image with LGF-injected platform adapters, unless a Frappe-specific deployment is required.
+
+### Generic sidecar runtime behavior
+
+The packaged sidecar image:
+
+* exposes the PEP HTTP listener on port `3000`
+* provides `/healthz`
+* supports `REPLAY_STORE=memory`
+* supports `REPLAY_STORE=redis` with runtime `REDIS_URL`
+* preserves graceful `SIGTERM` / `SIGINT` shutdown
+* does not bake in Frappe credentials, LGF credentials, signing private keys, Redis credentials, or local `/tmp` secret files
+
+Example local run:
+
+```bash
+docker run --rm -p 8080:3000 \
+  -e OXDEAI_MODE=observe \
+  -e EXPECTED_AUDIENCE=pep-sidecar.local \
+  -e FRAPPE_BASE_URL=https://example.invalid \
+  -e REPLAY_STORE=memory \
+  -e SIGNING_PRIVATE_KEY_PEM="<runtime-injected-private-key-pem>" \
+  oxdeai-pep-sidecar:local
+```
+
+Health check:
+
+```bash
+curl -fsS http://127.0.0.1:8080/healthz
+```
 
 ## Runtime Configuration Contract
 
