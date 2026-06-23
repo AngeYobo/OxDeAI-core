@@ -10,6 +10,8 @@ REDIS_URL=redis://127.0.0.1:6379 pnpm -C examples/lgf-frappe-pep test:redis
 docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml down
 ```
 
+The runtime also handles `SIGTERM` and `SIGINT` gracefully during local runs, closing the HTTP server and disconnecting owned Redis clients before exit.
+
 Protected action: `frappe.helpdesk.create_ticket`
 
 Core invariant: **No valid authorization → no execution path.**

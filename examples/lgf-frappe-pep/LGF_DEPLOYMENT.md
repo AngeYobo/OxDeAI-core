@@ -58,6 +58,7 @@ The PEP does not know the target platform's internal semantics. Platform-specifi
 * Enforce / observe mode behavior
 * Fail-closed execution guarantees
 * Decision logging (structured, secret-free)
+* Graceful runtime shutdown on `SIGTERM` / `SIGINT`
 
 ## Image Strategy
 
@@ -240,6 +241,23 @@ It proves:
 It does **not** require live Frappe, LGF-managed infrastructure, or deployment secrets.
 
 Current CI note: this repository keeps the live Redis test runnable locally first. CI service-container wiring is a follow-up and does not change the runtime or replay contract being tested.
+
+## Graceful Shutdown
+
+The PEP runtime registers `SIGTERM` and `SIGINT` handlers in the main process entrypoint.
+
+On shutdown request it:
+
+* logs a structured shutdown event with mode, replay store type, port, signal, and shutdown status
+* stops accepting new HTTP connections
+* closes active connections through the existing server shutdown path
+* disconnects owned Redis clients on the Redis replay path
+* exits `0` on successful shutdown
+* exits non-zero if shutdown fails unexpectedly
+
+Shutdown is idempotent. Multiple signals do not double-run cleanup or double-disconnect Redis.
+
+This is operational hardening for sidecar deployment. It does not change authorization, replay, or policy semantics.
 
 ### Configuration
 
