@@ -38,6 +38,12 @@ This repository now packages the runtime as a generic-sidecar OCI image using:
 ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
 ```
 
+Published digest:
+
+```text
+ghcr.io/oxdeai/oxdeai-pep-sidecar@sha256:19086e7972484852efe998f8a3f0982125a16e3911ea068af52829b8ee746e53
+```
+
 Local build:
 
 ```bash
@@ -84,6 +90,18 @@ GHCR publish commands are prepared but not run automatically:
 docker tag oxdeai-pep-sidecar:local ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
 docker push ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
 docker pull ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
+
+Published image pull-test command:
+
+```bash
+docker pull ghcr.io/oxdeai/oxdeai-pep-sidecar:lgf-sidecar-poc
+```
+
+Published image health result:
+
+```json
+{"ok":true,"status":"healthy","mode":"observe"}
 ```
 
 Current limitation: this is the first generic-sidecar packaging step. The packaged runtime still comes from the `examples/lgf-frappe-pep` implementation source and still expects Frappe-oriented adapter configuration such as `FRAPPE_BASE_URL`. No live Frappe credentials are baked into the image, but a fuller extraction of platform adapter configuration remains future work.
