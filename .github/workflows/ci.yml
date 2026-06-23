@@ -149,6 +149,11 @@ jobs:
             tryConnect();
           '
 
+      - name: Build workspace dependencies
+        run: |
+          pnpm --filter @oxdeai/core build
+          pnpm --filter @oxdeai/guard build
+
       - name: PEP live Redis replay integration
         run: pnpm --filter @oxdeai/example-lgf-frappe-pep test:redis
         env:
