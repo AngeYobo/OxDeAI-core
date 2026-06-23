@@ -240,7 +240,15 @@ It proves:
 
 It does **not** require live Frappe, LGF-managed infrastructure, or deployment secrets.
 
-Current CI note: this repository keeps the live Redis test runnable locally first. CI service-container wiring is a follow-up and does not change the runtime or replay contract being tested.
+This same replay integration test now also runs in CI in the `pep-redis-replay` job in [.github/workflows/ci.yml](/home/ange/OxDeAI-core/.github/workflows/ci.yml:93) against a real `redis:7-alpine` service.
+
+The CI job keeps the same contract as the local Docker Compose flow:
+
+* no live Frappe dependency
+* no LGF infrastructure dependency
+* no secrets required
+* replay denial remains validated with `AUTH_REPLAY`
+* outage denial remains validated with `REPLAY_STORE_UNAVAILABLE`
 
 ## Graceful Shutdown
 
