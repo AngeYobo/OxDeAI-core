@@ -34,9 +34,11 @@ import { createInMemoryReplayStore } from "@oxdeai/guard";
 import type { ReplayStore } from "@oxdeai/guard";
 import type { PepConfig } from "../src/config.js";
 import { redactedConfigSummary } from "../src/config.js";
-import type { FrappeAdapter, FrappeCreateTicketParams, ActionEnvelope } from "../src/types.js";
+import type { ActionEnvelope } from "../src/types.js";
+import type { PlatformAdapter, PlatformExecutionContext } from "../src/adapters/platform.js";
+import type { FrappeCreateTicketParams } from "../src/adapters/frappe.js";
 import { createPepServer } from "../src/server.js";
-import { createFrappeHttpAdapter } from "../src/frappe.js";
+import { createFrappePlatformAdapter } from "../src/adapters/frappe.js";
 import { createReplayStore, createReplayStoreHandle } from "../src/replay.js";
 import type { RedisClientLike } from "../src/replay.js";
 import { POLICY_ID } from "../src/policy.js";
@@ -48,6 +50,7 @@ type TestHarness = {
   config: PepConfig;
   frappeCallCount: () => number;
   frappeLastCall: () => FrappeCreateTicketParams | null;
+  lastAdapterContext: () => PlatformExecutionContext | null;
   resetFrappe: () => void;
   privateKeyPem: string;
   close: () => Promise<void>;
@@ -83,12 +86,17 @@ async function startHarness(modeOverride?: "enforce" | "observe"): Promise<TestH
 
   let callCount = 0;
   let lastCall: FrappeCreateTicketParams | null = null;
+  let lastContext: PlatformExecutionContext | null = null;
 
-  const mockFrappe: FrappeAdapter = {
-    async createTicket(params) {
+  const mockFrappe: PlatformAdapter = {
+    name: "frappe",
+    async execute(action, payload, context) {
+      assert.equal(action, "frappe.helpdesk.create_ticket");
+      assert.ok(typeof payload === "object" && payload !== null);
       callCount++;
-      lastCall = params;
-      return { ticket_id: `HD-TICKET-${callCount}`, name: `HD-TICKET-${callCount}` };
+      lastCall = payload as FrappeCreateTicketParams;
+      lastContext = context;
+      return { resource_id: `HD-TICKET-${callCount}`, details: { ticket_id: `HD-TICKET-${callCount}`, name: `HD-TICKET-${callCount}` } };
     },
   };
 
@@ -110,7 +118,7 @@ async function startHarness(modeOverride?: "enforce" | "observe"): Promise<TestH
   const server = createPepServer({
     config,
     replayStore: createInMemoryReplayStore(),
-    frappeAdapter: mockFrappe,
+    platformAdapter: mockFrappe,
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -126,7 +134,8 @@ async function startHarness(modeOverride?: "enforce" | "observe"): Promise<TestH
     config,
     frappeCallCount: () => callCount,
     frappeLastCall: () => lastCall,
-    resetFrappe: () => { callCount = 0; lastCall = null; },
+    lastAdapterContext: () => lastContext,
+    resetFrappe: () => { callCount = 0; lastCall = null; lastContext = null; },
     privateKeyPem,
     close: () => {
       server.closeAllConnections();
@@ -207,6 +216,8 @@ describe("LGF Frappe PEP boundary", () => {
     assert.equal(body["mode"], "enforce");
     assert.equal(typeof body["frappe_ticket_id"], "string");
     assert.equal(h.frappeCallCount(), 1, "Frappe adapter must be called exactly once");
+    assert.equal(h.frappeLastCall()?.subject, envelope.action.params.subject);
+    assert.equal(h.lastAdapterContext()?.mode, "enforce");
   });
 
   // ── 2. ALLOW (enforce, Medium) ─────────────────────────────────────────────
@@ -535,8 +546,9 @@ describe("LGF Frappe PEP upstream error handling", () => {
     privateKeyPem = keyPair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
     const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
 
-    const failingFrappe: FrappeAdapter = {
-      async createTicket() {
+    const failingFrappe: PlatformAdapter = {
+      name: "frappe",
+      async execute() {
         throw new Error("Frappe API returned non-JSON content-type=text/html status=200");
       },
     };
@@ -559,7 +571,7 @@ describe("LGF Frappe PEP upstream error handling", () => {
     const server = createPepServer({
       config,
       replayStore: createInMemoryReplayStore(),
-      frappeAdapter: failingFrappe,
+      platformAdapter: failingFrappe,
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -640,20 +652,26 @@ describe("Frappe adapter response parsing", () => {
       }),
     };
 
-    const adapter = createFrappeHttpAdapter({
+    const adapter = createFrappePlatformAdapter({
       baseUrl: mockFrappeUrl,
       apiKey: "test-key",
       apiSecret: "test-secret",
     });
 
-    const result = await adapter.createTicket({
-      subject: "test",
-      description: "test",
-      priority: "Low",
-    });
+    const result = await adapter.execute(
+      "frappe.helpdesk.create_ticket",
+      { subject: "test", description: "test", priority: "Low" },
+      {
+        correlationId: "c1",
+        mode: "enforce",
+        authId: "a1",
+        expectedAudience: "PEP-frappe.lgf.oxdeai.dev",
+      },
+    );
 
-    assert.equal(result.ticket_id, "3");
-    assert.equal(result.name, "3");
+    assert.equal(result.resource_id, "3");
+    assert.equal(result.details?.["ticket_id"], "3");
+    assert.equal(result.details?.["name"], "3");
   });
 
   test("string data.name is returned as-is", async () => {
@@ -665,20 +683,26 @@ describe("Frappe adapter response parsing", () => {
       }),
     };
 
-    const adapter = createFrappeHttpAdapter({
+    const adapter = createFrappePlatformAdapter({
       baseUrl: mockFrappeUrl,
       apiKey: "test-key",
       apiSecret: "test-secret",
     });
 
-    const result = await adapter.createTicket({
-      subject: "test",
-      description: "test",
-      priority: "Low",
-    });
+    const result = await adapter.execute(
+      "frappe.helpdesk.create_ticket",
+      { subject: "test", description: "test", priority: "Low" },
+      {
+        correlationId: "c2",
+        mode: "enforce",
+        authId: "a2",
+        expectedAudience: "PEP-frappe.lgf.oxdeai.dev",
+      },
+    );
 
-    assert.equal(result.ticket_id, "HD-TICKET-00042");
-    assert.equal(result.name, "HD-TICKET-00042");
+    assert.equal(result.resource_id, "HD-TICKET-00042");
+    assert.equal(result.details?.["ticket_id"], "HD-TICKET-00042");
+    assert.equal(result.details?.["name"], "HD-TICKET-00042");
   });
 
   test("non-JSON response throws with content-type detail", async () => {
@@ -688,14 +712,18 @@ describe("Frappe adapter response parsing", () => {
       body: "<html><body>Login</body></html>",
     };
 
-    const adapter = createFrappeHttpAdapter({
+    const adapter = createFrappePlatformAdapter({
       baseUrl: mockFrappeUrl,
       apiKey: "test-key",
       apiSecret: "test-secret",
     });
 
     await assert.rejects(
-      () => adapter.createTicket({ subject: "t", description: "t", priority: "Low" }),
+      () => adapter.execute(
+        "frappe.helpdesk.create_ticket",
+        { subject: "t", description: "t", priority: "Low" },
+        { correlationId: "c3", mode: "enforce", authId: "a3", expectedAudience: "PEP-frappe.lgf.oxdeai.dev" },
+      ),
       (err: Error) => {
         assert.match(err.message, /non-JSON/);
         assert.match(err.message, /text\/html/);
@@ -711,14 +739,18 @@ describe("Frappe adapter response parsing", () => {
       body: JSON.stringify({ message: "ok" }),
     };
 
-    const adapter = createFrappeHttpAdapter({
+    const adapter = createFrappePlatformAdapter({
       baseUrl: mockFrappeUrl,
       apiKey: "test-key",
       apiSecret: "test-secret",
     });
 
     await assert.rejects(
-      () => adapter.createTicket({ subject: "t", description: "t", priority: "Low" }),
+      () => adapter.execute(
+        "frappe.helpdesk.create_ticket",
+        { subject: "t", description: "t", priority: "Low" },
+        { correlationId: "c4", mode: "enforce", authId: "a4", expectedAudience: "PEP-frappe.lgf.oxdeai.dev" },
+      ),
       (err: Error) => {
         assert.match(err.message, /unexpected response shape/);
         assert.match(err.message, /message/);
@@ -894,10 +926,11 @@ describe("Redis unavailable PEP integration", () => {
     const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
 
     frappeCallCount = 0;
-    const mockFrappe: FrappeAdapter = {
-      async createTicket() {
+    const mockFrappe: PlatformAdapter = {
+      name: "frappe",
+      async execute() {
         frappeCallCount++;
-        return { ticket_id: "should-not-reach", name: "should-not-reach" };
+        return { resource_id: "should-not-reach" };
       },
     };
 
@@ -925,7 +958,7 @@ describe("Redis unavailable PEP integration", () => {
     const server = createPepServer({
       config,
       replayStore: failingStore,
-      frappeAdapter: mockFrappe,
+      platformAdapter: mockFrappe,
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -1040,10 +1073,11 @@ describe("Redis runtime wiring", () => {
     const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
 
     let frappeCallCount = 0;
-    const mockFrappe: FrappeAdapter = {
-      async createTicket() {
+    const mockFrappe: PlatformAdapter = {
+      name: "frappe",
+      async execute() {
         frappeCallCount++;
-        return { ticket_id: "T1", name: "T1" };
+        return { resource_id: "T1", details: { ticket_id: "T1", name: "T1" } };
       },
     };
 
@@ -1063,7 +1097,7 @@ describe("Redis runtime wiring", () => {
     };
 
     // Do NOT pass replayStore — force the factory path
-    const server = createPepServer({ config, frappeAdapter: mockFrappe });
+    const server = createPepServer({ config, platformAdapter: mockFrappe });
     await new Promise<void>((resolve, reject) => {
       server.on("error", reject);
       server.listen(0, "127.0.0.1", () => resolve());

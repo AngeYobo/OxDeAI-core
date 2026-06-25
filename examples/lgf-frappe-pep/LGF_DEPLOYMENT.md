@@ -32,6 +32,36 @@ The PEP enforces a single invariant:
 
 The PEP does not know the target platform's internal semantics. Platform-specific adapter logic, credentials, and routing are injected by LGF at deployment time.
 
+## Adapter Boundary
+
+The runtime now exposes an explicit platform adapter boundary.
+
+PEP owns:
+
+* AuthorizationV1 verification
+* intent hash binding
+* replay protection
+* policy enforcement
+* fail-closed execution gating
+* observe/enforce mode behavior
+* health and graceful shutdown
+
+Adapter owns:
+
+* target-platform API invocation
+* target-platform request formatting
+* target-platform response parsing
+* target-platform-specific side effects
+* target-platform runtime configuration
+
+Current adapter:
+
+```text
+Frappe Helpdesk
+```
+
+Current limitation: this is a first adapter-boundary extraction. The packaged sidecar still uses the current example runtime and still expects Frappe-oriented adapter configuration such as `FRAPPE_BASE_URL`. Full dynamic adapter loading and additional platform adapters remain future work.
+
 ## Responsibility Boundary
 
 ### LGF owns

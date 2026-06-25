@@ -4,7 +4,8 @@ import { sha256HexFromJson, verifyAuthorization } from "@oxdeai/core";
 import type { AuthorizationV1, KeySet } from "@oxdeai/core";
 import type { ReplayStore } from "@oxdeai/guard";
 import type { PepConfig } from "./config.js";
-import type { ActionEnvelope, FrappeAdapter, PepResponse, DecisionLog } from "./types.js";
+import type { ActionEnvelope, PepResponse, DecisionLog } from "./types.js";
+import type { PlatformAdapter } from "./adapters/platform.js";
 import { PROTECTED_ACTION, POLICY_ID } from "./policy.js";
 
 function parseExecuteRequest(
@@ -73,7 +74,7 @@ function denyResult(
 export function handleExecute(
   config: PepConfig,
   replayStore: ReplayStore,
-  frappeAdapter: FrappeAdapter,
+  platformAdapter: PlatformAdapter,
 ) {
   const trustedKeySets: KeySet[] = [
     {
@@ -195,11 +196,16 @@ export function handleExecute(
 
     // 8. Enforce mode — call Frappe
     try {
-      const result = await frappeAdapter.createTicket({
-        subject: envelope.action.params.subject,
-        description: envelope.action.params.description,
-        priority: envelope.action.params.priority,
-      });
+      const result = await platformAdapter.execute(
+        envelope.action.tool,
+        envelope.action.params,
+        {
+          correlationId,
+          mode: config.mode,
+          authId: authorization.auth_id,
+          expectedAudience: config.expectedAudience,
+        },
+      );
 
       const log: DecisionLog = {
         correlation_id: correlationId,
@@ -212,7 +218,7 @@ export function handleExecute(
         decision: "ALLOW",
         reason: "AUTHORIZED",
         executed: true,
-        frappe_ticket_id: result.ticket_id,
+        frappe_ticket_id: result.resource_id,
         timestamp: new Date(now * 1000).toISOString(),
       };
       return {
@@ -224,7 +230,7 @@ export function handleExecute(
           auth_id: authorization.auth_id,
           intent_hash: intentHash,
           policy_id: POLICY_ID,
-          frappe_ticket_id: result.ticket_id,
+          frappe_ticket_id: result.resource_id,
         },
         log,
       };

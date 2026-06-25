@@ -44,21 +44,6 @@ export type PepResponse =
       reason: string;
     };
 
-export type FrappeCreateTicketParams = {
-  subject: string;
-  description: string;
-  priority: string;
-};
-
-export type FrappeCreateTicketResult = {
-  ticket_id: string;
-  name: string;
-};
-
-export interface FrappeAdapter {
-  createTicket(params: FrappeCreateTicketParams): Promise<FrappeCreateTicketResult>;
-}
-
 export type DecisionLog = {
   correlation_id: string;
   action: string;
