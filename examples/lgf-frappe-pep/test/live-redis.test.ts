@@ -9,7 +9,8 @@ import { sha256HexFromJson, signAuthorizationEd25519 } from "@oxdeai/core";
 import type { AuthorizationV1 } from "@oxdeai/core";
 import type { PepConfig } from "../src/config.js";
 import { createPepServer } from "../src/server.js";
-import type { ActionEnvelope, FrappeAdapter, FrappeCreateTicketParams } from "../src/types.js";
+import type { ActionEnvelope } from "../src/types.js";
+import type { PlatformAdapter } from "../src/adapters/platform.js";
 import { POLICY_ID } from "../src/policy.js";
 
 const LIVE_REDIS_URL = process.env["REDIS_URL"] ?? "redis://127.0.0.1:6379";
@@ -114,10 +115,11 @@ async function startHarness(replayKeyPrefix: string, redisUrl = LIVE_REDIS_URL):
   const publicKeyPem = keyPair.publicKey.export({ type: "spki", format: "pem" }) as string;
 
   let callCount = 0;
-  const mockFrappe: FrappeAdapter = {
-    async createTicket(_params: FrappeCreateTicketParams) {
+  const mockFrappe: PlatformAdapter = {
+    name: "frappe",
+    async execute() {
       callCount += 1;
-      return { ticket_id: `HD-TICKET-${callCount}`, name: `HD-TICKET-${callCount}` };
+      return { resource_id: `HD-TICKET-${callCount}` };
     },
   };
 
@@ -141,7 +143,7 @@ async function startHarness(replayKeyPrefix: string, redisUrl = LIVE_REDIS_URL):
     authorizationTtlSeconds: AUTH_TTL_SECONDS,
   };
 
-  const server = createPepServer({ config, frappeAdapter: mockFrappe });
+  const server = createPepServer({ config, platformAdapter: mockFrappe });
   await new Promise<void>((resolve, reject) => {
     server.on("error", reject);
     server.listen(0, "127.0.0.1", () => resolve());

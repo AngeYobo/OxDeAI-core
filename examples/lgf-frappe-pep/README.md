@@ -6,6 +6,36 @@ Protected action: `frappe.helpdesk.create_ticket`
 
 Core invariant: **No valid authorization → no execution path.**
 
+## PEP vs adapter boundary
+
+The runtime now has an explicit platform adapter boundary.
+
+PEP owns:
+
+* authorization verification
+* intent hash binding
+* replay protection
+* policy enforcement
+* fail-closed execution gating
+* observe/enforce behavior
+* health and graceful shutdown behavior
+
+Adapter owns:
+
+* target-platform API call
+* target-platform request formatting
+* target-platform response parsing
+* target-platform-specific side effects
+* target-platform runtime configuration
+
+Current adapter:
+
+```text
+Frappe Helpdesk
+```
+
+Current limitation: this is a first adapter-boundary extraction. It is not yet a dynamic adapter registry or plugin system. The generic sidecar image still packages the current example runtime, and additional platform adapters remain future work.
+
 ## Endpoints
 
 * `GET /healthz` - container health

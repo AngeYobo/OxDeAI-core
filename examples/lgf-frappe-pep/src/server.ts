@@ -4,10 +4,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ReplayStore } from "@oxdeai/guard";
 import { loadConfig, redactedConfigSummary } from "./config.js";
 import type { PepConfig } from "./config.js";
-import type { FrappeAdapter, DecisionLog } from "./types.js";
+import type { DecisionLog } from "./types.js";
+import type { PlatformAdapter } from "./adapters/platform.js";
 import { handleAuthorize } from "./authorize.js";
 import { handleExecute } from "./execute.js";
-import { createFrappeHttpAdapter } from "./frappe.js";
+import { createFrappePlatformAdapter } from "./adapters/frappe.js";
 import { createReplayStoreHandle } from "./replay.js";
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -130,7 +131,7 @@ export function installShutdownHandlers(options: ShutdownHandlerOptions): {
 export type PepServerOptions = {
   config: PepConfig;
   replayStore?: ReplayStore;
-  frappeAdapter?: FrappeAdapter;
+  platformAdapter?: PlatformAdapter;
   replayStoreHandleFactory?: typeof createReplayStoreHandle;
 };
 
@@ -153,16 +154,16 @@ export function createPepServer(options: PepServerOptions): PepHttpServer {
     replayStore = handle.store;
     replayDisconnect = handle.disconnect;
   }
-  const frappeAdapter =
-    options.frappeAdapter ??
-    createFrappeHttpAdapter({
+  const platformAdapter =
+    options.platformAdapter ??
+    createFrappePlatformAdapter({
       baseUrl: config.frappeBaseUrl,
       apiKey: config.frappeApiKey,
       apiSecret: config.frappeApiSecret,
     });
 
   const authorize = handleAuthorize(config);
-  const execute = handleExecute(config, replayStore, frappeAdapter);
+  const execute = handleExecute(config, replayStore, platformAdapter);
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method === "GET" && req.url === "/healthz") {

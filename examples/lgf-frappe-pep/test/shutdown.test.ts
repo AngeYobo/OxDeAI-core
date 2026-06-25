@@ -192,8 +192,9 @@ describe("PEP runtime shutdown hardening", () => {
           disconnectCalls += 1;
         },
       }),
-      frappeAdapter: {
-        createTicket: async () => ({ ticket_id: "T1", name: "T1" }),
+      platformAdapter: {
+        name: "frappe",
+        execute: async () => ({ resource_id: "T1", details: { ticket_id: "T1", name: "T1" } }),
       },
     });
 
