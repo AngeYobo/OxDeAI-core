@@ -33,3 +33,4 @@ audit.json
 *.der
 *.key
 .local/
+WhitePaper.md
