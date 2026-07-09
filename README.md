@@ -292,17 +292,20 @@ Properties:
 
 ---
 
-## Adapter Ecosystem
+ ## Adapter Ecosystem
+ 
+Maintained TypeScript adapters:
 
-Works across:
-
-* LangGraph
-* OpenAI Agents SDK
-* CrewAI
-* AutoGen
+* LangGraph (LangGraph.js)
+* OpenAI Agents SDK (JS/TS)
 * OpenClaw
 
-All produce identical outcomes:
+Adapter-shape bindings (TypeScript; Python-native adapters for these frameworks are not yet published): 
+
+ * CrewAI
+ * AutoGen
+
+ All adapters produce identical outcomes:
 
 ```text
 ALLOW / ALLOW / DENY / verifyEnvelope() => ok
