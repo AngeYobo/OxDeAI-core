@@ -12,6 +12,7 @@ dist/
 !.env.live.example
 *.tgz
 
+packages/core/temp/core.api.md
 packages/cli/.oxdeai/
 .vscode/
 
@@ -34,3 +35,4 @@ audit.json
 *.key
 .local/
 WhitePaper.md
+__pycache__/
