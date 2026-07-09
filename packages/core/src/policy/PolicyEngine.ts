@@ -14,6 +14,7 @@ import { runDecisionModules } from "./decision/index.js";
 
 import { HashChainedLog } from "../audit/HashChainedLog.js";
 import type { AuditEvent } from "../audit/AuditLog.js";
+import { isRuntimeState, validateNumericLeaves } from "./stateGuards.js";
 import { KillSwitchModule } from "./modules/KillSwitchModule.js";
 import { AllowlistModule } from "./modules/AllowlistModule.js";
 import { BudgetModule } from "./modules/BudgetModule.js";
@@ -77,10 +78,6 @@ export type EngineOptions = {
   auditSink?: AuditSink;
   autoPersist?: boolean;
 };
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
 
 // Keep canonical snapshot hashes stable across host package managers/runners.
 const ENGINE_VERSION = "unknown";
@@ -155,82 +152,12 @@ export class PolicyEngine {
    * Note: per-agent configuration is validated for the current intent.agent_id only.
    */
   private validateStateForIntent(state: unknown, intent: Intent): { ok: true } | { ok: false; reason: ReasonCode } {
-    if (!isObject(state)) return { ok: false, reason: "STATE_INVALID" };
+    if (!isRuntimeState(state)) return { ok: false, reason: "STATE_INVALID" };
 
-    // policy_version check is handled separately to keep reason specific
-    if (!("policy_version" in state) || typeof (state as any).policy_version !== "string") {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-
-    // Required top-level keys
-    const requiredTop = [
-      "period_id",
-      "kill_switch",
-      "allowlists",
-      "budget",
-      "max_amount_per_action",
-      "velocity",
-      "replay",
-      "concurrency",
-      "recursion",
-      "tool_limits"
-    ];
-    for (const k of requiredTop) {
-      if (!(k in state)) return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const ks = (state as any).kill_switch;
-    if (!isObject(ks) || typeof ks.global !== "boolean" || !isObject(ks.agents)) {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const al = (state as any).allowlists;
-    if (!isObject(al)) return { ok: false, reason: "STATE_INVALID" };
-
-    const budget = (state as any).budget;
-    if (!isObject(budget) || !isObject(budget.budget_limit) || !isObject(budget.spent_in_period)) {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const caps = (state as any).max_amount_per_action;
-    if (!isObject(caps)) return { ok: false, reason: "STATE_INVALID" };
-
-    const vel = (state as any).velocity;
-    if (!isObject(vel) || !isObject(vel.config) || !isObject(vel.counters)) return { ok: false, reason: "STATE_INVALID" };
-    if (typeof (vel.config as any).window_seconds !== "number" || typeof (vel.config as any).max_actions !== "number") {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const rp = (state as any).replay;
-    if (!isObject(rp) || typeof rp.window_seconds !== "number" || typeof rp.max_nonces_per_agent !== "number" || !isObject(rp.nonces)) {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const cc = (state as any).concurrency;
-    if (!isObject(cc) || !isObject(cc.max_concurrent) || !isObject(cc.active) || !isObject(cc.active_auths)) {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    const rc = (state as any).recursion;
-    if (!isObject(rc) || !isObject(rc.max_depth)) return { ok: false, reason: "STATE_INVALID" };
-
-    const tl = (state as any).tool_limits;
-    if (!isObject(tl) || typeof tl.window_seconds !== "number" || !isObject(tl.max_calls) || !isObject(tl.calls)) {
-      return { ok: false, reason: "STATE_INVALID" };
-    }
-
-    // Per-agent minimal config for this intent
-    const agent = intent.agent_id;
-    if (budget.budget_limit[agent] === undefined) return { ok: false, reason: "STATE_INVALID" };
-    if (caps[agent] === undefined) return { ok: false, reason: "STATE_INVALID" };
-    if (cc.max_concurrent[agent] === undefined) return { ok: false, reason: "STATE_INVALID" };
-    if (rc.max_depth[agent] === undefined) return { ok: false, reason: "STATE_INVALID" };
-    if (tl.max_calls[agent] === undefined) return { ok: false, reason: "STATE_INVALID" };
+    const leaves = validateNumericLeaves(state, intent.agent_id);
+    if (!leaves.ok) return { ok: false, reason: "STATE_INVALID" };
 
     return { ok: true };
-
-    
   }
 
   private validateIntent(intent: Intent): { ok: true } | { ok: false; reason: ReasonCode } {
