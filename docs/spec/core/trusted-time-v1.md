@@ -91,10 +91,14 @@ parallel result format**. A policy module returns a `PolicyResult`
   clock inside the evaluation; `evaluation_time` is the only time input, sampled
   once per evaluation (§2.1).
 
-The existing module signature is `evaluate(intent, state)`. How `evaluation_time`
-is threaded to the module (an added parameter, a decision context, or a
-PEP-level pre-gate) is an implementation concern deferred to a later,
-independently reviewed change (§9) and is not fixed by this profile.
+**Logical input model.** A trusted-time evaluation is normatively a pure function
+of the logical inputs `(intent, state, evaluation_time)`. This is an *input
+model*, not a mandated public API signature: the existing module signature is
+`evaluate(intent, state)`, and how `evaluation_time` is threaded to the module
+(an added parameter, a decision context, or a PEP-level pre-gate) is an
+implementation concern deferred to a later, independently reviewed change (§9).
+This profile fixes *what* the evaluation depends on, not *how* a signature
+exposes it.
 
 ---
 
