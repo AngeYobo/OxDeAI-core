@@ -55,10 +55,12 @@ requirements:
 - **Multi-PEP authority.** A deployment with more than one PEP MUST either read
   from a single authoritative time source, or bound inter-PEP disagreement by a
   configured `maxInterPepSkewSeconds` (§5).
-- **Skew-aware replay retention.** When inter-PEP skew is bounded rather than
-  eliminated, nonce retention MUST account for it: the retention window is
+- **Effective replay-retention window.** Nonce retention is
+  `[seen_at, seen_at + replayWindowSeconds)`, computed against `evaluation_time`.
+  Under a bounded-skew multi-PEP deployment it MUST widen to
   `[seen_at, seen_at + replayWindowSeconds + maxInterPepSkewSeconds)`, so a nonce
-  first seen at a leading PEP is not evicted early at a lagging PEP.
+  first seen at a leading PEP is not evicted early at a lagging PEP. This is the
+  single normative definition of the retention window; §7 applies it.
 
 ---
 
@@ -143,17 +145,19 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 
 - **Source.** An OPTIONAL per-request desired TTL (carried on the request /
   intent or supplied by policy). It is **not** a configuration field.
-- **Type / bounds.** A finite non-negative integer, seconds. Its effective range
-  is `[0, maxTtlSeconds]`; the `min(maxTtlSeconds, requested_ttl)` clamp (§4.3)
-  is the enforced upper bound.
+- **Type / bounds.** A finite integer in `[1, maxTtlSeconds]`, seconds. `0` is
+  invalid — it would mint `expiry == issued_at`. The `min(maxTtlSeconds,
+  requested_ttl)` clamp (§4.3) is the enforced upper bound, and `maxTtlSeconds`
+  itself MUST be `> 0` (§5.2), so a valid clamp result is always `≥ 1`.
 - **Trust status.** `requested_ttl` MAY originate from an untrusted source. It is
   trust-safe **only** because it enters through the `min()` clamp: it can shorten
   the minted TTL but can never extend it beyond `maxTtlSeconds`. It MUST NOT be
   used for any other time-dependent decision.
 - **Absent / invalid.** Absent → `expiry = evaluation_time + maxTtlSeconds`
-  (§4.3). Present but outside its domain (negative, non-integer, non-finite, or
-  otherwise per §5.2) → the evaluation MUST fail closed and `DENY` with
-  `STATE_INVALID`; it MUST NOT be silently coerced to a permissive value.
+  (§4.3). Present but outside `[1, maxTtlSeconds]` (including `0`, negative,
+  non-integer, or non-finite; see §5.2) → the evaluation MUST fail closed and
+  `DENY` with `STATE_INVALID`; it MUST NOT be silently coerced to a permissive
+  value.
 
 ### 5.2 Numeric Domain
 
@@ -167,6 +171,8 @@ coercion:
   `replayWindowSeconds`, `maxTtlSeconds`, `maxInterPepSkewSeconds`,
   `requested_ttl`, `velocity.windowSeconds` — MUST be a finite non-negative
   integer; `velocity.maxActions` MUST be a finite non-negative integer count.
+  `maxTtlSeconds` and `requested_ttl` MUST additionally be `≥ 1` (a zero TTL
+  would mint `expiry == issued_at`).
 - A malformed `intent.timestamp` (NaN, Infinity, non-integer, negative, or
   unsafe magnitude) MUST `DENY` with `STATE_INVALID` at the freshness gate (§6),
   minting no authorization. Malformed configuration MUST cause the implementation
@@ -196,9 +202,12 @@ future-dated or stale — the freshness decision is reached first.
 Replay and velocity MUST key off `evaluation_time` only.
 
 - **Replay.** A nonce's retention/eviction MUST be computed against
-  `evaluation_time`. A future-dated `intent.timestamp` MUST NOT evict a nonce
-  still inside `[seen_at, seen_at + replayWindowSeconds)`. Reuse of a retained
-  nonce → `DENY`.
+  `evaluation_time`, over the **effective retention window defined in §2.1** —
+  `[seen_at, seen_at + replayWindowSeconds)`, widened to
+  `[seen_at, seen_at + replayWindowSeconds + maxInterPepSkewSeconds)` under
+  bounded multi-PEP skew. §2.1 is the single normative definition of that window;
+  this section does not restate it. A future-dated `intent.timestamp` MUST NOT
+  evict a nonce still inside it. Reuse of a retained nonce → `DENY`.
 - **Velocity.** The action window is
   `[window_start, window_start + velocity.windowSeconds)` in `evaluation_time`.
   A future-dated intent MUST NOT reset or advance it. Exceeding `maxActions`
