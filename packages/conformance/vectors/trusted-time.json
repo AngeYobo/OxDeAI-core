@@ -1,0 +1,140 @@
+{
+  "version": "0.1.0-draft",
+  "description": "Trusted-time authorization conformance vectors (issue #171). intent.timestamp is a bounded freshness claim only; evaluation_time is the trusted PEP clock used for issuance, expiry, replay retention, and velocity/tool-call windows. Times are abstract epoch-seconds; T0 is the trusted evaluation_time baseline. Evaluation order: the freshness gate (intent.timestamp vs evaluation_time) is checked BEFORE replay and velocity, so a future-dated intent denies with INTENT_FRESHNESS_FUTURE even when a retained nonce or an active window would also fail — the replay/velocity vectors therefore use fresh timestamps to isolate those gates. Stale-intent rejection (maxIntentAgeSeconds) is intentionally deferred to the follow-up vector pass; only the future-dating freshness direction is covered here. Reason codes are PROVISIONAL pending the spec enum. Each vector is a pure evaluate(intent, state, evaluation_time) call. Sketch for review before wiring.",
+  "config": {
+    "maxClockSkewSeconds": 300,
+    "maxIntentAgeSeconds": 300,
+    "replayWindowSeconds": 600,
+    "velocity": { "maxActions": 1, "windowSeconds": 60 },
+    "maxTtlSeconds": 60,
+    "T0": 1730000000
+  },
+  "vectors": [
+    {
+      "id": "tt-neg-001",
+      "mode": "future-dated-authorization",
+      "description": "V1 — intent future-dated ~100y beyond trusted time; freshness gate must deny before issuance.",
+      "input": {
+        "evaluation_time": 1730000000,
+        "intent": { "timestamp": 4883600000, "nonce": "n1", "action": "a1" },
+        "preconditions": []
+      },
+      "expected": {
+        "decision": "DENY",
+        "status": "denied",
+        "violations": [
+          { "code": "INTENT_FRESHNESS_FUTURE", "provisional": true, "message": "intent.timestamp > evaluation_time + maxClockSkew; no issued_at/expiry minted" }
+        ]
+      }
+    },
+    {
+      "id": "tt-neg-002",
+      "mode": "replay-fresh-intent-retained-nonce",
+      "description": "V2 — fresh intent (within maxClockSkew) reuses nonce n7 still retained under trusted evaluation_time; the replay gate denies. Fresh timestamp isolates replay from the freshness gate.",
+      "input": {
+        "evaluation_time": 1730000005,
+        "intent": { "timestamp": 1730000005, "nonce": "n7", "action": "a1" },
+        "preconditions": [
+          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
+        ]
+      },
+      "expected": {
+        "decision": "DENY",
+        "status": "denied",
+        "violations": [
+          { "code": "REPLAY_NONCE", "provisional": true, "message": "nonce n7 still retained at evaluation_time 1730000005 (< retained_until 1730000600); reuse denied" }
+        ]
+      }
+    },
+    {
+      "id": "tt-neg-003",
+      "mode": "velocity-fresh-intent-active-window",
+      "description": "V3 — fresh intent (within maxClockSkew); trusted evaluation_time is still inside the active velocity window, so the second action is denied. Fresh timestamp isolates velocity from the freshness gate.",
+      "input": {
+        "evaluation_time": 1730000005,
+        "intent": { "timestamp": 1730000005, "nonce": "n2", "action": "a2" },
+        "preconditions": [
+          { "event": "action_consumed_slot", "action": "a1", "at_evaluation_time": 1730000000, "window": [1730000000, 1730000060], "count": 1 }
+        ]
+      },
+      "expected": {
+        "decision": "DENY",
+        "status": "denied",
+        "violations": [
+          { "code": "VELOCITY_EXCEEDED", "provisional": true, "message": "second action at evaluation_time 1730000005 still inside window [T0, T0+60); maxActions=1 exceeded" }
+        ]
+      }
+    },
+    {
+      "id": "tt-neg-004",
+      "mode": "freshness-precedes-replay",
+      "description": "V4 (evaluation order) — a future-dated intent that would ALSO be a replay (nonce n7 still retained). The freshness gate is evaluated first, so the reason is INTENT_FRESHNESS_FUTURE, not REPLAY_NONCE. Pins the ordering: freshness before replay and velocity.",
+      "input": {
+        "evaluation_time": 1730000005,
+        "intent": { "timestamp": 1730600010, "nonce": "n7", "action": "a1" },
+        "preconditions": [
+          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
+        ]
+      },
+      "expected": {
+        "decision": "DENY",
+        "status": "denied",
+        "violations": [
+          { "code": "INTENT_FRESHNESS_FUTURE", "provisional": true, "message": "intent.timestamp > evaluation_time + maxClockSkew; freshness denies before replay is evaluated, even though nonce n7 is retained" }
+        ]
+      }
+    },
+    {
+      "id": "tt-pos-001",
+      "mode": "honest-fresh-authorization",
+      "description": "P1 (mirrors V1) — honest intent within maxClockSkew; freshness gate passes and issuance proceeds from trusted time.",
+      "input": {
+        "evaluation_time": 1730000000,
+        "intent": { "timestamp": 1730000030, "nonce": "p1", "action": "a1" },
+        "preconditions": []
+      },
+      "expected": {
+        "decision": "ALLOW",
+        "status": "ok",
+        "issued_at": 1730000000,
+        "expiry": 1730000060,
+        "expiry_rule": "evaluation_time + min(maxTtlSeconds, requested_ttl); requested_ttl unset here, so bounded by maxTtlSeconds (60)",
+        "violations": []
+      }
+    },
+    {
+      "id": "tt-pos-002",
+      "mode": "new-nonce-inside-retention",
+      "description": "P2 (mirrors V2) — a distinct unused nonce inside the retention window is not a replay; retention must not block legitimate new actions.",
+      "input": {
+        "evaluation_time": 1730000005,
+        "intent": { "timestamp": 1730000005, "nonce": "n8", "action": "a1" },
+        "preconditions": [
+          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
+        ]
+      },
+      "expected": {
+        "decision": "ALLOW",
+        "status": "ok",
+        "violations": []
+      }
+    },
+    {
+      "id": "tt-pos-003",
+      "mode": "velocity-after-trusted-window-expiry",
+      "description": "P3 (mirrors V3) — the window legitimately reset because enough trusted time elapsed; the sharp contrast to V3 (same 'window looks expired' surface, opposite trusted-time truth).",
+      "input": {
+        "evaluation_time": 1730000065,
+        "intent": { "timestamp": 1730000065, "nonce": "p3", "action": "a2" },
+        "preconditions": [
+          { "event": "action_consumed_slot", "action": "a1", "at_evaluation_time": 1730000000, "window": [1730000000, 1730000060], "count": 1 }
+        ]
+      },
+      "expected": {
+        "decision": "ALLOW",
+        "status": "ok",
+        "violations": []
+      }
+    }
+  ]
+}
