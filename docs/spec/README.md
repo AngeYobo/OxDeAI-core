@@ -18,6 +18,7 @@ Execution is only reachable if authorization is verified.
 
 - canonicalization-v1
 - eta-core-v1
+- trusted-time-v1
 
 ### Artifacts
 
