@@ -38,29 +38,63 @@ An evaluation reasons over two distinct time sources:
 check against `evaluation_time` (§6). Every other time-dependent decision MUST
 key off `evaluation_time` only.
 
+### 2.1 PEP Time-Source Requirements
+
+`evaluation_time` is read from the PEP's trusted clock under the following
+requirements:
+
+- **Captured once.** `evaluation_time` MUST be sampled exactly once per
+  evaluation and reused for every trusted-time-dependent decision within that
+  evaluation. An evaluation MUST NOT re-read the clock mid-flight — this is the
+  purity requirement of §3 stated for the clock specifically.
+- **Monotonic non-decreasing.** Within a PEP, successive `evaluation_time`
+  samples MUST NOT decrease. A wall-clock or NTP step-back MUST NOT move
+  `evaluation_time` backward; an implementation SHOULD derive it from a monotonic
+  source or clamp to the last observed value. A backward step MUST NOT be able to
+  re-open a replay or velocity window that trusted time had already closed.
+- **Multi-PEP authority.** A deployment with more than one PEP MUST either read
+  from a single authoritative time source, or bound inter-PEP disagreement by a
+  configured `maxInterPepSkewSeconds` (§5).
+- **Skew-aware replay retention.** When inter-PEP skew is bounded rather than
+  eliminated, nonce retention MUST account for it: the retention window is
+  `[seen_at, seen_at + replayWindowSeconds + maxInterPepSkewSeconds)`, so a nonce
+  first seen at a leading PEP is not evicted early at a lagging PEP.
+
 ---
 
 ## 3. Evaluation Contract
 
-The evaluation is:
+Trusted-time evaluation reuses the existing result types; it introduces **no
+parallel result format**. A policy module returns a `PolicyResult`
+(`packages/core/src/types/policy.ts`):
 
 ```
-evaluate(intent, state, evaluation_time) → { decision, status, issued_at?, expiry?, violations[] }
+// ALLOW
+{ decision: "ALLOW", reasons: [], stateDelta?: Partial<State> }
+// DENY
+{ decision: "DENY", reasons: ReasonCode[] }
 ```
 
-- `decision` ∈ { `ALLOW`, `DENY` }.
-- `status`: `ok` on `ALLOW`; a denial status otherwise.
-- On **`ALLOW`**: `issued_at` and `expiry` MUST be present and derived per §5.
-- On **`DENY`**: `issued_at` and `expiry` MUST be absent — no authorization is
-  minted for a denied intent — and `violations[]` MUST carry one or more reason
-  codes (§7).
-- Evaluation MUST be a pure function of `(intent, state, evaluation_time)`. It
-  MUST NOT read an ambient clock inside the evaluation; `evaluation_time` is the
-  only time input.
+- `decision` ∈ { `ALLOW`, `DENY` }, unchanged from `eta-core-v1`.
+- On **`ALLOW`**, `reasons` MUST be empty; any trusted-time bookkeeping (nonce
+  retention, velocity counters) is carried in the optional `stateDelta`.
+- On **`DENY`**, `reasons` MUST carry one or more `ReasonCode` values (§8). No
+  separate `status` field is introduced — the reason codes are the denial's
+  machine-readable status.
+- **`issued_at` and `expiry` are not fields of `PolicyResult`.** They are fields
+  of the **Authorization** artifact (`packages/core/src/types/authorization.ts`),
+  minted on `ALLOW` per `authorization-v1`. This profile only constrains how
+  those artifact fields are *derived* from `evaluation_time` (§4); it does not
+  add them to the module result. A `DENY` mints no Authorization artifact, so no
+  `issued_at` / `expiry` exists for a denied intent.
+- Evaluation MUST be a pure function of its inputs and MUST NOT read an ambient
+  clock inside the evaluation; `evaluation_time` is the only time input, sampled
+  once per evaluation (§2.1).
 
-How `evaluation_time` is threaded into the existing evaluation pipeline (an
-explicit third parameter, a decision context, or a PEP-level pre-gate) is an
-implementation concern for a later change and is not fixed by this profile.
+The existing module signature is `evaluate(intent, state)`. How `evaluation_time`
+is threaded to the module (an added parameter, a decision context, or a
+PEP-level pre-gate) is an implementation concern deferred to a later,
+independently reviewed change (§9) and is not fixed by this profile.
 
 ---
 
@@ -90,11 +124,49 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 | `maxIntentAgeSeconds` | max `evaluation_time − intent.timestamp` tolerated as fresh (stale side) | REQUIRED |
 | `replayWindowSeconds` | nonce retention window, keyed to `evaluation_time` | REQUIRED |
 | `maxTtlSeconds` | upper bound on the minted expiry TTL | REQUIRED |
+| `maxInterPepSkewSeconds` | bound on inter-PEP clock disagreement (§2.1) | profile-defined; REQUIRED for multi-PEP |
 | `velocity.maxActions`, `velocity.windowSeconds` | actions per trusted-time window | profile-defined |
 
 - **REQUIRED** fields MUST be present for a conformant trusted-time evaluation.
 - **profile-defined** fields MAY be set or omitted by a profile, which MUST
-  document its default when omitted.
+  document its default when omitted. `maxInterPepSkewSeconds` is REQUIRED only
+  for a deployment that runs more than one PEP without a single authoritative
+  clock (§2.1).
+
+### 5.1 `requested_ttl`
+
+`requested_ttl` appears in the expiry formula (§4.3) and is defined here:
+
+- **Source.** An OPTIONAL per-request desired TTL (carried on the request /
+  intent or supplied by policy). It is **not** a configuration field.
+- **Type / bounds.** A finite non-negative integer, seconds. Its effective range
+  is `[0, maxTtlSeconds]`; the `min(maxTtlSeconds, requested_ttl)` clamp (§4.3)
+  is the enforced upper bound.
+- **Trust status.** `requested_ttl` MAY originate from an untrusted source. It is
+  trust-safe **only** because it enters through the `min()` clamp: it can shorten
+  the minted TTL but can never extend it beyond `maxTtlSeconds`. It MUST NOT be
+  used for any other time-dependent decision.
+- **Absent / invalid.** Absent → `expiry = evaluation_time + maxTtlSeconds`
+  (§4.3). Present but outside its domain (negative, non-integer, non-finite, or
+  otherwise per §5.2) → the evaluation MUST fail closed and `DENY` with
+  `STATE_INVALID`; it MUST NOT be silently coerced to a permissive value.
+
+### 5.2 Numeric Domain
+
+All time and duration quantities MUST lie in a well-defined numeric domain;
+values outside it MUST cause the evaluation to fail closed, never a silent
+coercion:
+
+- `evaluation_time` and `intent.timestamp` MUST be finite, non-negative integers
+  within the safe-integer range (unix seconds).
+- Every duration field — `maxClockSkewSeconds`, `maxIntentAgeSeconds`,
+  `replayWindowSeconds`, `maxTtlSeconds`, `maxInterPepSkewSeconds`,
+  `requested_ttl`, `velocity.windowSeconds` — MUST be a finite non-negative
+  integer; `velocity.maxActions` MUST be a finite non-negative integer count.
+- A malformed `intent.timestamp` (NaN, Infinity, non-integer, negative, or
+  unsafe magnitude) MUST `DENY` with `STATE_INVALID` at the freshness gate (§6),
+  minting no authorization. Malformed configuration MUST cause the implementation
+  to refuse to evaluate (config-invalid) rather than proceed on a coerced value.
 
 ---
 
@@ -133,6 +205,12 @@ retention window, and a velocity window that legitimately reset because
 *trusted* time advanced, are both `ALLOW` (subject to the rest of the policy).
 
 **Evaluation order (normative):** freshness (§6) → replay → velocity.
+
+This order is normative **among the trusted-time-dependent gates only**. It does
+not mandate a complete global module order: other `eta-core-v1` gates
+(kill-switch, allowlists, budget, auth) MAY be evaluated before, between, or
+after these, provided that the relative freshness → replay → velocity order among
+the trusted-time gates is preserved.
 
 ---
 
@@ -176,6 +254,11 @@ profile:
 - `verifyTrustedTime` verifier wiring
 - engine / runtime integration of `evaluation_time`
 - conformance vectors, including the stale-intent negative/positive pair
+- trusted-time rules for **tool-call windows**. This profile does not make
+  tool-call-window accounting (the existing `TOOL_CALL_LIMIT_EXCEEDED`
+  enforcement path) trusted-time-aware. A follow-up MAY do so, keying the window
+  off `evaluation_time` exactly as velocity does (§7); until then tool-call
+  windows are unchanged from `eta-core-v1`.
 - key distribution, delegation, and orchestration (already out of scope per
   `eta-core-v1`)
 
