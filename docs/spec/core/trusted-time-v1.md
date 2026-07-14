@@ -114,8 +114,7 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 2. **Trusted issuance.** `issued_at` MUST be minted from trusted time:
    `issued_at = evaluation_time`.
 3. **Trusted, bounded expiry.** `expiry` MUST be derived from trusted time and a
-   bounded TTL: `expiry = evaluation_time + min(maxTtlSeconds, requested_ttl)`.
-   Absent an optional `requested_ttl`, `expiry = evaluation_time + maxTtlSeconds`.
+   bounded TTL: `expiry = evaluation_time + maxTtlSeconds`.
 4. **Enforcement stays zero-tolerance.** Trusted-time *mints* the expiry;
    downstream expiry verification remains zero-tolerance (`now < expiry`),
    unchanged from `eta-core-v1`. This profile does not relax enforcement.
@@ -139,27 +138,7 @@ A conformant trusted-time evaluation MUST hold all four invariants:
   for a deployment that runs more than one PEP without a single authoritative
   clock (§2.1).
 
-### 5.1 `requested_ttl`
-
-`requested_ttl` appears in the expiry formula (§4.3) and is defined here:
-
-- **Source.** An OPTIONAL per-request desired TTL (carried on the request /
-  intent or supplied by policy). It is **not** a configuration field.
-- **Type / bounds.** A finite integer in `[1, maxTtlSeconds]`, seconds. `0` is
-  invalid — it would mint `expiry == issued_at`. The `min(maxTtlSeconds,
-  requested_ttl)` clamp (§4.3) is the enforced upper bound, and `maxTtlSeconds`
-  itself MUST be `> 0` (§5.2), so a valid clamp result is always `≥ 1`.
-- **Trust status.** `requested_ttl` MAY originate from an untrusted source. It is
-  trust-safe **only** because it enters through the `min()` clamp: it can shorten
-  the minted TTL but can never extend it beyond `maxTtlSeconds`. It MUST NOT be
-  used for any other time-dependent decision.
-- **Absent / invalid.** Absent → `expiry = evaluation_time + maxTtlSeconds`
-  (§4.3). Present but outside `[1, maxTtlSeconds]` (including `0`, negative,
-  non-integer, or non-finite; see §5.2) → the evaluation MUST fail closed and
-  `DENY` with `STATE_INVALID`; it MUST NOT be silently coerced to a permissive
-  value.
-
-### 5.2 Numeric Domain
+### 5.1 Numeric Domain
 
 All time and duration quantities MUST lie in a well-defined numeric domain;
 values outside it MUST cause the evaluation to fail closed, never a silent
@@ -169,9 +148,9 @@ coercion:
   within the safe-integer range (unix seconds).
 - Every duration field — `maxClockSkewSeconds`, `maxIntentAgeSeconds`,
   `replayWindowSeconds`, `maxTtlSeconds`, `maxInterPepSkewSeconds`,
-  `requested_ttl`, `velocity.windowSeconds` — MUST be a finite non-negative
+  `velocity.windowSeconds` — MUST be a finite non-negative
   integer; `velocity.maxActions` MUST be a finite non-negative integer count.
-  `maxTtlSeconds` and `requested_ttl` MUST additionally be `≥ 1` (a zero TTL
+  `maxTtlSeconds` MUST additionally be `≥ 1` (a zero TTL
   would mint `expiry == issued_at`).
 - A malformed `intent.timestamp` (NaN, Infinity, non-integer, negative, or
   unsafe magnitude) MUST `DENY` with `STATE_INVALID` at the freshness gate (§6),
@@ -184,6 +163,11 @@ coercion:
 
 Let `Δ = intent.timestamp − evaluation_time`. The freshness gate is evaluated
 **before** replay and velocity (§7 ordering), and is the only gate that reads
+`intent.timestamp`.
+
+**Precondition.** A malformed `intent.timestamp` (NaN, Infinity, non-integer,
+negative, or unsafe magnitude) fails closed with `STATE_INVALID` per §5.1
+*before* `Δ` is computed; the freshness comparisons below assume a well-formed
 `intent.timestamp`.
 
 - **Future-dated.** `Δ > maxClockSkewSeconds` → `DENY`, no authorization minted.
@@ -202,12 +186,10 @@ future-dated or stale — the freshness decision is reached first.
 Replay and velocity MUST key off `evaluation_time` only.
 
 - **Replay.** A nonce's retention/eviction MUST be computed against
-  `evaluation_time`, over the **effective retention window defined in §2.1** —
-  `[seen_at, seen_at + replayWindowSeconds)`, widened to
-  `[seen_at, seen_at + replayWindowSeconds + maxInterPepSkewSeconds)` under
-  bounded multi-PEP skew. §2.1 is the single normative definition of that window;
-  this section does not restate it. A future-dated `intent.timestamp` MUST NOT
-  evict a nonce still inside it. Reuse of a retained nonce → `DENY`.
+  `evaluation_time`, over the **effective retention window defined in §2.1**,
+  which is the single normative definition of that window; this section does not
+  restate the formula. A future-dated `intent.timestamp` MUST NOT evict a nonce
+  still inside it. Reuse of a retained nonce → `DENY`.
 - **Velocity.** The action window is
   `[window_start, window_start + velocity.windowSeconds)` in `evaluation_time`.
   A future-dated intent MUST NOT reset or advance it. Exceeding `maxActions`
@@ -237,7 +219,7 @@ match; additions are **proposed and subject to review**.
 |---|---|---|
 | retained-nonce reuse (§7) | `REPLAY_NONCE` | **reuse** — existing code |
 | velocity window exceeded (§7) | `VELOCITY_EXCEEDED` | **reuse** — existing code |
-| minted authorization later expired (downstream enforcement, §4.4) | `AUTH_EXPIRED` | **reuse** — existing code |
+| minted authorization later expired (downstream enforcement, §4) | `AUTH_EXPIRED` | **reuse** — existing code |
 | intent future-dated beyond skew (§6) | `INTENT_FRESHNESS_FUTURE` | **proposed addition** |
 | intent staler than `maxIntentAgeSeconds` (§6) | `INTENT_STALE` | **proposed addition** |
 
