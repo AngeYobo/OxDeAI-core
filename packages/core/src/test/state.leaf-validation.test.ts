@@ -117,3 +117,56 @@ test("corrupted replay.window_seconds as NaN returns DENY STATE_INVALID", () => 
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
+
+test("control: kill_switch.agents[agent] = true returns DENY KILL_SWITCH", () => {
+  const engine = makeEngine();
+  const state = validState();
+  state.kill_switch.agents["agent-1"] = true;
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "DENY");
+  assert.deepEqual(out.reasons, ["KILL_SWITCH"]);
+});
+
+test("control: kill_switch.agents[agent] = false allows evaluation to continue", () => {
+  const engine = makeEngine();
+  const state = validState();
+  state.kill_switch.agents["agent-1"] = false;
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "ALLOW");
+});
+
+test("corrupted kill_switch.agents[agent] = 1 returns DENY STATE_INVALID", () => {
+  const engine = makeEngine();
+  const state = validState();
+  (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = 1;
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "DENY");
+  assert.deepEqual(out.reasons, ["STATE_INVALID"]);
+});
+
+test("corrupted kill_switch.agents[agent] = \"true\" returns DENY STATE_INVALID", () => {
+  const engine = makeEngine();
+  const state = validState();
+  (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = "true";
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "DENY");
+  assert.deepEqual(out.reasons, ["STATE_INVALID"]);
+});
+
+test("corrupted kill_switch.agents[agent] = {} returns DENY STATE_INVALID", () => {
+  const engine = makeEngine();
+  const state = validState();
+  (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = {};
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "DENY");
+  assert.deepEqual(out.reasons, ["STATE_INVALID"]);
+});
+
+test("corrupted kill_switch.agents container with a non-boolean element returns DENY STATE_INVALID", () => {
+  const engine = makeEngine();
+  const state = validState();
+  (state.kill_switch as unknown as Record<string, unknown>)["agents"] = { "agent-1": true, "agent-2": null };
+  const out = engine.evaluatePure(validIntent(), state);
+  assert.equal(out.decision, "DENY");
+  assert.deepEqual(out.reasons, ["STATE_INVALID"]);
+});
