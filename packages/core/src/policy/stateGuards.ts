@@ -36,6 +36,9 @@ export function isRuntimeState(state: unknown): state is State {
 
   const ks = state.kill_switch;
   if (!isObject(ks) || typeof ks.global !== "boolean" || !isObject(ks.agents)) return false;
+  for (const v of Object.values(ks.agents)) {
+    if (typeof v !== "boolean") return false;
+  }
 
   const al = state.allowlists;
   if (!isObject(al)) return false;
