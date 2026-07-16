@@ -22,6 +22,7 @@ import type { DecisionInput } from "../policy/decision/types.js";
 import { PolicyEngine } from "../policy/PolicyEngine.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
+import { ReasonCode as ReasonCodeValues } from "../types/policy.js";
 import type { PolicyModule, PolicyResult, ReasonCode } from "../types/policy.js";
 
 // ── Stub helpers ──────────────────────────────────────────────────────────────
@@ -270,4 +271,13 @@ test("PolicyEngine.evaluatePure: collect-all mode accumulates multiple deny reas
   // At minimum KILL_SWITCH must appear; collect-all may surface more
   assert.ok(out.reasons.length >= 1);
   assert.ok(out.reasons.includes("KILL_SWITCH"));
+});
+
+// ── ReasonCode membership ─────────────────────────────────────────────────────
+
+test("ReasonCode: trusted-time freshness codes are members of the public ReasonCode surface", () => {
+  const future: ReasonCode = "INTENT_FRESHNESS_FUTURE";
+  const stale: ReasonCode = "INTENT_STALE";
+  assert.equal(ReasonCodeValues.INTENT_FRESHNESS_FUTURE, future);
+  assert.equal(ReasonCodeValues.INTENT_STALE, stale);
 });
