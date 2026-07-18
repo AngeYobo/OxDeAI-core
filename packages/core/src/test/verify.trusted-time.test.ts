@@ -169,3 +169,83 @@ test("verifyTrustedTime: input object remains unchanged after verification", () 
   assert.deepEqual(input, snapshot);
   assert.equal(out.decision, "DENY");
 });
+
+// ── Maximum-magnitude arithmetic (overflow-safe freshness, issue #183) ───────
+//
+// Freshness is evaluated in DIFFERENCE form (`delta = intentTimestamp -
+// evaluationTime`, compared to the tolerances), not the literal spec SUM form
+// (`intentTimestamp > evaluationTime + maxClockSkewSeconds`). Because
+// `isProtocolSeconds` bounds every operand to `[0, MAX_SAFE_INTEGER]`, `delta`
+// is always an exact safe integer, whereas `evaluationTime +
+// maxClockSkewSeconds` can exceed 2^53 and lose integer precision. These cases
+// pin correct behavior at the safe-integer domain edge and exercise the path
+// where a naive sum would form an unsafe intermediate.
+
+const MAX = Number.MAX_SAFE_INTEGER;
+
+test("verifyTrustedTime: intent exactly at the future boundary with evaluationTime near MAX_SAFE_INTEGER → ALLOW", () => {
+  // Future boundary = evaluationTime + skew = MAX (exactly representable); inclusive → ALLOW.
+  const out = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX, evaluationTime: MAX - 300, maxClockSkewSeconds: 300 })
+  );
+  assert.deepEqual(out, { decision: "ALLOW", reasons: [] });
+});
+
+test("verifyTrustedTime: intent one second beyond the future boundary near MAX_SAFE_INTEGER → INTENT_FRESHNESS_FUTURE", () => {
+  // delta = 300, skew = 299 → strictly beyond → deny; all operands are valid safe integers.
+  const out = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX, evaluationTime: MAX - 300, maxClockSkewSeconds: 299 })
+  );
+  assert.deepEqual(out, { decision: "DENY", reasons: ["INTENT_FRESHNESS_FUTURE"] });
+});
+
+test("verifyTrustedTime: fresh intent when evaluationTime + maxClockSkewSeconds would exceed MAX_SAFE_INTEGER → ALLOW (no unsafe addition)", () => {
+  // evaluationTime + maxClockSkewSeconds = MAX + 999 (beyond the safe range), yet the difference
+  // form keeps delta exact, so the intent is correctly within skew. A sum-form implementation that
+  // guarded or threw on the unsafe intermediate would regress this case.
+  const out = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX, evaluationTime: 1000, maxClockSkewSeconds: MAX - 1 })
+  );
+  assert.deepEqual(out, { decision: "ALLOW", reasons: [] });
+});
+
+test("verifyTrustedTime: stale boundary is exact at maximum magnitude → ALLOW at the boundary, INTENT_STALE beyond", () => {
+  const atBoundary = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX - 300, evaluationTime: MAX, maxIntentAgeSeconds: 300 })
+  );
+  assert.deepEqual(atBoundary, { decision: "ALLOW", reasons: [] });
+  const beyond = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX - 301, evaluationTime: MAX, maxIntentAgeSeconds: 300 })
+  );
+  assert.deepEqual(beyond, { decision: "DENY", reasons: ["INTENT_STALE"] });
+});
+
+test("verifyTrustedTime: intent one past MAX_SAFE_INTEGER is out of domain → DENY STATE_INVALID (not a freshness code)", () => {
+  // MAX + 1 (= 2^53) is not a safe integer, so it is rejected as malformed data, never evaluated for freshness.
+  const out = verifyTrustedTime(
+    baseInput({ intentTimestamp: MAX + 1, evaluationTime: MAX - 300, maxClockSkewSeconds: 300 })
+  );
+  assert.deepEqual(out, { decision: "DENY", reasons: ["STATE_INVALID"] });
+});
+
+// ── Validation ordering: trusted preconditions before attacker input (issue #183) ──
+//
+// Trusted inputs (evaluationTime, config bounds) are validated BEFORE the
+// attacker-controlled intentTimestamp. When BOTH a trusted input and the
+// intent are malformed, the trusted-precondition failure must surface as a
+// throw — never be masked as a data-driven DENY / STATE_INVALID. This pins the
+// order: trusted inputs → intent timestamp → freshness.
+
+test("verifyTrustedTime: malformed evaluationTime AND malformed intentTimestamp → throws (trusted precondition precedes STATE_INVALID)", () => {
+  assert.throws(
+    () => verifyTrustedTime(baseInput({ evaluationTime: NaN, intentTimestamp: NaN })),
+    /evaluationTime/
+  );
+});
+
+test("verifyTrustedTime: malformed config AND malformed intentTimestamp → throws (config precondition precedes STATE_INVALID)", () => {
+  assert.throws(
+    () => verifyTrustedTime(baseInput({ maxClockSkewSeconds: NaN, intentTimestamp: Infinity })),
+    /maxClockSkewSeconds/
+  );
+});
