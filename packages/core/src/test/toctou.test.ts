@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { signAuthorizationEd25519, verifyAuthorization } from "../verification/verifyAuthorization.js";
 import { createDelegation } from "../delegation/createDelegation.js";
 import { verifyDelegation, verifyDelegationChain } from "../verification/verifyDelegation.js";
@@ -39,6 +40,7 @@ function makeEngine(): PolicyEngine {
     policy_version: POLICY,
     engine_secret: "toctou-test-secret-32-bytes-ok!!",
     authorization_ttl_seconds: TTL,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -88,7 +90,7 @@ function makeIntent(overrides: Partial<Intent> = {}): Intent {
 
 // Issue a valid authorization and return it along with the next state.
 function issueAuth(engine: PolicyEngine, state: State, intent: Intent) {
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, T0);
   assert.equal(out.decision, "ALLOW", "fixture precondition: intent must ALLOW");
   return { authorization: out.authorization, nextState: out.nextState };
 }
@@ -237,7 +239,7 @@ test("T-6 RELEASE with unknown authorization_id → CONCURRENCY_RELEASE_INVALID"
 
   // Step 1: EXECUTE → ALLOW → record the auth_id and advance state.
   const execIntent = makeIntent({ nonce: 6n, type: "EXECUTE" });
-  const execOut    = engine.evaluatePure(execIntent, state);
+  const execOut    = engine.evaluatePure(execIntent, state, T0);
   assert.equal(execOut.decision, "ALLOW", "EXECUTE precondition: must ALLOW");
   const authorization_id = execOut.authorization.auth_id;
   const stateAfterExec = execOut.nextState;
@@ -255,7 +257,7 @@ test("T-6 RELEASE with unknown authorization_id → CONCURRENCY_RELEASE_INVALID"
     type:             "RELEASE",
     authorization_id: authorization_id,
   };
-  const rel1 = engine.evaluatePure(releaseIntent, stateAfterExec);
+  const rel1 = engine.evaluatePure(releaseIntent, stateAfterExec, T0);
   assert.equal(rel1.decision, "ALLOW", "first RELEASE must ALLOW");
   const stateAfterRel1 = rel1.nextState;
 
@@ -272,7 +274,7 @@ test("T-6 RELEASE with unknown authorization_id → CONCURRENCY_RELEASE_INVALID"
     type:             "RELEASE",
     authorization_id: "f".repeat(64),  // not in active_auths
   };
-  const rel2 = engine.evaluatePure(fakeRelease, stateAfterRel1);
+  const rel2 = engine.evaluatePure(fakeRelease, stateAfterRel1, T0);
   assert.equal(rel2.decision, "DENY",
     "RELEASE with unknown authorization_id must DENY");
   assert.ok(
@@ -288,18 +290,20 @@ test("T-7 cross-engine artifact: wrong engine secret → AUTH_SIGNATURE_INVALID"
     policy_version: POLICY,
     engine_secret: "secret-A-32-bytes-exactly-here!!",
     authorization_ttl_seconds: TTL,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
   const engineB = new PolicyEngine({
     policy_version: POLICY,
     engine_secret: "secret-B-32-bytes-exactly-here!!",
     authorization_ttl_seconds: TTL,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 
   const state  = makeState();
   const intent = makeIntent({ nonce: 7n });
 
   // Auth issued by engine A.
-  const out = engineA.evaluatePure(intent, state);
+  const out = engineA.evaluatePure(intent, state, T0);
   assert.equal(out.decision, "ALLOW", "engine A precondition");
 
   // Verified by engine B (different secret) → HMAC mismatch.

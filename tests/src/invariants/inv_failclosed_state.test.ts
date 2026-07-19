@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent } from "@oxdeai/core";
 
 test("INV-FailClosed: corrupted/incomplete state must DENY (never ALLOW)", () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const now = 1000;
@@ -27,7 +28,7 @@ test("INV-FailClosed: corrupted/incomplete state must DENY (never ALLOW)", () =>
 
   // Case 1: state missing required fields (runtime corruption)
   const badState1: any = { policy_version: "0.1.0" };
-  const out1 = engine.evaluate(intent, badState1);
+  const out1 = engine.evaluate(intent, badState1, now);
   assert.equal(out1.decision, "DENY");
 
   // Case 2: missing budget_limit for agent => fail-closed STATE_INVALID
@@ -43,7 +44,7 @@ test("INV-FailClosed: corrupted/incomplete state must DENY (never ALLOW)", () =>
     concurrency: { max_concurrent: { "agent-A": 10 }, active: {}, active_auths: {} },
     recursion: { max_depth: { "agent-A": 5 } }
   };
-  const out2 = engine.evaluate(intent, badState2);
+  const out2 = engine.evaluate(intent, badState2, now);
   assert.equal(out2.decision, "DENY");
   assert.ok(out2.reasons.includes("STATE_INVALID"));
 
@@ -60,7 +61,7 @@ test("INV-FailClosed: corrupted/incomplete state must DENY (never ALLOW)", () =>
     concurrency: { max_concurrent: { "agent-A": 10 }, active: {}, active_auths: {} },
     recursion: { max_depth: { "agent-A": 5 } }
   };
-  const out3 = engine.evaluate(intent, badState3);
+  const out3 = engine.evaluate(intent, badState3, now);
   assert.equal(out3.decision, "DENY");
   assert.ok(out3.reasons.includes("STATE_INVALID"));
 });

@@ -49,15 +49,25 @@ export class OxDeAIClient {
 
   async evaluateAndCommit(input: EvaluateInput): Promise<EvaluateAndCommitResult> {
     const state = await this.stateAdapter.load();
+    // Single clock sample, reused for both the timestamp fallback below and
+    // evaluationTime — the trusted-time freshness gate requires evaluationTime
+    // to be sampled exactly once per evaluation (spec §2.1), and this.clock is
+    // the same trusted-context boundary already responsible for the timestamp
+    // fallback. Never derived from intent.timestamp itself (which may be
+    // attacker-supplied via `input.timestamp`). Note: this.clock defaults to
+    // Date.now()/1000 unless the caller supplies an independent ClockAdapter;
+    // an explicitly supplied value here is not necessarily independently
+    // trusted time.
+    const evaluationTime = this.clock.now();
     const resolvedTimestamp = input.timestamp === undefined || input.timestamp === 0
-      ? this.clock.now()
+      ? evaluationTime
       : input.timestamp;
     const intent: Intent = {
       ...input,
       timestamp: resolvedTimestamp
     } as Intent;
 
-    const out = this.engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    const out = this.engine.evaluatePure(intent, state, evaluationTime, { mode: "fail-fast" });
     const emitted = collectNewEvents(this.engine, this.auditCursor);
     this.auditCursor = emitted.nextCursor;
 

@@ -2,6 +2,7 @@ import {
   encodeCanonicalState,
   encodeEnvelope,
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   verifySnapshot,
 } from "@oxdeai/core";
 import type { Authorization, Intent, State } from "@oxdeai/core";
@@ -82,6 +83,7 @@ function makeEngine(policyId: string, policyVersion: string): PolicyEngine {
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",
     policyId,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -178,7 +180,7 @@ function makeFixture(profile: FixtureProfile, seed: number): BenchFixture {
   const engine = makeEngine(policy.id, policy.version);
   const state = makeState(profile, seed);
   const intent = makeIntent(profile, seed);
-  const out = engine.evaluatePure(intent, deepCloneState(state));
+  const out = engine.evaluatePure(intent, deepCloneState(state), intent.timestamp);
   if (out.decision !== "ALLOW" || !out.authorization) {
     throw new Error(`fixture ${profile}: expected ALLOW authorization`);
   }

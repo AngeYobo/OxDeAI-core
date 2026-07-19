@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { PolicyResult } from "../types/policy.js";
+import { isProtocolSeconds } from "./trustedTimeValidation.js";
 
 /**
  * Inputs to {@link verifyTrustedTime}.
  *
- * `evaluationTime` MUST be supplied by a trusted caller — the PEP's own
+ * `evaluationTime` MUST be supplied by a trusted caller - the PEP's own
  * clock, sampled once per evaluation (docs/spec/core/trusted-time-v1.md
  * §2.1). This module never reads an ambient clock; passing an untrusted or
  * attacker-influenced `evaluationTime` defeats the entire trusted-time
@@ -26,28 +27,19 @@ export type VerifyTrustedTimeInput = {
 };
 
 /**
- * Protocol numeric domain (spec §5.1): finite, non-negative, safe-integer
- * unix-seconds / duration-seconds values only. NaN, Infinity, non-integers,
- * negatives, and unsafe magnitudes are all rejected — never coerced.
- */
-function isProtocolSeconds(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
-/**
  * Pure, deterministic freshness gate for the trusted-time profile
  * (docs/spec/core/trusted-time-v1.md §6).
  *
  * Compares the untrusted `intentTimestamp` freshness claim against the
  * trusted `evaluationTime` and the two bounded tolerances. Both boundaries
- * are inclusive — a delta exactly equal to a tolerance is fresh; only a
+ * are inclusive - a delta exactly equal to a tolerance is fresh; only a
  * delta strictly beyond it denies (spec §6).
  *
  * This function is side-effect-free: it performs no I/O, reads no ambient
  * clock (`Date.now()` or otherwise), derives no trust from
  * `intentTimestamp`, and does not mutate its input or any external state.
- * It returns the standard `PolicyResult` shape (spec §3) — `ALLOW` with
- * empty reasons, or `DENY` with one `ReasonCode` — introducing no parallel
+ * It returns the standard `PolicyResult` shape (spec §3) - `ALLOW` with
+ * empty reasons, or `DENY` with one `ReasonCode` - introducing no parallel
  * result format.
  *
  * This function is standalone: it is not wired into `PolicyEngine`, does
@@ -62,7 +54,7 @@ function isProtocolSeconds(value: number): boolean {
  *
  * `evaluationTime`, `maxClockSkewSeconds`, and `maxIntentAgeSeconds` are
  * trusted-caller / configuration inputs, not attacker-reachable data. A
- * malformed value among them is a caller precondition violation — per spec
+ * malformed value among them is a caller precondition violation - per spec
  * §5.1 ("malformed configuration MUST cause the implementation to refuse to
  * evaluate") this function throws rather than returning a policy decision,
  * so the failure cannot be mistaken for a data-driven `DENY`.

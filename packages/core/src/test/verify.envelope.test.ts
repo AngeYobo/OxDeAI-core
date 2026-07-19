@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { encodeCanonicalState } from "../snapshot/CanonicalCodec.js";
 import { encodeEnvelope, signEnvelopeEd25519, verifyEnvelope } from "../verification/index.js";
 import type { AuditEntry } from "../audit/AuditLog.js";
@@ -55,7 +56,8 @@ function makeSnapshotBytes() {
   const engine = new PolicyEngine({
     policy_version: "v0.9-test",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
   const snapshot = engine.exportState(baseState());
   return { policyId: engine.computePolicyId(), bytes: encodeCanonicalState(snapshot) };

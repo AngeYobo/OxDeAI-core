@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   decodeCanonicalState,
   decodeEnvelope,
   encodeCanonicalState,
@@ -529,10 +530,11 @@ function validateStateStructure(state: State): void {
   const engine = new PolicyEngine({
     policy_version: state.policy_version,
     engine_secret: "validate-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 1
+    authorization_ttl_seconds: 1,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
   const probe = buildValidationIntent(state);
-  const out = engine.evaluatePure(probe, structuredClone(state), { mode: "fail-fast" });
+  const out = engine.evaluatePure(probe, structuredClone(state), probe.timestamp, { mode: "fail-fast" });
   if (out.decision === "DENY" && out.reasons.includes("STATE_INVALID")) {
     throw new Error("STATE_INVALID");
   }
@@ -545,7 +547,10 @@ function buildEngine(state: State): PolicyEngine {
   return new PolicyEngine({
     policy_version: state.policy_version,
     engine_secret: secret,
-    authorization_ttl_seconds: Number.isFinite(ttl) ? ttl : 120
+    authorization_ttl_seconds: Number.isFinite(ttl) ? ttl : 120,
+    // #184: no CLI flags for trusted-time tolerances yet (deferred); the CLI
+    // explicitly uses the recommended profile rather than any implicit default.
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -869,6 +874,7 @@ export async function runCli(argv: string[], io?: Partial<Io>): Promise<number> 
       if (!flags.out) throw new Error("Missing --out <authorization.json>");
       const state = await readStateFile(statePath);
       const engine = buildEngine(state);
+      const evaluationTime = now();
       const intent: Intent = {
         intent_id: `intent:${flags.agent}:${flags.nonce}`,
         type: "EXECUTE",
@@ -877,12 +883,12 @@ export async function runCli(argv: string[], io?: Partial<Io>): Promise<number> 
         amount: parseBigIntArg(amountRaw),
         asset: flags.asset,
         target,
-        timestamp: now(),
+        timestamp: evaluationTime,
         metadata_hash: "0x" + "0".repeat(64),
         nonce: parseBigIntArg(flags.nonce),
         signature: "cli-signature-placeholder"
       };
-      const outEval = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+      const outEval = engine.evaluatePure(intent, state, evaluationTime, { mode: "fail-fast" });
       if (outEval.decision !== "ALLOW") {
         const payload = { decision: "DENY" as const, reasons: outEval.reasons };
         writePayload(out, flags, payload, `DENY: ${toJson(payload.reasons)}`);
@@ -1010,7 +1016,7 @@ export async function runCli(argv: string[], io?: Partial<Io>): Promise<number> 
         signature: "cli-signature-placeholder"
       };
 
-      const outEval = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+      const outEval = engine.evaluatePure(intent, state, ts, { mode: "fail-fast" });
       const emitted = engine.audit.snapshot();
 
       if (outEval.decision === "ALLOW") {

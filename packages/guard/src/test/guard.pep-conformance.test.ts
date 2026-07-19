@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 
 import {
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   stateSnapshotHash,
   intentHash,
 } from "@oxdeai/core";
@@ -57,6 +58,7 @@ function makeEngine(): PolicyEngine {
     authorization_audience: AUDIENCE,
     authorization_ttl_seconds: 600,
     authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -73,6 +75,9 @@ function makeState(): State {
 
 // Fixed fields make defaultNormalizeAction deterministic so intent_hash can be
 // pre-computed and used in signAuth calls for tests that need to pass step 6d.
+// Every scenario below except GPC-2 exercises a fake engine that ignores
+// intent.timestamp entirely, so this fixed historical timestamp remains safe
+// and deterministic for them.
 const BASE_ACTION: ProposedAction = {
   name: "provision_gpu",
   args: { asset: "a100", region: "us-east-1" },
@@ -154,9 +159,16 @@ test("GPC-2 kill-switch DENY (real engine): OxDeAIDenyError is thrown, execute n
 
   const guard = makeGuard({ engine, ...store });
 
+  // Keep this intent fresh so the scenario continues to exercise the
+  // kill-switch boundary rather than being denied earlier by trusted-time
+  // freshness (BASE_ACTION's fixed historical timestamp would otherwise be
+  // rejected with INTENT_STALE before the real engine's KillSwitchModule
+  // ever runs).
+  const freshAction: ProposedAction = { ...BASE_ACTION, timestampSeconds: Math.floor(Date.now() / 1000) };
+
   let executed = false;
   await assert.rejects(
-    () => guard(BASE_ACTION, async () => { executed = true; }),
+    () => guard(freshAction, async () => { executed = true; }),
     (err: unknown) => {
       assert.ok(err instanceof OxDeAIDenyError, `GPC-2: expected OxDeAIDenyError, got ${String(err)}`);
       assert.ok((err as OxDeAIDenyError).reasons.length > 0, "GPC-2: DENY must include at least one reason");
@@ -460,6 +472,14 @@ test("GPC-11 side-effect isolation: beforeExecute / execute / setState all block
   const scenarios: Array<{ label: string; buildGuard: () => ReturnType<typeof OxDeAIGuard> }> = [];
 
   // ── GPC-11a: kill-switch DENY ──────────────────────────────────────────────
+  // This scenario is driven through the shared loop below with BASE_ACTION's
+  // fixed historical timestamp, so — with the real engine — it now denies via
+  // the trusted-time freshness gate (INTENT_STALE) rather than KillSwitchModule
+  // specifically. This is intentional and not a gap: GPC-11's invariant is
+  // side-effect isolation on *any* DENY path, and freshness-DENY is one such
+  // path. It is left unfresh deliberately, matching every other scenario in
+  // this shared loop, rather than special-casing one entry with its own
+  // timestamp.
   scenarios.push({
     label: "GPC-11a kill-switch DENY",
     buildGuard: () => {

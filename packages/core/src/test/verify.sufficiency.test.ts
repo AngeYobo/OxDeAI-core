@@ -22,6 +22,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { encodeCanonicalState, decodeCanonicalState } from "../snapshot/CanonicalCodec.js";
 import { verifySnapshot } from "../verification/verifySnapshot.js";
 import { encodeEnvelope } from "../verification/envelope.js";
@@ -70,7 +71,8 @@ function makeEngine(): PolicyEngine {
   return new PolicyEngine({
     policy_version: POLICY_VERSION,
     engine_secret: "sufficiency-test-secret-32-chars!",
-    authorization_ttl_seconds: 300
+    authorization_ttl_seconds: 300,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -145,7 +147,7 @@ test("S-3 functional replay: importState restores nonce history, blocking replay
   const intent = makeIntent(777n);
 
   // First evaluation: ALLOW, state advances with nonce 777 recorded.
-  const result1 = engine.evaluatePure(intent, initial);
+  const result1 = engine.evaluatePure(intent, initial, T0);
   assert.equal(result1.decision, "ALLOW", "first evaluation must be ALLOW");
   if (result1.decision !== "ALLOW") throw new Error("expected ALLOW");
   const advancedState = result1.nextState;
@@ -160,7 +162,7 @@ test("S-3 functional replay: importState restores nonce history, blocking replay
   freshEngine.importState(target, decodeCanonicalState(bytes));
 
   // Re-run the same intent against the imported state: must DENY as REPLAY.
-  const result2 = freshEngine.evaluatePure(intent, target);
+  const result2 = freshEngine.evaluatePure(intent, target, T0);
   assert.equal(result2.decision, "DENY",
     "replayed nonce must be DENY after importState into fresh engine");
   assert.ok(
@@ -181,7 +183,7 @@ test("S-4 state-binding: correctly-built envelope — verifyEnvelope.stateHash m
   const policyId = engine.computePolicyId();
 
   const intent = makeIntent(888n);
-  const result = engine.evaluatePure(intent, initial);
+  const result = engine.evaluatePure(intent, initial, T0);
   assert.equal(result.decision, "ALLOW");
   const nextState = result.nextState;
 
@@ -238,10 +240,10 @@ test("S-5 state-binding gap: verifyEnvelope passes even when snapshot and STATE_
   const initial = makeState();
 
   // Two successive decisions → two distinct states.
-  const r1 = engine.evaluatePure(makeIntent(901n), initial);
+  const r1 = engine.evaluatePure(makeIntent(901n), initial, T0);
   assert.equal(r1.decision, "ALLOW");
   if (r1.decision !== "ALLOW") throw new Error("expected ALLOW");
-  const r2 = engine.evaluatePure(makeIntent(902n), r1.nextState);
+  const r2 = engine.evaluatePure(makeIntent(902n), r1.nextState, T0);
   assert.equal(r2.decision, "ALLOW");
   if (r2.decision !== "ALLOW") throw new Error("expected ALLOW");
 

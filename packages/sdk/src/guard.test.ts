@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 
 import { InMemoryAuditAdapter, InMemoryStateAdapter } from "./adapters.js";
 import { buildIntent, buildState } from "./builders.js";
@@ -16,6 +16,7 @@ function makeEngine() {
     authorization_issuer: "issuer-A",
     authorization_audience: "rp-A",
     policyId: "a".repeat(64),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 

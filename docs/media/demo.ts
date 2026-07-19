@@ -1,4 +1,4 @@
-import { PolicyEngine, verifyAuthorization } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE, verifyAuthorization } from "@oxdeai/core";
 import type { Intent, State } from "@oxdeai/core";
 
 const FIXED_TIMESTAMP = 1_730_000_000;
@@ -9,7 +9,8 @@ if (!_engineSecret) throw new Error("Missing required env var: OXDEAI_ENGINE_SEC
 const engine = new PolicyEngine({
   policy_version: "v1.6",
   engine_secret: _engineSecret,
-  authorization_ttl_seconds: 60
+  authorization_ttl_seconds: 60,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE
 });
 
 const initialState: State = {
@@ -76,7 +77,7 @@ function printSeparator(): void {
 function main(): void {
   printProposal();
 
-  const first = engine.evaluatePure(intent, initialState, { mode: "fail-fast" });
+  const first = engine.evaluatePure(intent, initialState, FIXED_TIMESTAMP, { mode: "fail-fast" });
   if (first.decision !== "ALLOW") {
     throw new Error(`Expected first decision to ALLOW, got DENY: ${first.reasons.join(", ")}`);
   }
@@ -105,7 +106,7 @@ function main(): void {
   printSeparator();
   printProposal();
 
-  const second = engine.evaluatePure(intent, first.nextState, { mode: "fail-fast" });
+  const second = engine.evaluatePure(intent, first.nextState, FIXED_TIMESTAMP, { mode: "fail-fast" });
   if (second.decision !== "DENY" || !second.reasons.includes("REPLAY_NONCE")) {
     throw new Error(`Expected second decision to DENY with REPLAY_NONCE, got ${second.decision}: ${second.reasons.join(", ")}`);
   }

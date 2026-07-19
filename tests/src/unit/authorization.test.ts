@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Authorization } from "@oxdeai/core";
 import { makeIntent } from "../helpers/intent.js";
 import { makeState } from "../helpers/state.js";
@@ -10,7 +10,8 @@ test("authorization signature verifies", () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: secret,
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const intent = makeIntent({
@@ -28,7 +29,7 @@ test("authorization signature verifies", () => {
     max_amount_per_action: { "agent-1": 5_000_000n }
   });
 
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, intent.timestamp);
   assert.equal(out.decision, "ALLOW");
 
   if (out.decision !== "ALLOW") throw new Error("expected ALLOW");

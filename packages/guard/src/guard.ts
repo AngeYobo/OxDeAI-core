@@ -296,9 +296,16 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     }
 
     // ── 4. Standard path: evaluate policy ─────────────────────────────────
+    // evaluationTime follows the same capture pattern already used elsewhere
+    // in this function for `now` (delegation-chain and post-hoc authorization
+    // verification, above/below) — this is not a new trusted-clock mechanism,
+    // just the existing one applied to the now-mandatory evaluatePure
+    // parameter. It is not independently trusted or monotonic; reliable
+    // PEP-side clock capture remains deferred.
+    const evaluationTime = Math.floor(Date.now() / 1000);
     let evalResult: ReturnType<typeof config.engine.evaluatePure>;
     try {
-      evalResult = config.engine.evaluatePure(intent, state);
+      evalResult = config.engine.evaluatePure(intent, state, evaluationTime);
     } catch (err) {
       // Engine errors are never swallowed — callers must handle them.
       throw new OxDeAIAuthorizationError(

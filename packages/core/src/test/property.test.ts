@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { MODULE_CODECS } from "../policy/modules/registry.js";
 import { encodeCanonicalState, decodeCanonicalState } from "../snapshot/CanonicalCodec.js";
 import type { Intent, ActionType } from "../types/intent.js";
@@ -54,7 +55,8 @@ function makeEngine(): PolicyEngine {
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 120,
     deny_mode: "fail-fast",
-    strictDeterminism: true
+    strictDeterminism: true,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -338,7 +340,7 @@ function runIntentOps(engine: PolicyEngine, initial: State, ops: IntentOp[], see
     }
 
     nonce += 1n;
-    const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    const out = engine.evaluatePure(intent, state, intent.timestamp, { mode: "fail-fast" });
     decisions.push(out.decision);
 
     if (out.decision === "ALLOW") {

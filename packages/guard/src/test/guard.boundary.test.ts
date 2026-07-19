@@ -8,6 +8,7 @@ import type { ProposedAction, StateVersion } from "../types.js";
 import type { State, Intent, Authorization, AuthorizationV1, KeySet } from "@oxdeai/core";
 import {
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   signAuthorizationEd25519,
   stateSnapshotHash,
   intentHash,
@@ -72,6 +73,7 @@ function makeEngine(policyVersion = "policy-test") {
     authorization_issuer: TRUSTED_KEYSET.issuer,
     authorization_audience: "aud-test",
     authorization_private_key_pem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -94,9 +96,28 @@ function makeVersionedStore(initial: State): {
 // Tests
 
 test("expired authorization is denied (execute not called)", async () => {
+  // The intent itself must be fresh to clear the trusted-time freshness gate
+  // (see #184) — an already-old intent.timestamp is now rejected earlier,
+  // with INTENT_STALE, before any authorization is even minted. To exercise
+  // the *post-issuance* expiry check this test targets, tamper the minted
+  // authorization's expiry directly instead of backdating the intent,
+  // mirroring the tampering pattern used by the audience test below.
   const engine = makeEngine();
   const state = makeState();
   const store = makeVersionedStore(state);
+
+  const originalEval = engine.evaluatePure.bind(engine);
+  engine.evaluatePure = ((intent: Intent, st: State, evaluationTime: number) => {
+    const out = originalEval(intent, st, evaluationTime);
+    if (out.decision === "ALLOW") {
+      // Cast as Authorization: spread of AuthorizationV1 + tampered field; internal
+      // engine fields are present at runtime even though TypeScript type was narrowed.
+      const tampered = { ...out.authorization, expiry: 1, expires_at: 1 } as Authorization;
+      return { ...out, authorization: tampered };
+    }
+    return out;
+  }) as any;
+
   const guard = OxDeAIGuard({
     engine,
     ...store,
@@ -104,8 +125,7 @@ test("expired authorization is denied (execute not called)", async () => {
     expectedAudience: "aud-test",
   });
 
-  const pastTs = 1;
-  const action = makeAction({ timestampSeconds: pastTs } as any, { timestampSeconds: pastTs });
+  const action = makeAction();
 
   let executed = false;
   await assert.rejects(
@@ -123,8 +143,8 @@ test("audience tampering is denied by strict verifier", async () => {
   const store = makeVersionedStore(state);
 
   const originalEval = engine.evaluatePure.bind(engine);
-  engine.evaluatePure = ((intent: Intent, st: State) => {
-    const out = originalEval(intent, st);
+  engine.evaluatePure = ((intent: Intent, st: State, evaluationTime: number) => {
+    const out = originalEval(intent, st, evaluationTime);
     if (out.decision === "ALLOW") {
       // Cast as Authorization: spread of AuthorizationV1 + tampered field; internal
       // engine fields are present at runtime even though TypeScript type was narrowed.

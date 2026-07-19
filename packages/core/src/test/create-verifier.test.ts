@@ -7,6 +7,7 @@ import { createVerifier } from "../verification/createVerifier.js";
 import { signAuthorizationEd25519 } from "../verification/verifyAuthorization.js";
 import { encodeEnvelope, signEnvelopeEd25519 } from "../verification/envelope.js";
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { encodeCanonicalState } from "../snapshot/CanonicalCodec.js";
 import type { KeySet } from "../types/keyset.js";
 import type { State } from "../types/state.js";
@@ -59,6 +60,7 @@ function makeEngine() {
     policy_version: "v0.9-test",
     engine_secret: "create-verifier-test-secret-32ch!",
     authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -93,7 +95,7 @@ function makeEvents(policyId: string, withCheckpoint: boolean): AuditEntry[] {
 
 // ── Construction guards ───────────────────────────────────────────────────────
 
-test("createVerifier: throws when trustedKeySets is empty — trust boundary cannot be empty", () => {
+test("createVerifier: throws when trustedKeySets is empty - trust boundary cannot be empty", () => {
   assert.throws(
     () => createVerifier({ trustedKeySets: [] }),
     /trustedKeySets must not be empty/
@@ -106,9 +108,9 @@ test("createVerifier: returns bound verifier when trustedKeySets is non-empty", 
   assert.equal(typeof v.verifyEnvelope, "function");
 });
 
-// ── verifyAuthorization — trust enforcement ───────────────────────────────────
+// ── verifyAuthorization - trust enforcement ───────────────────────────────────
 
-test("verifyAuthorization: ok — artifact from trusted issuer with valid signature", () => {
+test("verifyAuthorization: ok - artifact from trusted issuer with valid signature", () => {
   const v = createVerifier({ trustedKeySets: [TRUSTED_KEYSET] });
   const out = v.verifyAuthorization(makeAuth(), { now: 1500 });
   assert.equal(out.ok, true);
@@ -116,8 +118,8 @@ test("verifyAuthorization: ok — artifact from trusted issuer with valid signat
   assert.deepEqual(out.violations, []);
 });
 
-test("verifyAuthorization: invalid — artifact signed by untrusted issuer is rejected", () => {
-  // OTHER_KP is not in TRUSTED_KEYSET — only TRUSTED_KEYSET is configured
+test("verifyAuthorization: invalid - artifact signed by untrusted issuer is rejected", () => {
+  // OTHER_KP is not in TRUSTED_KEYSET - only TRUSTED_KEYSET is configured
   const v = createVerifier({ trustedKeySets: [TRUSTED_KEYSET] });
   const auth = makeAuth("other-issuer", "k2", OTHER_KP.privateKey);
   const out = v.verifyAuthorization(auth, { now: 1500 });
@@ -127,7 +129,7 @@ test("verifyAuthorization: invalid — artifact signed by untrusted issuer is re
   assert.ok(out.violations.some((v) => v.code === "AUTH_KID_UNKNOWN"));
 });
 
-test("verifyAuthorization: invalid — tampered artifact fails signature check", () => {
+test("verifyAuthorization: invalid - tampered artifact fails signature check", () => {
   const v = createVerifier({ trustedKeySets: [TRUSTED_KEYSET] });
   const auth = { ...makeAuth(), state_hash: "f".repeat(64) };
   const out = v.verifyAuthorization(auth, { now: 1500 });
@@ -135,7 +137,7 @@ test("verifyAuthorization: invalid — tampered artifact fails signature check",
   assert.ok(out.violations.some((v) => v.code === "AUTH_SIGNATURE_INVALID"));
 });
 
-test("verifyAuthorization: adding untrusted issuer to the verifier grants access — trust is explicit", () => {
+test("verifyAuthorization: adding untrusted issuer to the verifier grants access - trust is explicit", () => {
   // Demonstrates that configuring a second keyset explicitly extends trust
   const v = createVerifier({ trustedKeySets: [TRUSTED_KEYSET, OTHER_KEYSET] });
   const auth = makeAuth("other-issuer", "k2", OTHER_KP.privateKey);
@@ -166,9 +168,9 @@ test("verifyAuthorization: per-call expectedIssuer overrides config-level", () =
   assert.equal(out.ok, true);
 });
 
-// ── verifyEnvelope — trust enforcement ────────────────────────────────────────
+// ── verifyEnvelope - trust enforcement ────────────────────────────────────────
 
-test("verifyEnvelope: ok — signed envelope from trusted issuer with checkpoint", () => {
+test("verifyEnvelope: ok - signed envelope from trusted issuer with checkpoint", () => {
   const { policyId, bytes } = makeSnapshotBytes();
   const signed = signEnvelopeEd25519(
     { formatVersion: 1, snapshot: bytes, events: makeEvents(policyId, true) },
@@ -180,7 +182,7 @@ test("verifyEnvelope: ok — signed envelope from trusted issuer with checkpoint
   assert.deepEqual(out.violations, []);
 });
 
-test("verifyEnvelope: inconclusive — envelope without STATE_CHECKPOINT (strict mode)", () => {
+test("verifyEnvelope: inconclusive - envelope without STATE_CHECKPOINT (strict mode)", () => {
   const { policyId, bytes } = makeSnapshotBytes();
   const envelopeBytes = encodeEnvelope({
     formatVersion: 1, snapshot: bytes, events: makeEvents(policyId, false)
@@ -192,7 +194,7 @@ test("verifyEnvelope: inconclusive — envelope without STATE_CHECKPOINT (strict
   assert.ok(out.violations.some((v) => v.code === "NO_STATE_ANCHOR"));
 });
 
-test("verifyEnvelope: invalid — envelope signed by untrusted issuer is rejected", () => {
+test("verifyEnvelope: invalid - envelope signed by untrusted issuer is rejected", () => {
   const { policyId, bytes } = makeSnapshotBytes();
   const signed = signEnvelopeEd25519(
     { formatVersion: 1, snapshot: bytes, events: makeEvents(policyId, true) },

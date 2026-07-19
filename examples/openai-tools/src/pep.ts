@@ -51,7 +51,7 @@ export function guardedProvision(
   const intent = buildProvisionIntent(asset, region, timestampSeconds);
 
   // ── Step 2: PDP evaluation (pre-execution boundary) ──────────────────────
-  const result = engine.evaluatePure(intent, state);
+  const result = engine.evaluatePure(intent, state, timestampSeconds);
 
   if (result.decision === "DENY") {
     // Tool does not execute. State is unchanged.

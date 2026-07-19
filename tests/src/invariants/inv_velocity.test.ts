@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import { makeIntent } from "../helpers/intent.js";
 import { makeState } from "../helpers/state.js";
 
@@ -8,7 +8,8 @@ test("INV-3 Velocity denies when exceeded in window", () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const state = makeState({
@@ -29,7 +30,7 @@ test("INV-3 Velocity denies when exceeded in window", () => {
     timestamp: 1000
   });
 
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, intent.timestamp);
   assert.equal(out.decision, "DENY");
   assert.ok(out.reasons.includes("VELOCITY_EXCEEDED"));
 });

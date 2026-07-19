@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { PolicyEngine } from "../policy/PolicyEngine.js"; // adjust path if needed
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { intentHash } from "../crypto/hashes.js";
 import { ReplayEngine } from "../replay/ReplayEngine.js";
 import { decodeCanonicalState, encodeCanonicalState } from "../snapshot/CanonicalCodec.js";
@@ -77,6 +78,12 @@ function intentBase(overrides?: Partial<Intent>): Intent {
   } as Intent;
 }
 
+// Every intent in this smoke run uses timestamp 1700000000; evaluationTime
+// matches it exactly so freshness is always fresh (delta = 0) and every
+// other decision/hash in this file stays byte-identical to before trusted-time
+// integration.
+const EVAL_TIME = 1700000000;
+
 type EvaluatePureResult = ReturnType<PolicyEngine["evaluatePure"]>;
 type AllowResult = Extract<EvaluatePureResult, { decision: "ALLOW" }>;
 type DenyResult = Extract<EvaluatePureResult, { decision: "DENY" }>;
@@ -109,7 +116,8 @@ async function main() {
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 60,
     deny_mode: "fail-fast",
-    checkpoint_every_n_events: 2
+    checkpoint_every_n_events: 2,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   // ---- Test 1: Replay ----
@@ -117,10 +125,10 @@ async function main() {
     const state = baseState();
     const intent = intentBase({ nonce: 42n });
 
-    const r1 = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    const r1 = engine.evaluatePure(intent, state, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r1);
 
-    const r2 = engine.evaluatePure(intent, r1.nextState, { mode: "fail-fast" });
+    const r2 = engine.evaluatePure(intent, r1.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustDeny(r2);
     mustIncludeReason(r2, "REPLAY_NONCE");
 
@@ -132,7 +140,7 @@ async function main() {
     const state = baseState();
     const intent = intentBase({ nonce: 43n, depth: 999 });
 
-    const r = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    const r = engine.evaluatePure(intent, state, EVAL_TIME, { mode: "fail-fast" });
     mustDeny(r);
     mustIncludeReason(r, "RECURSION_DEPTH_EXCEEDED");
 
@@ -144,15 +152,15 @@ async function main() {
     const state = baseState();
 
     const i1 = intentBase({ nonce: 100n });
-    const r1 = engine.evaluatePure(i1, state, { mode: "fail-fast" });
+    const r1 = engine.evaluatePure(i1, state, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r1);
 
     const i2 = intentBase({ nonce: 101n });
-    const r2 = engine.evaluatePure(i2, r1.nextState, { mode: "fail-fast" });
+    const r2 = engine.evaluatePure(i2, r1.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r2);
 
     const i3 = intentBase({ nonce: 102n });
-    const r3 = engine.evaluatePure(i3, r2.nextState, { mode: "fail-fast" });
+    const r3 = engine.evaluatePure(i3, r2.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustDeny(r3);
     mustIncludeReason(r3, "CONCURRENCY_LIMIT_EXCEEDED");
 
@@ -164,14 +172,14 @@ async function main() {
     const state = baseState();
 
     // EXECUTE twice -> should ALLOW, active=2
-    const r1 = engine.evaluatePure(intentBase({ nonce: 200n, type: "EXECUTE" }), state, { mode: "fail-fast" });
+    const r1 = engine.evaluatePure(intentBase({ nonce: 200n, type: "EXECUTE" }), state, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r1);
 
-    const r2 = engine.evaluatePure(intentBase({ nonce: 201n, type: "EXECUTE" }), r1.nextState, { mode: "fail-fast" });
+    const r2 = engine.evaluatePure(intentBase({ nonce: 201n, type: "EXECUTE" }), r1.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r2);
 
     // Third EXECUTE -> DENY
-    const r3 = engine.evaluatePure(intentBase({ nonce: 202n, type: "EXECUTE" }), r2.nextState, { mode: "fail-fast" });
+    const r3 = engine.evaluatePure(intentBase({ nonce: 202n, type: "EXECUTE" }), r2.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustDeny(r3);
     mustIncludeReason(r3, "CONCURRENCY_LIMIT_EXCEEDED");
 
@@ -179,7 +187,7 @@ async function main() {
     const badRel = engine.evaluatePure(
       intentBase({ nonce: 203n, type: "RELEASE", authorization_id: "not-a-real-auth" }),
       r2.nextState,
-      { mode: "fail-fast" }
+      EVAL_TIME, { mode: "fail-fast" }
     );
     mustDeny(badRel);
     mustIncludeReason(badRel, "CONCURRENCY_RELEASE_INVALID");
@@ -188,12 +196,12 @@ async function main() {
     const rel = engine.evaluatePure(
       intentBase({ nonce: 204n, type: "RELEASE", authorization_id: r2.authorization.auth_id }),
       r2.nextState,
-      { mode: "fail-fast" }
+      EVAL_TIME, { mode: "fail-fast" }
     );
     mustAllow(rel);
 
     // Now EXECUTE should ALLOW again (slot freed)
-    const r4 = engine.evaluatePure(intentBase({ nonce: 205n, type: "EXECUTE" }), rel.nextState, { mode: "fail-fast" });
+    const r4 = engine.evaluatePure(intentBase({ nonce: 205n, type: "EXECUTE" }), rel.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r4);
 
     console.log("- Release binding test passed");
@@ -218,14 +226,14 @@ async function main() {
         tool: "openai.responses"
       });
 
-    const r1 = engine.evaluatePure(mk(300n), state, { mode: "fail-fast" });
+    const r1 = engine.evaluatePure(mk(300n), state, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r1);
 
-    const r2 = engine.evaluatePure(mk(301n), r1.nextState, { mode: "fail-fast" });
+    const r2 = engine.evaluatePure(mk(301n), r1.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustAllow(r2);
 
     // third call in same window should DENY (max_calls = 2)
-    const r3 = engine.evaluatePure(mk(302n), r2.nextState, { mode: "fail-fast" });
+    const r3 = engine.evaluatePure(mk(302n), r2.nextState, EVAL_TIME, { mode: "fail-fast" });
     mustDeny(r3);
     mustIncludeReason(r3, "TOOL_CALL_LIMIT_EXCEEDED");
 
@@ -260,7 +268,7 @@ async function main() {
     let liveState = liveStart;
     const liveDecisions: Array<"ALLOW" | "DENY"> = [];
     for (const i of sequence) {
-      const out = engine.evaluatePure(i, liveState, { mode: "fail-fast" });
+      const out = engine.evaluatePure(i, liveState, EVAL_TIME, { mode: "fail-fast" });
       liveDecisions.push(out.decision);
       if (out.decision === "ALLOW") liveState = out.nextState;
     }
@@ -275,7 +283,7 @@ async function main() {
     let importedState = importedStart;
     const importedDecisions: Array<"ALLOW" | "DENY"> = [];
     for (const i of sequence) {
-      const out = engine.evaluatePure(i, importedState, { mode: "fail-fast" });
+      const out = engine.evaluatePure(i, importedState, EVAL_TIME, { mode: "fail-fast" });
       importedDecisions.push(out.decision);
       if (out.decision === "ALLOW") importedState = out.nextState;
     }

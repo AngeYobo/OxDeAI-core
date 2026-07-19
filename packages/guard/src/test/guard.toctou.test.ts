@@ -12,7 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 
@@ -36,6 +36,7 @@ function makeEngine(): PolicyEngine {
     authorization_audience: "aud-test",
     authorization_ttl_seconds: 600,
     authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 

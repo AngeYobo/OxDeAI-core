@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { encodeCanonicalState } from "../snapshot/CanonicalCodec.js";
 import { verifySnapshot } from "../verification/verifySnapshot.js";
 import { verifyAuditEvents } from "../verification/verifyAuditEvents.js";
@@ -51,7 +52,8 @@ function makeEngine() {
   return new PolicyEngine({
     policy_version: "v0.9-test",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 

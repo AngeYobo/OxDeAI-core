@@ -21,6 +21,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import type { Intent, ActionType } from "../types/intent.js";
 import type { State, ToolLimitsState } from "../types/state.js";
 import type { Authorization } from "../types/authorization.js";
@@ -76,7 +77,8 @@ function makeEngine(): PolicyEngine {
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 120,
     deny_mode: "fail-fast",
-    strictDeterminism: true
+    strictDeterminism: true,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -370,7 +372,7 @@ function runIntentOps(
     }
 
     nonce += 1n;
-    const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    const out = engine.evaluatePure(intent, state, intent.timestamp, { mode: "fail-fast" });
     decisions.push(out.decision);
 
     if (out.decision === "ALLOW") {
@@ -396,8 +398,8 @@ test("D-1 evaluatePure is deterministic for equivalent inputs", () => {
 
     const intent = buildExecIntent(op, seed, 0, 1_000n);
 
-    const out1 = engine.evaluatePure(intent, structuredClone(state), { mode: "fail-fast" });
-    const out2 = engine.evaluatePure(intent, structuredClone(state), { mode: "fail-fast" });
+    const out1 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
+    const out2 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
 
     assert.equal(out1.decision, out2.decision, `seed=${seed} decision mismatch`);
     assert.deepEqual(out1.reasons ?? [], out2.reasons ?? [], `seed=${seed} reasons mismatch`);
@@ -440,8 +442,8 @@ test("D-2 evaluatePure does not mutate the input state", () => {
     // Capture a deterministic fingerprint of the state before evaluation.
     const preHash = engine.computeStateHash(state);
 
-    // Pass state directly — the implementation must not mutate it.
-    engine.evaluatePure(intent, state, { mode: "fail-fast" });
+    // Pass state directly - the implementation must not mutate it.
+    engine.evaluatePure(intent, state, intent.timestamp, { mode: "fail-fast" });
 
     const postHash = engine.computeStateHash(state);
     assert.equal(preHash, postHash,
@@ -451,7 +453,7 @@ test("D-2 evaluatePure does not mutate the input state", () => {
 
 test("D-3 cross-clone determinism: structuredClone inputs yield identical outputs", () => {
   // Two independent structuredClone copies of the same logical state must
-  // produce identical evaluation outputs — ruling out any residual aliasing
+  // produce identical evaluation outputs - ruling out any residual aliasing
   // between the cloned copy and the engine's internal working state.
   for (const seed of seeds()) {
     const engine = makeEngine();
@@ -470,8 +472,8 @@ test("D-3 cross-clone determinism: structuredClone inputs yield identical output
     assert.notStrictEqual(cloneA, cloneB,
       `seed=${seed} structuredClone must return new objects`);
 
-    const outA = engine.evaluatePure(intent, cloneA, { mode: "fail-fast" });
-    const outB = engine.evaluatePure(intent, cloneB, { mode: "fail-fast" });
+    const outA = engine.evaluatePure(intent, cloneA, intent.timestamp, { mode: "fail-fast" });
+    const outB = engine.evaluatePure(intent, cloneB, intent.timestamp, { mode: "fail-fast" });
 
     assert.equal(outA.decision, outB.decision,
       `seed=${seed} cross-clone decision mismatch`);
@@ -526,7 +528,7 @@ test("D-6 strict mode: verifyAuthorization requires explicit now", () => {
     if (!op) continue;
 
     const intent = buildExecIntent(op, seed, 0, 4_000n);
-    const out = engine.evaluatePure(intent, structuredClone(state), { mode: "fail-fast" });
+    const out = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
     if (out.decision !== "ALLOW") continue;
 
     const { authorization } = out;
@@ -565,8 +567,8 @@ test("D-6 strict mode: evaluatePure uses intent.timestamp, not Date.now()", () =
 
     const intent = buildExecIntent(op, seed, 0, 5_000n);
 
-    const out1 = engine.evaluatePure(intent, structuredClone(state), { mode: "fail-fast" });
-    const out2 = engine.evaluatePure(intent, structuredClone(state), { mode: "fail-fast" });
+    const out1 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
+    const out2 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
 
     assert.equal(out1.decision, out2.decision,
       `seed=${seed} strict mode evaluatePure decision not stable`);
@@ -585,7 +587,7 @@ test("D-6 strict mode: evaluatePure uses intent.timestamp, not Date.now()", () =
 test("D-7 audit head hash is deterministic across independent engine instances", () => {
   // Two freshly-created engines that process the same intent sequence against
   // the same initial state must produce identical audit.headHash() values.
-  // This verifies that all audit event fields — policyId, timestamps, hashes —
+  // This verifies that all audit event fields - policyId, timestamps, hashes -
   // are derived solely from the inputs and not from any per-instance entropy.
   for (const seed of seeds()) {
     const state = genState(seed);
@@ -626,7 +628,8 @@ test("D-8 computePolicyId is stable for fixed engine configuration", () => {
       engine_secret: "test-secret-must-be-at-least-32-chars!!",
       authorization_ttl_seconds: 999,   // differs from makeEngine() (120)
       deny_mode: "fail-fast",
-      strictDeterminism: true
+      strictDeterminism: true,
+      ...RECOMMENDED_TRUSTED_TIME_PROFILE
     });
     assert.notEqual(id1a, eDiffTtl.computePolicyId(),
       `seed=${seed} D-8 computePolicyId did not change when ttl changed`);
@@ -636,7 +639,8 @@ test("D-8 computePolicyId is stable for fixed engine configuration", () => {
       engine_secret: "test-secret-must-be-at-least-32-chars!!",
       authorization_ttl_seconds: 120,
       deny_mode: "fail-fast",
-      strictDeterminism: true
+      strictDeterminism: true,
+      ...RECOMMENDED_TRUSTED_TIME_PROFILE
     });
     assert.notEqual(id1a, eDiffVersion.computePolicyId(),
       `seed=${seed} D-8 computePolicyId did not change when policy_version changed`);

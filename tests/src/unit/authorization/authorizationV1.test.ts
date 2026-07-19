@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { PolicyEngine, signAuthorizationEd25519, verifyAuthorization } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE, signAuthorizationEd25519, verifyAuthorization } from "@oxdeai/core";
 import type { Authorization, KeySet } from "@oxdeai/core";
 import { makeIntent } from "../../helpers/intent.js";
 import { makeState } from "../../helpers/state.js";
@@ -18,7 +18,8 @@ function makeEngine(): PolicyEngine {
     authorization_ttl_seconds: 60,
     authorization_issuer: "issuer-A",
     authorization_audience: "rp-A",
-    policyId: "a".repeat(64)
+    policyId: "a".repeat(64),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -44,7 +45,7 @@ function allowOutput() {
     max_amount_per_action: { "agent-1": 5_000_000n }
   });
 
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, intent.timestamp);
   if (out.decision !== "ALLOW") {
     throw new Error(`expected ALLOW, got DENY: ${out.reasons.join(",")}`);
   }

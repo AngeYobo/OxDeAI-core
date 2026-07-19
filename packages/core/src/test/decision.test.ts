@@ -5,11 +5,11 @@
  * Focused tests for the explicit decision layer introduced in the refactor.
  *
  * Two levels of coverage:
- *  1. runDecisionModules unit tests — exercise the extracted function directly
+ *  1. runDecisionModules unit tests - exercise the extracted function directly
  *     using lightweight stub modules, verifying ALLOW/DENY paths, fail-fast,
  *     collect-all, nextState, and reason accumulation.
  *
- *  2. PolicyEngine integration tests — verify that evaluatePure() produces
+ *  2. PolicyEngine integration tests - verify that evaluatePure() produces
  *     identical outputs before and after the refactor: same decisions, same
  *     reasons, same nextState shape, same audit event sequence.
  */
@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { runDecisionModules } from "../policy/decision/runDecisionModules.js";
 import type { DecisionInput } from "../policy/decision/types.js";
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
 import { ReasonCode as ReasonCodeValues } from "../types/policy.js";
@@ -43,7 +44,7 @@ function stubDeny(id: string, reason: ReasonCode): PolicyModule {
   };
 }
 
-/** Minimal state — only the shape matters for stub modules */
+/** Minimal state - only the shape matters for stub modules */
 function minimalState(overrides?: Partial<State>): State {
   return {
     policy_version: "v1-test",
@@ -97,14 +98,14 @@ test("runDecisionModules: all ALLOW → ALLOW decision", () => {
   assert.deepEqual(result.reasons, []);
 });
 
-test("runDecisionModules: ALLOW path — nextState carries module deltas", () => {
+test("runDecisionModules: ALLOW path - nextState carries module deltas", () => {
   const delta: Partial<State> = { period_id: "updated" };
   const result = runDecisionModules(baseInput(), [stubAllow("a", delta)]);
   assert.equal(result.decision, "ALLOW");
   assert.equal((result.nextState as any).period_id, "updated");
 });
 
-test("runDecisionModules: ALLOW path — deltas accumulate in module-order", () => {
+test("runDecisionModules: ALLOW path - deltas accumulate in module-order", () => {
   const d1: Partial<State> = { period_id: "first" };
   const d2: Partial<State> = { period_id: "second" };
   const result = runDecisionModules(baseInput(), [stubAllow("a", d1), stubAllow("b", d2)]);
@@ -118,14 +119,14 @@ test("runDecisionModules: single DENY → DENY decision", () => {
   assert.deepEqual(result.reasons, ["KILL_SWITCH"]);
 });
 
-test("runDecisionModules: DENY path — nextState is unchanged input state", () => {
+test("runDecisionModules: DENY path - nextState is unchanged input state", () => {
   const state = minimalState();
   const result = runDecisionModules(baseInput({ state }), [stubDeny("a", "BUDGET_EXCEEDED")]);
   assert.equal(result.decision, "DENY");
   assert.strictEqual(result.nextState, state);
 });
 
-test("runDecisionModules: fail-fast — stops at first DENY, ignores subsequent modules", () => {
+test("runDecisionModules: fail-fast - stops at first DENY, ignores subsequent modules", () => {
   let secondRan = false;
   const second: PolicyModule = {
     id: "b",
@@ -144,7 +145,7 @@ test("runDecisionModules: fail-fast — stops at first DENY, ignores subsequent 
   void secondRan;
 });
 
-test("runDecisionModules: collect-all — accumulates reasons from all DENY modules", () => {
+test("runDecisionModules: collect-all - accumulates reasons from all DENY modules", () => {
   const result = runDecisionModules(
     baseInput({ mode: "collect-all" }),
     [stubDeny("a", "KILL_SWITCH"), stubDeny("b", "BUDGET_EXCEEDED")]
@@ -160,7 +161,7 @@ test("runDecisionModules: empty module list → ALLOW with original state", () =
   assert.strictEqual(result.nextState, state);
 });
 
-test("runDecisionModules: ALLOW before DENY — delta from first module is NOT in nextState", () => {
+test("runDecisionModules: ALLOW before DENY - delta from first module is NOT in nextState", () => {
   // DENY path returns original input state regardless of prior ALLOW deltas
   const delta: Partial<State> = { period_id: "modified" };
   const state = minimalState();
@@ -181,6 +182,7 @@ function makeEngine(): PolicyEngine {
     engine_secret: "test-secret-32-bytes-long-enough!!",
     authorization_ttl_seconds: 60,
     deny_mode: "fail-fast",
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
@@ -188,37 +190,42 @@ function validState(): State {
   return minimalState({ policy_version: "v1-test" });
 }
 
+// minimalIntent() defaults timestamp to T0; evaluationTime matches it
+// exactly (delta = 0) so these pre-existing tests exercise the same
+// ALLOW/DENY behavior as before trusted-time integration.
+const T0 = 1_000_000;
+
 test("PolicyEngine.evaluatePure: ALLOW path returns authorization and nextState", () => {
   const engine = makeEngine();
   const state = validState();
   const intent = minimalIntent({ timestamp: 1_000_000, nonce: 99n });
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, T0);
   assert.equal(out.decision, "ALLOW");
   assert.ok("authorization" in out && out.authorization);
   assert.ok("nextState" in out && out.nextState);
 });
 
-test("PolicyEngine.evaluatePure: DENY path — kill switch", () => {
+test("PolicyEngine.evaluatePure: DENY path - kill switch", () => {
   const engine = makeEngine();
   const state = validState();
   state.kill_switch.global = true;
-  const out = engine.evaluatePure(minimalIntent({ nonce: 1n }), state);
+  const out = engine.evaluatePure(minimalIntent({ nonce: 1n }), state, T0);
   assert.equal(out.decision, "DENY");
   assert.ok(out.reasons.includes("KILL_SWITCH"));
 });
 
-test("PolicyEngine.evaluatePure: DENY path — replay nonce", () => {
+test("PolicyEngine.evaluatePure: DENY path - replay nonce", () => {
   const engine = makeEngine();
   const state = validState();
   const intent = minimalIntent({ nonce: 42n });
 
   // First call → ALLOW, records nonce in state
-  const first = engine.evaluatePure(intent, state);
+  const first = engine.evaluatePure(intent, state, T0);
   assert.equal(first.decision, "ALLOW");
 
   // Second call with same nonce against updated state → DENY
   if (first.decision !== "ALLOW") throw new Error("expected ALLOW");
-  const second = engine.evaluatePure(intent, first.nextState);
+  const second = engine.evaluatePure(intent, first.nextState, T0);
   assert.equal(second.decision, "DENY");
   assert.ok(second.reasons.includes("REPLAY_NONCE"));
 });
@@ -227,16 +234,16 @@ test("PolicyEngine.evaluatePure: ALLOW nextState carries replay nonce delta", ()
   const engine = makeEngine();
   const state = validState();
   const intent = minimalIntent({ nonce: 7n, timestamp: 1_000_000 });
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, T0);
   assert.equal(out.decision, "ALLOW");
   if (out.decision !== "ALLOW") return;
   const nonces = out.nextState.replay.nonces["agent-1"] ?? [];
   assert.ok(nonces.some((e) => e.nonce === "7"), "nonce 7 should be recorded in nextState");
 });
 
-test("PolicyEngine.evaluatePure: audit sequence — ALLOW emits INTENT_RECEIVED, DECISION, AUTH_EMITTED", () => {
+test("PolicyEngine.evaluatePure: audit sequence - ALLOW emits INTENT_RECEIVED, DECISION, AUTH_EMITTED", () => {
   const engine = makeEngine();
-  const out = engine.evaluatePure(minimalIntent({ nonce: 55n }), validState());
+  const out = engine.evaluatePure(minimalIntent({ nonce: 55n }), validState(), T0);
   assert.equal(out.decision, "ALLOW");
   const events = engine.audit.snapshot();
   const types = events.map((e) => e.type);
@@ -248,11 +255,11 @@ test("PolicyEngine.evaluatePure: audit sequence — ALLOW emits INTENT_RECEIVED,
   assert.ok(types.indexOf("DECISION") < types.indexOf("AUTH_EMITTED"));
 });
 
-test("PolicyEngine.evaluatePure: audit sequence — DENY emits INTENT_RECEIVED then DECISION only", () => {
+test("PolicyEngine.evaluatePure: audit sequence - DENY emits INTENT_RECEIVED then DECISION only", () => {
   const engine = makeEngine();
   const state = validState();
   state.kill_switch.global = true;
-  engine.evaluatePure(minimalIntent({ nonce: 1n }), state);
+  engine.evaluatePure(minimalIntent({ nonce: 1n }), state, T0);
   const types = engine.audit.snapshot().map((e) => e.type);
   assert.ok(types.includes("INTENT_RECEIVED"), "missing INTENT_RECEIVED");
   assert.ok(types.includes("DECISION"),        "missing DECISION");
@@ -266,7 +273,7 @@ test("PolicyEngine.evaluatePure: collect-all mode accumulates multiple deny reas
   state.kill_switch.agents["agent-1"] = true; // redundant but verifies collect-all
   // Also trip the budget
   state.budget.spent_in_period["agent-1"] = 999_999_999_999n;
-  const out = engine.evaluatePure(minimalIntent({ nonce: 1n }), state, { mode: "collect-all" });
+  const out = engine.evaluatePure(minimalIntent({ nonce: 1n }), state, T0, { mode: "collect-all" });
   assert.equal(out.decision, "DENY");
   // At minimum KILL_SWITCH must appear; collect-all may surface more
   assert.ok(out.reasons.length >= 1);
