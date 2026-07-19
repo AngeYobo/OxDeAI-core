@@ -147,10 +147,11 @@ async function main() {
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",
     policyId,
+    ...core.RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
   const intent = makeIntent(seed);
   const state = makeState();
-  const allow = engine.evaluatePure(intent, state);
+  const allow = engine.evaluatePure(intent, state, 1700000000);
   const auth = allow.authorization;
   const snapshot = core.encodeCanonicalState({
     formatVersion: 1,
@@ -188,7 +189,7 @@ async function main() {
       legacyHmacSecret: "bench-hmac-secret",
     };
     work = () => {
-      const decision = engine.evaluatePure(intent, makeState());
+      const decision = engine.evaluatePure(intent, makeState(), 1700000000);
       if (decision.decision !== "ALLOW") return 0;
       const authVr = core.verifyAuthorization(auth, authOpts);
       if (authVr.status !== "ok") return 0;
@@ -197,7 +198,7 @@ async function main() {
       return runTool(actionType, target, amount);
     };
   } else if (scenario === "evaluate") {
-    work = () => engine.evaluatePure(intent, makeState());
+    work = () => engine.evaluatePure(intent, makeState(), 1700000000);
   } else if (scenario === "verifyAuthorization") {
     const opts = {
       now: 1700000000,

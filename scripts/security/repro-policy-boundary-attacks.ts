@@ -1,4 +1,5 @@
 import { PolicyEngine } from "../../packages/core/src/policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../../packages/core/src/policy/trustedTimeProfile.js";
 import type { EvaluatePureOutput } from "../../packages/core/src/policy/PolicyEngine.js";
 import type { State } from "../../packages/core/src/types/state.js";
 import type { Intent } from "../../packages/core/src/types/intent.js";
@@ -17,8 +18,18 @@ function engine(): PolicyEngine {
   return new PolicyEngine({
     policy_version: POLICY_VERSION,
     engine_secret: SECRET,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
+
+// Fixed trusted "now" for every attack below — deliberately NOT derived from
+// each attack's (attacker-controlled) intent.timestamp. This is the two-clock
+// model itself: attacks that future-date intent.timestamp are now expected to
+// be caught by the freshness gate (INTENT_FRESHNESS_FUTURE) before they ever
+// reach replay/velocity/tool-window logic. Attacks C, K3, J, and I probe
+// exactly this boundary and are expected to flip from VULNERABLE to
+// RESISTED/FIXED now that freshness is wired in ahead of those gates.
+const EVAL_TIME = BASE_TS;
 
 function baseState(overrides?: (s: State) => void): State {
   const s: State = {
@@ -117,7 +128,7 @@ function attackF_killSwitchTypeConfusion(): void {
     st.velocity.config.max_actions = 1000;
   });
 
-  const out = engine().evaluatePure(intent(), s);
+  const out = engine().evaluatePure(intent(), s, EVAL_TIME);
   print("F: kill_switch.agents[agent] = 1", out);
 
   assertSignal(
@@ -150,6 +161,7 @@ function attackC_futureDatedAuthorization(): void {
       nonce: 2n,
     }),
     s,
+    EVAL_TIME,
   );
 
   print("C: future-dated intent timestamp", out);
@@ -178,11 +190,11 @@ function attackK_replayFutureDating(): void {
     st.tool_limits.max_calls[AGENT] = 1000;
   });
 
-  const first = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS }), s);
+  const first = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS }), s, EVAL_TIME);
   if (first.decision === "ALLOW") s = first.nextState;
 
-  const immediateReplay = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS }), s);
-  const futureReplay = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS + 7200 }), s);
+  const immediateReplay = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS }), s, EVAL_TIME);
+  const futureReplay = e.evaluatePure(intent({ nonce: 7n, timestamp: BASE_TS + 7200 }), s, EVAL_TIME);
 
   print("K1: nonce 7 first use", first);
   print("K2: nonce 7 immediate replay", immediateReplay);
@@ -223,6 +235,7 @@ function attackJ_velocityFutureDating(): void {
         timestamp: BASE_TS + i * 7200,
       }),
       s,
+      EVAL_TIME,
     );
     outs.push(out);
     if (out.decision === "ALLOW") s = out.nextState;
@@ -269,6 +282,7 @@ function attackI_toolWindowFutureDating(): void {
         tool_call: true,
       }),
       s,
+      EVAL_TIME,
     );
     outs.push(out);
     if (out.decision === "ALLOW") s = out.nextState;
@@ -318,6 +332,7 @@ function attackH_toolCallOptIn(): void {
         // tool_call intentionally omitted
       }),
       s1,
+      EVAL_TIME,
     );
     omitted.push(out);
     if (out.decision === "ALLOW") s1 = out.nextState;
@@ -342,6 +357,7 @@ function attackH_toolCallOptIn(): void {
         tool_call: true,
       }),
       s2,
+      EVAL_TIME,
     );
     explicit.push(out);
     if (out.decision === "ALLOW") s2 = out.nextState;
@@ -372,8 +388,8 @@ function attackG_depthSelfDeclared(): void {
     st.velocity.config.max_actions = 1000;
   });
 
-  const highDepth = engine().evaluatePure(intent({ depth: 99, nonce: 500n }), s);
-  const lowDepth = engine().evaluatePure(intent({ depth: 0, nonce: 501n }), s);
+  const highDepth = engine().evaluatePure(intent({ depth: 99, nonce: 500n }), s, EVAL_TIME);
+  const lowDepth = engine().evaluatePure(intent({ depth: 0, nonce: 501n }), s, EVAL_TIME);
 
   print("G1: depth = 99", highDepth);
   print("G2: depth = 0", lowDepth);

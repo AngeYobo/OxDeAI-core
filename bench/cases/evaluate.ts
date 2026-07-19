@@ -1,5 +1,5 @@
 import { createFixtureSet } from "../fixtures";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { State } from "@oxdeai/core";
 
 export const name = "evaluate";
@@ -31,11 +31,12 @@ export function create(seed: number): () => unknown {
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",
     policyId: fx.policy.id,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
   const baseState = cloneState(fx.state);
 
   return () => {
-    const out = engine.evaluatePure(fx.intent, cloneState(baseState));
+    const out = engine.evaluatePure(fx.intent, cloneState(baseState), fx.intent.timestamp);
     if (out.decision === "ALLOW") {
       return out.authorization.authorization_id;
     }

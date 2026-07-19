@@ -103,6 +103,27 @@ export function encodeCanonicalState(state: CanonicalState_2): Uint8Array;
 export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array;
 
 // @public (undocumented)
+export type EngineOptions = {
+    policy_version: string;
+    engine_secret: string;
+    authorization_ttl_seconds?: number;
+    authorization_issuer?: string;
+    authorization_audience?: string;
+    authorization_signing_alg?: "Ed25519" | "HMAC-SHA256";
+    authorization_signing_kid?: string;
+    authorization_private_key_pem?: string;
+    maxClockSkewSeconds: number;
+    maxIntentAgeSeconds: number;
+    deny_mode?: "collect-all" | "fail-fast";
+    policyId?: string;
+    strictDeterminism?: boolean;
+    checkpoint_every_n_events?: number;
+    stateStore?: StateStore;
+    auditSink?: AuditSink;
+    autoPersist?: boolean;
+};
+
+// @public (undocumented)
 export function engineSignHmac(payload: unknown, secret: string): string;
 
 // @public (undocumented)
@@ -189,7 +210,6 @@ export interface ModuleStateCodec {
 
 // @public (undocumented)
 export class PolicyEngine {
-    // Warning: (ae-forgotten-export) The symbol "EngineOptions" needs to be exported by the entry point index.d.ts
     constructor(opts: EngineOptions);
     // (undocumented)
     readonly audit: HashChainedLog;
@@ -204,12 +224,12 @@ export class PolicyEngine {
     // Warning: (ae-forgotten-export) The symbol "EvaluateOutput" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    evaluate(intent: Intent, state: State): EvaluateOutput;
+    evaluate(intent: Intent, state: State, evaluationTime: number): EvaluateOutput;
     // Warning: (ae-forgotten-export) The symbol "EngineEvalOptions" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "EvaluatePureOutput" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    evaluatePure(intent: Intent, state: State, opts?: EngineEvalOptions): EvaluatePureOutput;
+    evaluatePure(intent: Intent, state: State, evaluationTime: number, opts?: EngineEvalOptions): EvaluatePureOutput;
     // (undocumented)
     exportState(): CanonicalState;
     // (undocumented)
@@ -225,7 +245,7 @@ export class PolicyEngine {
     // Warning: (ae-forgotten-export) The symbol "SimulationResult" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    simulateSequence(intents: Intent[], opts?: EngineEvalOptions): SimulationResult;
+    simulateSequence(intents: Intent[], evaluationTime: number, opts?: EngineEvalOptions): SimulationResult;
     // (undocumented)
     verifyAuthorization(intent: Intent, authorization: Authorization, state: State, now?: number): {
         valid: boolean;
@@ -283,6 +303,12 @@ export const ReasonCode: {
 
 // @public (undocumented)
 export type ReasonCode = (typeof ReasonCode)[keyof typeof ReasonCode];
+
+// @public
+export const RECOMMENDED_TRUSTED_TIME_PROFILE: {
+    readonly maxClockSkewSeconds: 300;
+    readonly maxIntentAgeSeconds: 300;
+};
 
 // @public (undocumented)
 export type RecursionState = {

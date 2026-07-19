@@ -6,7 +6,7 @@
  * LangGraph proposes actions; OxDeAI decides whether they may execute.
  */
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, State } from "@oxdeai/core";
 import { DEMO_KEYSET, DEMO_PRIVATE_KEY_PEM } from "./crypto.js";
 
@@ -44,6 +44,7 @@ export const engine = new PolicyEngine({
   authorization_ttl_seconds: 600,
   authorization_audience: AGENT_ID,
   policyId: POLICY_ID,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 export function makeState(): State {

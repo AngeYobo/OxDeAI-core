@@ -5,7 +5,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { PolicyEngine, encodeCanonicalState, encodeEnvelope } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE, encodeCanonicalState, encodeEnvelope } from "@oxdeai/core";
 import type { State } from "@oxdeai/core";
 
 
@@ -221,7 +221,8 @@ test("verify-envelope reads file and verifies", async () => {
   const engine = new PolicyEngine({
     policy_version: state.policy_version,
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 120
+    authorization_ttl_seconds: 120,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
   const snapshotBytes = encodeCanonicalState(engine.exportState(state));
   const envelope = encodeEnvelope({ formatVersion: 1, snapshot: snapshotBytes, events });
@@ -345,7 +346,8 @@ test("verify supports --kind authorization from file", async () => {
   const engine = new PolicyEngine({
     policy_version: state.policy_version,
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 120
+    authorization_ttl_seconds: 120,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
   const intent = {
     intent_id: "intent:agent-1:22",
@@ -360,7 +362,7 @@ test("verify supports --kind authorization from file", async () => {
     nonce: 22n,
     signature: "cli-signature-placeholder"
   };
-  const evaluated = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+  const evaluated = engine.evaluatePure(intent, state, intent.timestamp, { mode: "fail-fast" });
   assert.equal(evaluated.decision, "ALLOW");
 
   const authPath = join(dir, "authorization.json");

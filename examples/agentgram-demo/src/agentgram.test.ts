@@ -14,7 +14,12 @@ import { AGENTGRAM_INTENTS } from "./intents.js";
 const AGENT_ID      = "test-agent";
 const TARGET_AGENT  = "target-agent";
 const POST_ID       = "post-001";
-const NOW           = 1_770_000_000;
+// createAgentgramGuard has no clock override — it always uses the SDK's
+// default Date.now()-based clock for the trusted-time freshness gate's
+// evaluationTime (see #184). NOW must therefore be real-time-derived, not a
+// fixed historical constant, or every guard() call below would be denied
+// with INTENT_STALE before reaching the property under test.
+const NOW           = Math.floor(Date.now() / 1000);
 const TEST_SECRET   = "test-secret-must-be-at-least-32-chars!!";
 
 function makeGuard(postIds: string[] = [POST_ID]) {
@@ -324,7 +329,7 @@ test("decision can be verified independently", async () => {
     )
   );
 
-  const result = engine.evaluatePure(intent, state);
+  const result = engine.evaluatePure(intent, state, intent.timestamp);
 
   assert.equal(result.decision, "ALLOW");
   assert.ok(result.authorization, "expected authorization on ALLOW");
@@ -363,7 +368,7 @@ test("tampered intent fails verification", async () => {
     )
   );
 
-  const result = engine.evaluatePure(intent, state);
+  const result = engine.evaluatePure(intent, state, intent.timestamp);
 
   assert.equal(result.decision, "ALLOW");
   assert.ok(result.authorization);

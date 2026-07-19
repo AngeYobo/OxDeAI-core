@@ -19,6 +19,7 @@
 
 import { writeFile } from "node:fs/promises";
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
 
@@ -92,7 +93,8 @@ async function main(): Promise<void> {
   const engine = new PolicyEngine({
     policy_version: POLICY,
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 300
+    authorization_ttl_seconds: 300,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const decisions: string[] = [];
@@ -115,7 +117,7 @@ async function main(): Promise<void> {
       }
     }
 
-    const out = engine.evaluatePure(actual, state, { mode: "fail-fast" });
+    const out = engine.evaluatePure(actual, state, actual.timestamp, { mode: "fail-fast" });
     decisions.push(out.decision);
 
     if (out.decision === "ALLOW") {

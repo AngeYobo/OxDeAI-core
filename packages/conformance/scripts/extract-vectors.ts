@@ -16,6 +16,7 @@ import {
   verifyEnvelope,
   encodeEnvelope,
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   signAuthorizationEd25519,
   createDelegation,
 } from "@oxdeai/core";
@@ -86,7 +87,8 @@ function makeEngine(): PolicyEngine {
     policy_version: "v1.0.0",
     engine_secret: ENGINE_SECRET,
     authorization_ttl_seconds: 60,
-    policyId: "a".repeat(64)
+    policyId: "a".repeat(64),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -210,13 +212,13 @@ async function extractAuthorizationPayload(): Promise<void> {
   const state = makeState();
   const policyId = engine.computePolicyId();
 
-  const r1 = engine.evaluatePure(makeIntent(100n, 1730000000), state);
+  const r1 = engine.evaluatePure(makeIntent(100n, 1730000000), state, 1730000000);
   if (r1.decision !== "ALLOW") throw new Error("expected ALLOW for auth vector 1");
   // Cast to Authorization to access engine-internal fields needed for vector extraction.
   // The runtime object still carries these fields; only the TypeScript type was narrowed.
   const r1auth = r1.authorization as Authorization;
 
-  const r2 = engine.evaluatePure(makeIntent(101n, 0), makeState());
+  const r2 = engine.evaluatePure(makeIntent(101n, 0), makeState(), 0);
   if (r2.decision !== "ALLOW") throw new Error("expected ALLOW for auth vector 2");
   const r2auth = r2.authorization as Authorization;
 
@@ -306,7 +308,7 @@ async function extractSnapshotHash(): Promise<void> {
 async function extractAuditChain(): Promise<void> {
   const engine = makeEngine();
   const state = makeState();
-  const out = engine.evaluatePure(makeIntent(200n, 1730000000), state);
+  const out = engine.evaluatePure(makeIntent(200n, 1730000000), state, 1730000000);
   if (out.decision !== "ALLOW") throw new Error("expected ALLOW for audit-chain vectors");
 
   const events = engine.audit.snapshot();
@@ -362,7 +364,7 @@ async function extractEnvelopeVerification(): Promise<void> {
   const engine = makeEngine();
   const state = makeState();
 
-  const out = engine.evaluatePure(makeIntent(300n, 1730000000), state);
+  const out = engine.evaluatePure(makeIntent(300n, 1730000000), state, 1730000000);
   if (out.decision !== "ALLOW") throw new Error("expected ALLOW for envelope vectors");
 
   const events = engine.audit.snapshot();

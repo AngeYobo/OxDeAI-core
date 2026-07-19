@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, State, ActionType } from "@oxdeai/core";
 import { makeIntent } from "../helpers/intent.js";
 import { makeState } from "../helpers/state.js";
@@ -79,7 +79,8 @@ test(`META(${ITERS}): ALLOW implies predicates hold (on pre-state)`, () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const r = lcg(0xA110FFEE);
@@ -136,7 +137,7 @@ test(`META(${ITERS}): ALLOW implies predicates hold (on pre-state)`, () => {
     // Snapshot PRE-STATE for predicate checks
     const preState: State = structuredClone(state);
 
-    const out = engine.evaluatePure(intent, state);
+    const out = engine.evaluatePure(intent, state, now);
 
     if (out.decision === "ALLOW") {
       const chk = predicatesHold(intent, preState);

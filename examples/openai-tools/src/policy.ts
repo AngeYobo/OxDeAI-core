@@ -13,7 +13,7 @@
  *   → Call 3: DENY  (BUDGET_EXCEEDED)
  */
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { State, Intent } from "@oxdeai/core";
 
 // ── Cost table ────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ export const engine = new PolicyEngine({
   engine_secret: _engineSecret,
   authorization_ttl_seconds: 60,
   policyId: POLICY_ID,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 // ── Policy state ──────────────────────────────────────────────────────────────

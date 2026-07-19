@@ -27,12 +27,27 @@ export class ReplayEngine {
     this.engine = engine;
   }
 
-  replay(initialState: State, intents: Intent[], opts?: EngineEvalOptions): ReplayResult {
+  /**
+   * `evaluationTime` accepts one explicit trusted-time value as a temporary
+   * deterministic compatibility model required to thread the new engine
+   * input (docs/spec/core/trusted-time-v1.md §2.1). It does NOT guarantee
+   * faithful historical replay: every intent in `intents` is evaluated
+   * against this single, fixed `evaluationTime`, regardless of when it was
+   * originally decided. Replayed decisions may therefore differ from the
+   * original decisions - including by returning `INTENT_STALE` - when the
+   * log spans more than `maxIntentAgeSeconds` relative to the supplied
+   * evaluation instant.
+   *
+   * Historical trusted-time fidelity remains unsupported until each
+   * original `evaluation_time` is captured in execution evidence and can be
+   * supplied per intent (deferred follow-up).
+   */
+  replay(initialState: State, intents: Intent[], evaluationTime: number, opts?: EngineEvalOptions): ReplayResult {
     let state = structuredClone(initialState);
     const outputs: EvaluatePureOutput[] = [];
 
     for (const intent of intents) {
-      const out = this.engine.evaluatePure(intent, state, opts);
+      const out = this.engine.evaluatePure(intent, state, evaluationTime, opts);
       outputs.push(out);
       if (out.decision === "ALLOW") state = out.nextState;
     }
@@ -40,8 +55,14 @@ export class ReplayEngine {
     return { outputs, finalState: state, allDeterministic: true };
   }
 
-  replayFromAudit(initialState: State, _audit: readonly AuditEntry[], intents: Intent[], opts?: EngineEvalOptions): ReplayResult {
-    return this.replay(initialState, intents, opts);
+  replayFromAudit(
+    initialState: State,
+    _audit: readonly AuditEntry[],
+    intents: Intent[],
+    evaluationTime: number,
+    opts?: EngineEvalOptions
+  ): ReplayResult {
+    return this.replay(initialState, intents, evaluationTime, opts);
   }
 
   static verify(events: readonly AuditEntry[], opts?: VerifyOptions): VerifyResult {

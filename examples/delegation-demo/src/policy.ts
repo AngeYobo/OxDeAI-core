@@ -17,7 +17,7 @@
  */
 
 import { generateKeyPairSync } from "node:crypto";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, State } from "@oxdeai/core";
 
 export const POLICY_ID =
@@ -62,6 +62,7 @@ export const engine = new PolicyEngine({
   // audience becomes delegation.delegator — set to Agent A's identity
   authorization_audience: AGENT_A,
   policyId: POLICY_ID,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 export function makeState(): State {

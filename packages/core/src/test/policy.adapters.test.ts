@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import { InMemoryAuditSink } from "../adapters/InMemory.js";
 import type { AuditEvent } from "../audit/AuditLog.js";
 import type { AuditSink } from "../adapters/types.js";
@@ -77,10 +78,11 @@ test("audit sink receives events in-order", async () => {
     policy_version: "v0.6-test",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 60,
-    auditSink: sink
+    auditSink: sink,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
-  const out = engine.evaluatePure(makeIntent(1n), makeState(), { mode: "fail-fast" });
+  const out = engine.evaluatePure(makeIntent(1n), makeState(), 1_700_000_001, { mode: "fail-fast" });
   assert.equal(out.decision, "ALLOW");
 
   await engine.flushAudit();
@@ -96,13 +98,14 @@ test("async audit sink preserves event order after flush", async () => {
     policy_version: "v0.6-test",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
     authorization_ttl_seconds: 60,
-    auditSink: sink
+    auditSink: sink,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const s0 = makeState();
-  const r1 = engine.evaluatePure(makeIntent(11n), s0, { mode: "fail-fast" });
+  const r1 = engine.evaluatePure(makeIntent(11n), s0, 1_700_000_011, { mode: "fail-fast" });
   assert.equal(r1.decision, "ALLOW");
-  const r2 = engine.evaluatePure(makeIntent(12n), r1.nextState, { mode: "fail-fast" });
+  const r2 = engine.evaluatePure(makeIntent(12n), r1.nextState, 1_700_000_012, { mode: "fail-fast" });
   assert.equal(r2.decision, "ALLOW");
 
   await engine.flushAudit();

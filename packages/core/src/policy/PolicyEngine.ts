@@ -15,6 +15,8 @@ import { runDecisionModules } from "./decision/index.js";
 import { HashChainedLog } from "../audit/HashChainedLog.js";
 import type { AuditEvent } from "../audit/AuditLog.js";
 import { isRuntimeState, validateNumericLeaves } from "./stateGuards.js";
+import { assertProtocolSeconds } from "./trustedTimeValidation.js";
+import { verifyTrustedTime } from "./verifyTrustedTime.js";
 import { KillSwitchModule } from "./modules/KillSwitchModule.js";
 import { AllowlistModule } from "./modules/AllowlistModule.js";
 import { BudgetModule } from "./modules/BudgetModule.js";
@@ -70,6 +72,23 @@ export type EngineOptions = {
   authorization_signing_alg?: "Ed25519" | "HMAC-SHA256";
   authorization_signing_kid?: string;
   authorization_private_key_pem?: string;
+  /**
+   * Trusted-time freshness tolerance (docs/spec/core/trusted-time-v1.md §5):
+   * the max seconds `intent.timestamp` may lead the trusted `evaluationTime`
+   * argument passed to `evaluate`/`evaluatePure` and still be considered
+   * fresh. REQUIRED - there is no default inside `PolicyEngine`. Deployments
+   * that have not chosen a policy should pass
+   * `RECOMMENDED_TRUSTED_TIME_PROFILE` explicitly rather than relying on any
+   * implicit fallback.
+   */
+  maxClockSkewSeconds: number;
+  /**
+   * Trusted-time freshness tolerance (docs/spec/core/trusted-time-v1.md §5):
+   * the max seconds `intent.timestamp` may lag the trusted `evaluationTime`
+   * argument and still be considered fresh. REQUIRED - see
+   * `maxClockSkewSeconds`.
+   */
+  maxIntentAgeSeconds: number;
   deny_mode?: "collect-all" | "fail-fast";
   policyId?: string;
   strictDeterminism?: boolean;
@@ -121,6 +140,8 @@ export class PolicyEngine {
         })`
       );
     }
+    assertProtocolSeconds(opts.maxClockSkewSeconds, "EngineOptions.maxClockSkewSeconds");
+    assertProtocolSeconds(opts.maxIntentAgeSeconds, "EngineOptions.maxIntentAgeSeconds");
     this.opts = opts;
   }
 
@@ -227,8 +248,16 @@ export class PolicyEngine {
     }
   }
 
-  evaluate(intent: Intent, state: State): EvaluateOutput {
-    const out = this.evaluatePure(intent, state, { mode: "fail-fast" });
+  /**
+   * `evaluationTime` is the trusted PEP clock (unix seconds), sampled once
+   * per evaluation by the caller (docs/spec/core/trusted-time-v1.md §2.1).
+   * It is REQUIRED and never defaulted or derived from `intent.timestamp` or
+   * an ambient clock - see `evaluatePure` for the full freshness-gate
+   * contract, which this method inherits unchanged (always in `fail-fast`
+   * mode).
+   */
+  evaluate(intent: Intent, state: State, evaluationTime: number): EvaluateOutput {
+    const out = this.evaluatePure(intent, state, evaluationTime, { mode: "fail-fast" });
 
     if (out.decision === "DENY") {
       this.currentState = structuredClone(state);
@@ -288,7 +317,7 @@ export class PolicyEngine {
   }
 
   /**
-   * evaluatePure — pure, deterministic evaluation of (intent, state, policy).
+   * evaluatePure - pure, deterministic evaluation of (intent, state, policy, evaluationTime).
    *
    * The input `state` is never mutated. deepMerge creates new object copies at
    * every level touched by a module delta, so passing the same state reference
@@ -297,8 +326,27 @@ export class PolicyEngine {
    * For concurrent evaluation in multi-threaded environments (e.g. worker
    * threads sharing a SharedArrayBuffer), callers should still provide
    * structuredClone(state) to each invocation for full isolation.
+   *
+   * `evaluationTime` is the trusted PEP clock (unix seconds), sampled once
+   * per evaluation by the caller and passed explicitly
+   * (docs/spec/core/trusted-time-v1.md §2.1). It is REQUIRED: there is no
+   * default, no fallback to `Date.now()`, and no derivation from
+   * `intent.timestamp`. A malformed `evaluationTime` (NaN, Infinity,
+   * non-integer, negative, or unsafe magnitude) is a trusted-caller
+   * precondition violation, not policy data - `evaluatePure` throws
+   * synchronously, before entering its evaluation `try` block, rather than
+   * returning any `EvaluatePureOutput` (no decision, no `nextState`, no
+   * audit event is produced for a rejected precondition).
+   *
+   * Trusted-time freshness is evaluated before module execution - before
+   * `ReplayModule` and (on EXECUTE) `VelocityModule`. When freshness denies,
+   * no module evaluation occurs, regardless of `opts.mode`. In
+   * `collect-all` mode, a freshness denial therefore returns only its own
+   * reason code; module reasons (e.g. `REPLAY_NONCE`, `VELOCITY_EXCEEDED`)
+   * are never collected for a non-fresh intent. This is a security
+   * property, not a bug - see docs/spec/core/trusted-time-v1.md §6-§7.
    */
-  evaluatePure(intent: Intent, state: State, opts?: EngineEvalOptions): EvaluatePureOutput {
+  evaluatePure(intent: Intent, state: State, evaluationTime: number, opts?: EngineEvalOptions): EvaluatePureOutput {
 
     const mode = opts?.mode ?? "fail-fast";
 
@@ -313,6 +361,12 @@ export class PolicyEngine {
       return { decision: "DENY", reasons: ["POLICY_VERSION_MISMATCH"] };
     }
 
+    // Trusted precondition - refuses to evaluate rather than proceeding on a
+    // coerced or attacker-influenced value (spec §5.1). Deliberately outside
+    // the try block below: this must never be caught and converted into a
+    // DENY/INTERNAL_ERROR policy result.
+    assertProtocolSeconds(evaluationTime, "evaluationTime");
+
     try {
       const intent_hash = intentHash(intent);
       const policyId = this.computePolicyId();
@@ -323,6 +377,35 @@ export class PolicyEngine {
         timestamp: intent.timestamp,
         policyId
       });
+
+      // ── Trusted-time freshness gate ───────────────────────────────────────
+      // Evaluated before any module (before Replay, before Velocity), per
+      // docs/spec/core/trusted-time-v1.md §6-§7. intent.timestamp is the one
+      // attacker-controlled input this gate reads; a malformed value denies
+      // with STATE_INVALID rather than being compared against the bounds.
+      // On DENY, no module in EXECUTE_MODULES/RELEASE_MODULES ever runs -
+      // this mirrors the existing module-pipeline DENY handling below
+      // exactly (same audit shape, same checkpoint behavior).
+      const freshness = verifyTrustedTime({
+        intentTimestamp: intent.timestamp,
+        evaluationTime,
+        maxClockSkewSeconds: this.opts.maxClockSkewSeconds,
+        maxIntentAgeSeconds: this.opts.maxIntentAgeSeconds
+      });
+
+      if (freshness.decision === "DENY") {
+        this.emitAudit({
+          type: "DECISION",
+          intent_hash,
+          decision: "DENY",
+          reasons: freshness.reasons,
+          policy_version: state.policy_version,
+          timestamp: intent.timestamp,
+          policyId
+        });
+        this.maybeEmitCheckpoint(policyId, intent.timestamp, state);
+        return { decision: "DENY", reasons: freshness.reasons };
+      }
 
       const t = intent.type ?? "EXECUTE";
       const modules = t === "RELEASE" ? RELEASE_MODULES : EXECUTE_MODULES;
@@ -369,7 +452,7 @@ export class PolicyEngine {
       // state_hash binds the authorization to the evaluation-time input state.
       // Uses computeStateHashFor (module-codec canonical hash) rather than a raw
       // JSON hash so it is insensitive to key-insertion order and missing optional
-      // fields — the same guarantee the engine already provides for state_snapshot_hash.
+      // fields - the same guarantee the engine already provides for state_snapshot_hash.
       // This allows the PEP boundary to verify the current state matches the state
       // the engine evaluated against via engine.computeStateHash(state).
       const state_hash = this.computeStateHashFor(state);
@@ -547,14 +630,20 @@ export class PolicyEngine {
     return this.computeStateHashFor(current);
   }
 
-  simulateSequence(intents: Intent[], opts?: EngineEvalOptions): SimulationResult {
+  /**
+   * The entire sequence is evaluated against one fixed trusted
+   * `evaluationTime`. `simulateSequence` is a what-if simulation at a fixed
+   * instant, not a historical replay - every intent in `intents` sees the
+   * same trusted clock reading, regardless of `intent.timestamp`.
+   */
+  simulateSequence(intents: Intent[], evaluationTime: number, opts?: EngineEvalOptions): SimulationResult {
     const base = this.currentState;
     if (!base) throw new Error("simulateSequence: engine has no current state");
 
     let working = structuredClone(base);
     const outputs: EvaluatePureOutput[] = [];
     for (const intent of intents) {
-      const out = this.evaluatePure(intent, working, opts);
+      const out = this.evaluatePure(intent, working, evaluationTime, opts);
       outputs.push(out);
       if (out.decision === "ALLOW") {
         working = out.nextState;

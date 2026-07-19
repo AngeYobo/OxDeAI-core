@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 
 import { InMemoryAuditAdapter, InMemoryStateAdapter } from "./adapters.js";
 import { buildIntent, buildState } from "./builders.js";
@@ -28,9 +28,10 @@ test("builder helpers create engine-compatible intent/state", () => {
   const engine = new PolicyEngine({
     policy_version: "v1",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
-  const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+  const out = engine.evaluatePure(intent, state, intent.timestamp, { mode: "fail-fast" });
   assert.equal(out.decision, "ALLOW");
 });
 
@@ -38,7 +39,8 @@ test("OxDeAIClient evaluate+persist+verify flow", async () => {
   const engine = new PolicyEngine({
     policy_version: "v1",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
   const stateAdapter = new InMemoryStateAdapter(
     buildState({

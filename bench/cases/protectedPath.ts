@@ -44,7 +44,7 @@ export function create(seed: number, envelopeMode: "strict" | "best-effort"): ()
   };
 
   return () => {
-    const decision = fx.engine.evaluatePure(fx.intent, cloneStateShallow(baseState));
+    const decision = fx.engine.evaluatePure(fx.intent, cloneStateShallow(baseState), fx.intent.timestamp);
     if (decision.decision !== "ALLOW") return 0;
 
     const authResult = verifyAuthorization(fx.auth, verifyAuthOpts);

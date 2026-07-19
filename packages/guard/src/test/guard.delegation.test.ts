@@ -10,6 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   signAuthorizationEd25519,
   createDelegation,
 } from "@oxdeai/core";
@@ -87,6 +88,7 @@ function makeGuardConfig(overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardCon
       authorization_audience: "agent-A",
       authorization_ttl_seconds: 600,
       authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+      ...RECOMMENDED_TRUSTED_TIME_PROFILE,
     }),
     getState: () => ({ state, version: 0 }),
     setState: () => true,

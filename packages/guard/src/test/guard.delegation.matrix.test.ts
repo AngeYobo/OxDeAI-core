@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import {
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   signAuthorizationEd25519,
   createDelegation,
 } from "@oxdeai/core";
@@ -80,7 +81,7 @@ function makeGuard(overrides?: Partial<OxDeAIGuardConfig>) {
     max_concurrent: 16,
   });
   return OxDeAIGuard({
-    engine: new PolicyEngine({ policy_version: "v1", engine_secret: "test-secret-must-be-at-least-32-chars!!" }),
+    engine: new PolicyEngine({ policy_version: "v1", engine_secret: "test-secret-must-be-at-least-32-chars!!", ...RECOMMENDED_TRUSTED_TIME_PROFILE }),
     getState: () => ({ state, version: 0 }),
     setState: () => true,
     trustedKeySets: [KEYSET],

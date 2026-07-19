@@ -6,6 +6,7 @@ import {
   encodeCanonicalState,
   encodeEnvelope,
   PolicyEngine,
+  RECOMMENDED_TRUSTED_TIME_PROFILE,
   sha256HexFromJson,
   signAuthorizationEd25519,
   signEnvelopeEd25519,
@@ -130,7 +131,8 @@ function makeEngine(): PolicyEngine {
     policy_version: "v1.0.0",
     engine_secret: CORE_ENGINE_SECRET, // now typed as string
     authorization_ttl_seconds: 60,
-    policyId: CORE_POLICY_ID
+    policyId: CORE_POLICY_ID,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 
@@ -311,7 +313,7 @@ const coreAdapter: ConformanceAdapter = {
   },
   evaluateAuthorization(intent: Intent) {
     const engine = makeEngine();
-    const out = engine.evaluatePure(intent, makeBaseState());
+    const out = engine.evaluatePure(intent, makeBaseState(), intent.timestamp);
     if (out.decision !== "ALLOW") {
       throw new Error(`expected ALLOW, got DENY: ${out.reasons.join(",")}`);
     }
@@ -920,7 +922,7 @@ function buildEnvelopeCases(adapter: ConformanceAdapter): Array<{ status: string
     type: "EXECUTE"
   });
 
-  const out = engine.evaluatePure(intent, state);
+  const out = engine.evaluatePure(intent, state, intent.timestamp);
   if (out.decision !== "ALLOW") throw new Error("expected ALLOW for envelope cases");
 
   const events = engine.audit.snapshot();

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 
 export const AGENTGRAM_API_HOST = "agentgram-production.up.railway.app";
@@ -19,7 +19,8 @@ export function makeEngine(): PolicyEngine {
     policy_version: "v1.0.0",
     engine_secret: secret,
     authorization_ttl_seconds: 60,
-    policyId: POLICY_ID
+    policyId: POLICY_ID,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 }
 

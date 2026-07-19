@@ -24,7 +24,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
-import { PolicyEngine, signAuthorizationEd25519, createDelegation } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE, signAuthorizationEd25519, createDelegation } from "@oxdeai/core";
 import type { AuthorizationV1, DelegationV1, KeySet } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 
@@ -140,6 +140,7 @@ function makeGuardConfig(overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardCon
     engine: new PolicyEngine({
       policy_version: "v1-test",
       engine_secret: "test-secret-must-be-at-least-32-chars!!",
+      ...RECOMMENDED_TRUSTED_TIME_PROFILE,
     }),
     getState: () => ({ state: buildState({ agent_id: "child-agent", allow_action_types: ["PROVISION"] }), version: 0 }),
     setState: () => true,

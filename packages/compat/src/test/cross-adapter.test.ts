@@ -58,7 +58,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, KeySet, State } from "@oxdeai/core";
 import {
   defaultNormalizeAction,
@@ -141,6 +141,7 @@ const ENGINE = new PolicyEngine({
   authorization_audience: AGENT_ID,
   authorization_ttl_seconds: 600,
   authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 // Policy state: only PROVISION-type actions are allowed, budget is generous so
@@ -172,6 +173,7 @@ const CAP_ENGINE = new PolicyEngine({
   authorization_audience: AGENT_ID,
   authorization_ttl_seconds: 600,
   authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 // 500 units in fixed-point micro-units (1 unit = 1_000_000 micro-units).
@@ -241,6 +243,7 @@ const CONCURRENCY_ENGINE = new PolicyEngine({
   authorization_audience: AGENT_ID,
   authorization_ttl_seconds: 600,
   authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 const ISOLATED_BUDGET = 100_000_000n; // 100 units

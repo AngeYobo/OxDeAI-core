@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, State } from "@oxdeai/core";
 import { makeIntent } from "../helpers/intent.js";
 import { makeState } from "../helpers/state.js";
@@ -48,7 +48,8 @@ test(`FUZZ(${ITERS}): budget & per-action cap consistency`, () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const r = lcg(0xC0FFEE);
@@ -80,7 +81,7 @@ test(`FUZZ(${ITERS}): budget & per-action cap consistency`, () => {
       tool_limits: { window_seconds: 60, max_calls: { "agent-1": 1_000_000 }, calls: {} }
     });
 
-    const out = engine.evaluatePure(intent, state);
+    const out = engine.evaluatePure(intent, state, now);
 
     const capViolated = amount > cap;
     const budgetViolated = spent + amount > limit;
@@ -99,7 +100,8 @@ test(`FUZZ(${ITERS}): velocity window edge cases`, () => {
   const engine = new PolicyEngine({
     policy_version: "0.1.0",
     engine_secret: "test-secret-must-be-at-least-32-chars!!",
-    authorization_ttl_seconds: 60
+    authorization_ttl_seconds: 60,
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
 
   const r = lcg(0xBADC0DE);
@@ -142,7 +144,7 @@ test(`FUZZ(${ITERS}): velocity window edge cases`, () => {
     // Inside window
     {
       const state = mkState(insideTs);
-      const out = engine.evaluatePure(mkIntent(BigInt(10_000 + i), insideTs), state);
+      const out = engine.evaluatePure(mkIntent(BigInt(10_000 + i), insideTs), state, insideTs);
       const shouldDeny = count + 1 > maxActions;
 
       if (shouldDeny) {
@@ -154,7 +156,7 @@ test(`FUZZ(${ITERS}): velocity window edge cases`, () => {
     // Boundary reset
     {
       const state = mkState(boundaryTs);
-      const out = engine.evaluatePure(mkIntent(BigInt(20_000 + i), boundaryTs), state);
+      const out = engine.evaluatePure(mkIntent(BigInt(20_000 + i), boundaryTs), state, boundaryTs);
       assert.equal(out.decision, "ALLOW", `boundary reset failed i=${i}`);
     }
   }

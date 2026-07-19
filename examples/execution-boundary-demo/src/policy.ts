@@ -8,7 +8,7 @@
  */
 
 import { generateKeyPairSync } from "node:crypto";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Intent, KeySet, State } from "@oxdeai/core";
 
 export const POLICY_ID =
@@ -65,6 +65,7 @@ export const engine = new PolicyEngine({
   authorization_signing_kid: AUTH_KID,
   authorization_private_key_pem: DEMO_AUTH_KEYPAIR.privateKey.toString(),
   policyId: POLICY_ID,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });
 
 export function makeState(): State {

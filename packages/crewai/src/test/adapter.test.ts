@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { Authorization, KeySet, State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 import { OxDeAIDenyError, OxDeAIAuthorizationError, OxDeAINormalizationError } from "@oxdeai/guard";
@@ -36,6 +36,7 @@ function makeEngine(): PolicyEngine {
     authorization_audience: AGENT_ID,
     authorization_ttl_seconds: 600,
     authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 

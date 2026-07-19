@@ -22,7 +22,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PolicyEngine, intentHash, stateSnapshotHash } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE, intentHash, stateSnapshotHash } from "@oxdeai/core";
 import type { Authorization, AuthorizationV1, Intent, State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 
@@ -48,6 +48,7 @@ function makeEngine(): PolicyEngine {
     authorization_audience: AUDIENCE,
     authorization_ttl_seconds: 600,
     authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 

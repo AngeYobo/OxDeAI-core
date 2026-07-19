@@ -12,6 +12,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { PolicyEngine } from "../policy/PolicyEngine.js";
+import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../policy/trustedTimeProfile.js";
 import type { State } from "../types/state.js";
 import type { Intent } from "../types/intent.js";
 
@@ -57,12 +58,17 @@ function makeEngine(): PolicyEngine {
     engine_secret: "test-secret-32-bytes-long-enough!!",
     authorization_ttl_seconds: 60,
     deny_mode: "fail-fast",
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
   });
 }
 
+// validIntent() defaults timestamp to T0; evaluationTime matches it exactly
+// (delta = 0) so these pre-existing tests are unaffected by the freshness gate.
+const T0 = 1_000_000;
+
 test("control: sound state returns ALLOW", () => {
   const engine = makeEngine();
-  const out = engine.evaluatePure(validIntent(), validState());
+  const out = engine.evaluatePure(validIntent(), validState(), T0);
   assert.equal(out.decision, "ALLOW");
 });
 
@@ -70,7 +76,7 @@ test("corrupted budget.budget_limit as string returns DENY STATE_INVALID", () =>
   const engine = makeEngine();
   const state = validState();
   (state.budget.budget_limit as unknown as Record<string, unknown>)["agent-1"] = "1000";
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -80,13 +86,13 @@ test("corrupted budget.budget_limit / max_amount_per_action as NaN returns DENY 
 
   const state1 = validState();
   (state1.budget.budget_limit as unknown as Record<string, unknown>)["agent-1"] = NaN;
-  const out1 = engine.evaluatePure(validIntent(), state1);
+  const out1 = engine.evaluatePure(validIntent(), state1, T0);
   assert.equal(out1.decision, "DENY");
   assert.deepEqual(out1.reasons, ["STATE_INVALID"]);
 
   const state2 = validState();
   (state2.max_amount_per_action as unknown as Record<string, unknown>)["agent-1"] = NaN;
-  const out2 = engine.evaluatePure(validIntent(), state2);
+  const out2 = engine.evaluatePure(validIntent(), state2, T0);
   assert.equal(out2.decision, "DENY");
   assert.deepEqual(out2.reasons, ["STATE_INVALID"]);
 });
@@ -95,7 +101,7 @@ test("corrupted budget.spent_in_period as plain number returns DENY STATE_INVALI
   const engine = makeEngine();
   const state = validState();
   (state.budget.spent_in_period as unknown as Record<string, unknown>)["agent-1"] = 0;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -104,7 +110,7 @@ test("corrupted velocity.config.window_seconds as NaN returns DENY STATE_INVALID
   const engine = makeEngine();
   const state = validState();
   state.velocity.config.window_seconds = NaN;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -113,7 +119,7 @@ test("corrupted replay.window_seconds as NaN returns DENY STATE_INVALID", () => 
   const engine = makeEngine();
   const state = validState();
   state.replay.window_seconds = NaN;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -122,7 +128,7 @@ test("control: kill_switch.agents[agent] = true returns DENY KILL_SWITCH", () =>
   const engine = makeEngine();
   const state = validState();
   state.kill_switch.agents["agent-1"] = true;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["KILL_SWITCH"]);
 });
@@ -131,7 +137,7 @@ test("control: kill_switch.agents[agent] = false allows evaluation to continue",
   const engine = makeEngine();
   const state = validState();
   state.kill_switch.agents["agent-1"] = false;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "ALLOW");
 });
 
@@ -139,7 +145,7 @@ test("corrupted kill_switch.agents[agent] = 1 returns DENY STATE_INVALID", () =>
   const engine = makeEngine();
   const state = validState();
   (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = 1;
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -148,7 +154,7 @@ test("corrupted kill_switch.agents[agent] = \"true\" returns DENY STATE_INVALID"
   const engine = makeEngine();
   const state = validState();
   (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = "true";
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -157,7 +163,7 @@ test("corrupted kill_switch.agents[agent] = {} returns DENY STATE_INVALID", () =
   const engine = makeEngine();
   const state = validState();
   (state.kill_switch.agents as unknown as Record<string, unknown>)["agent-1"] = {};
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
@@ -166,7 +172,7 @@ test("corrupted kill_switch.agents container with a non-boolean element returns 
   const engine = makeEngine();
   const state = validState();
   (state.kill_switch as unknown as Record<string, unknown>)["agents"] = { "agent-1": true, "agent-2": null };
-  const out = engine.evaluatePure(validIntent(), state);
+  const out = engine.evaluatePure(validIntent(), state, T0);
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
