@@ -9,6 +9,36 @@ function prune(events: Array<{ ts: number; tool?: string }>, cutoff: number): Ar
   return events.filter((e) => e.ts >= cutoff);
 }
 
+/**
+ * Trusted tool-call classifier.
+ *
+ * `intent.tool_call` is a self-declared, agent-controlled field and MUST NOT
+ * influence this decision (an agent can omit or falsify it to bypass
+ * enforcement). Classification instead follows the trusted action
+ * discriminator (`EXECUTE`) plus policy-controlled tool configuration in
+ * `state.tool_limits`, resolved via the agent-supplied `intent.tool` used
+ * only as a lookup key — the same pattern AllowlistModule uses to resolve
+ * `intent.action_type`/`intent.target` against `state.allowlists`. A bare
+ * non-empty `tool` string is never sufficient on its own; it must also
+ * resolve against trusted state.
+ *
+ * @public
+ */
+export function isRateLimitedToolCall(intent: Intent, state: State): boolean {
+  const t = intent.type ?? "EXECUTE";
+  if (t !== "EXECUTE") return false;
+
+  const tool = intent.tool;
+  if (typeof tool !== "string" || tool.length === 0) return false;
+
+  const tl = state.tool_limits;
+  if (!tl) return false;
+
+  const agent = intent.agent_id;
+  if (tl.max_calls_by_tool?.[agent]?.[tool] !== undefined) return true;
+  return tl.max_calls?.[agent] !== undefined;
+}
+
 /** @public */
 export function ToolAmplificationModule(intent: Intent, state: State): PolicyResult {
   const agent = intent.agent_id;
@@ -17,8 +47,9 @@ export function ToolAmplificationModule(intent: Intent, state: State): PolicyRes
   const t = intent.type ?? "EXECUTE";
   if (t === "RELEASE") return { decision: "ALLOW", reasons: [] };
 
-  // Explicit opt-in: only enforce for tool calls
-  if (intent.tool_call !== true) return { decision: "ALLOW", reasons: [] };
+  // Trusted classification only — intent.tool_call is descriptive/compat
+  // data and MUST NOT gate enforcement. See isRateLimitedToolCall above.
+  if (!isRateLimitedToolCall(intent, state)) return { decision: "ALLOW", reasons: [] };
 
   const tl = state.tool_limits;
   if (!tl || typeof tl.window_seconds !== "number" || !tl.max_calls || !tl.calls) {
