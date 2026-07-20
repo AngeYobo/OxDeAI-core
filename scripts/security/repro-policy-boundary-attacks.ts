@@ -93,6 +93,52 @@ function intent(overrides?: Partial<Intent>): Intent {
   } as Intent;
 }
 
+// ── Fixtures for identity/label-substitution attacks (L, M) ────────────────
+const LOW_AGENT = "agent-low";
+const HIGH_AGENT = "agent-high";
+const CAPPED_TOOL = "search";
+
+// Two configured agents: a restrictive one and a permissive one. L probes an
+// intent that self-declares HIGH_AGENT to inherit the permissive caps.
+function twoAgentState(): State {
+  const s = baseState();
+  s.budget.budget_limit = { [LOW_AGENT]: 100n, [HIGH_AGENT]: 1_000_000_000n };
+  s.budget.spent_in_period = { [LOW_AGENT]: 0n, [HIGH_AGENT]: 0n };
+  s.max_amount_per_action = { [LOW_AGENT]: 100n, [HIGH_AGENT]: 1_000_000_000n };
+  s.velocity.config.max_actions = 1000;
+  s.concurrency.max_concurrent = { [LOW_AGENT]: 1000, [HIGH_AGENT]: 1000 };
+  s.recursion.max_depth = { [LOW_AGENT]: 1, [HIGH_AGENT]: 1 };
+  s.tool_limits.max_calls = { [LOW_AGENT]: 1000, [HIGH_AGENT]: 1000 };
+  return s;
+}
+
+// Per-tool cap on CAPPED_TOOL only; every other gate relaxed so M isolates the
+// per-tool accounting path.
+function perToolCapState(): State {
+  const s = baseState();
+  s.budget.budget_limit = { [LOW_AGENT]: 1_000_000n };
+  s.budget.spent_in_period = { [LOW_AGENT]: 0n };
+  s.max_amount_per_action = { [LOW_AGENT]: 1_000_000n };
+  s.velocity.config.max_actions = 1000;
+  s.concurrency.max_concurrent = { [LOW_AGENT]: 1000 };
+  s.recursion.max_depth = { [LOW_AGENT]: 1000 };
+  s.tool_limits.max_calls = { [LOW_AGENT]: 100 };
+  s.tool_limits.max_calls_by_tool = { [LOW_AGENT]: { [CAPPED_TOOL]: 1 } };
+  return s;
+}
+
+function toolIntent(nonce: number): Partial<Intent> {
+  return {
+    intent_id: `tool-${nonce}`,
+    agent_id: LOW_AGENT,
+    asset: "tool",
+    target: "tool_1",
+    nonce: BigInt(nonce),
+    timestamp: BASE_TS,
+    tool_call: true,
+  };
+}
+
 function print(name: string, out: Outcome): void {
   console.log(`\n=== ${name} ===`);
   console.log("decision:", out.decision);
@@ -303,16 +349,30 @@ function attackI_toolWindowFutureDating(): void {
 /**
  * H — tool-amplification opt-in bypass.
  *
- * Expected vulnerable behavior:
+ * Classification is now derived from the trusted action discriminator
+ * (EXECUTE) plus a policy-configured tool in state.tool_limits, resolved via
+ * intent.tool as a lookup key — never from the self-declared intent.tool_call
+ * boolean (see isRateLimitedToolCall in ToolAmplificationModule.ts). All
+ * three intents below name the same policy-configured tool and therefore
+ * MUST receive identical tool-limit treatment regardless of tool_call.
+ *
+ * Originally vulnerable behavior:
  *   max_calls = 1
  *   tool_call omitted
  *   5 tool-like actions ALLOW
  *
- * Control:
+ * Control (always enforced, before and after the fix):
  *   tool_call = true
  *   only first ALLOW, rest DENY
+ *
+ * Fixed behavior additionally requires the omitted/false variants to be
+ * denied identically to the control, AND a mixed omitted -> false -> true
+ * sequence to consume one shared budget (limit = 1): only the first call
+ * ALLOWs, the rest DENY with TOOL_CALL_LIMIT_EXCEEDED.
  */
 function attackH_toolCallOptIn(): void {
+  const TOOL = "search";
+
   const e1 = engine();
   let s1 = baseState((st) => {
     st.velocity.config.max_actions = 1000;
@@ -327,6 +387,7 @@ function attackH_toolCallOptIn(): void {
         intent_id: `tool-omitted-${i}`,
         asset: "tool",
         target: "tool_1",
+        tool: TOOL,
         nonce: BigInt(300 + i),
         timestamp: BASE_TS,
         // tool_call intentionally omitted
@@ -352,6 +413,7 @@ function attackH_toolCallOptIn(): void {
         intent_id: `tool-explicit-${i}`,
         asset: "tool",
         target: "tool_1",
+        tool: TOOL,
         nonce: BigInt(400 + i),
         timestamp: BASE_TS,
         tool_call: true,
@@ -363,16 +425,48 @@ function attackH_toolCallOptIn(): void {
     if (out.decision === "ALLOW") s2 = out.nextState;
   }
 
+  const e3 = engine();
+  let s3 = baseState((st) => {
+    st.velocity.config.max_actions = 1000;
+    st.tool_limits.max_calls[AGENT] = 1;
+  });
+
+  const mixedVariants: Array<{ tool_call?: boolean }> = [{ tool_call: undefined }, { tool_call: false }, { tool_call: true }];
+  const mixed: Outcome[] = [];
+
+  for (let i = 0; i < mixedVariants.length; i++) {
+    const out = e3.evaluatePure(
+      intent({
+        intent_id: `tool-mixed-${i}`,
+        asset: "tool",
+        target: "tool_1",
+        tool: TOOL,
+        nonce: BigInt(800 + i),
+        timestamp: BASE_TS,
+        tool_call: mixedVariants[i]!.tool_call,
+      }),
+      s3,
+      EVAL_TIME,
+    );
+    mixed.push(out);
+    if (out.decision === "ALLOW") s3 = out.nextState;
+  }
+
   console.log("\n=== H: tool_call opt-in bypass ===");
   console.log("tool_call omitted:", omitted.map((o) => o.decision).join(", "));
   console.log("tool_call true   :", explicit.map((o) => o.decision).join(", "));
+  console.log("mixed omitted->false->true:", mixed.map((o) => o.decision).join(", "));
+
+  const omittedBypassed = omitted.every((o) => o.decision === "ALLOW");
+  const controlEnforced = explicit.filter((o) => o.decision === "ALLOW").length === 1;
+  const mixedSharesOneBudget =
+    mixed[0]!.decision === "ALLOW" && mixed[1]!.decision === "DENY" && mixed[2]!.decision === "DENY";
 
   assertSignal(
     "H",
-    omitted.every((o) => o.decision === "ALLOW") &&
-      explicit.filter((o) => o.decision === "ALLOW").length === 1,
-    "VULNERABLE: omitting self-declared tool_call bypasses tool limit",
-    "tool limit enforced even when tool_call is omitted",
+    omittedBypassed || !controlEnforced || !mixedSharesOneBudget,
+    "VULNERABLE: omitting or falsifying self-declared tool_call bypasses tool limit",
+    "tool limit enforced identically regardless of tool_call value or presence",
   );
 }
 
@@ -402,6 +496,111 @@ function attackG_depthSelfDeclared(): void {
   );
 }
 
+/**
+ * L — per-agent limit evasion by self-declared identity.
+ *
+ * agent_id is the trust anchor every per-agent gate keys off (budget,
+ * velocity, replay, concurrency, recursion, tool limits, kill-switch), yet it
+ * is an unauthenticated attacker-controlled intent field. An agent bound to a
+ * restrictive profile can inherit a more permissive agent's limits simply by
+ * naming it. Same family as G/H: a self-declared field gates a security
+ * decision without independent provenance.
+ *
+ * Note: substituting an *unconfigured* agent_id fails closed (STATE_INVALID),
+ * so this probes the more dangerous case — substituting a *known, more
+ * privileged* agent, which is indistinguishable from a legitimate request for
+ * that agent.
+ *
+ * Expected vulnerable behavior:
+ *   amount above the caller's own per-action cap => DENY as self
+ *   identical amount declared under a higher-limit agent => ALLOW
+ *
+ * Expected fixed behavior (design change, out of scope for trusted-time):
+ *   engine binds decisions to an authenticated principal, not intent.agent_id;
+ *   the substituted-identity request cannot inherit foreign limits.
+ */
+function attackL_agentIdentitySubstitution(): void {
+  const restrictedAmount = 1_000n;
+
+  const asSelf = engine().evaluatePure(
+    intent({ agent_id: LOW_AGENT, amount: restrictedAmount, nonce: 600n }),
+    twoAgentState(),
+    EVAL_TIME,
+  );
+  const asPrivileged = engine().evaluatePure(
+    intent({ agent_id: HIGH_AGENT, amount: restrictedAmount, nonce: 601n }),
+    twoAgentState(),
+    EVAL_TIME,
+  );
+
+  print(`L1: amount ${restrictedAmount} as '${LOW_AGENT}' (cap 100)`, asSelf);
+  print(`L2: amount ${restrictedAmount} as '${HIGH_AGENT}' (cap 1e9)`, asPrivileged);
+
+  assertSignal(
+    "L",
+    asSelf.decision === "DENY" && asPrivileged.decision === "ALLOW",
+    "VULNERABLE: per-agent limits inherited by self-declaring a more privileged agent_id",
+    "decisions bound to authenticated principal, not self-declared agent_id",
+  );
+}
+
+/**
+ * M — per-tool cap evasion by self-declared tool name.
+ *
+ * ToolAmplificationModule enforces a per-tool cap only when
+ * max_calls_by_tool[agent][intent.tool] is configured. intent.tool is
+ * attacker-controlled, so spreading calls across freshly-invented tool names
+ * falls through to the aggregate cap only, defeating any per-tool cap. Sibling
+ * of H (there the whole module is skipped by omitting tool_call; here one
+ * specific cap is dodged by renaming the tool).
+ *
+ * Setup isolates the per-tool cap: aggregate tool cap, budget, velocity and
+ * concurrency are all raised so only the per-tool "search" cap can bite.
+ *
+ * Expected vulnerable behavior:
+ *   second call to capped tool "search" => DENY TOOL_CALL_LIMIT_EXCEEDED
+ *   call to unlisted tool "search_v2"   => ALLOW
+ *
+ * Expected fixed behavior:
+ *   per-tool accounting cannot be escaped by an unconfigured tool name
+ *   (e.g. default-deny unknown tools, or an aggregate that ignores tool label).
+ */
+function attackM_toolNameSelfDeclared(): void {
+  const e = engine();
+  let s = perToolCapState();
+
+  const first = e.evaluatePure(
+    intent({ ...toolIntent(700), tool: CAPPED_TOOL }),
+    s,
+    EVAL_TIME,
+  );
+  if (first.decision === "ALLOW") s = first.nextState;
+
+  const sameTool = e.evaluatePure(
+    intent({ ...toolIntent(701), tool: CAPPED_TOOL }),
+    s,
+    EVAL_TIME,
+  );
+  const renamedTool = e.evaluatePure(
+    intent({ ...toolIntent(702), tool: `${CAPPED_TOOL}_v2` }),
+    s,
+    EVAL_TIME,
+  );
+
+  print(`M1: first '${CAPPED_TOOL}' (per-tool cap 1)`, first);
+  print(`M2: second '${CAPPED_TOOL}'`, sameTool);
+  print(`M3: renamed '${CAPPED_TOOL}_v2' (no per-tool cap)`, renamedTool);
+
+  assertSignal(
+    "M",
+    first.decision === "ALLOW" &&
+      sameTool.decision === "DENY" &&
+      renamedTool.decision === "ALLOW",
+    "VULNERABLE: per-tool cap bypassed by self-declaring an unlisted tool name",
+    "per-tool accounting resistant to attacker-chosen tool labels",
+  );
+}
+
 function main(): void {
   console.log("\nOxDeAI policy-boundary attack repro harness");
   console.log("Repo-local only. Do not run against production systems.\n");
@@ -413,6 +612,8 @@ function main(): void {
   attackI_toolWindowFutureDating();
   attackH_toolCallOptIn();
   attackG_depthSelfDeclared();
+  attackL_agentIdentitySubstitution();
+  attackM_toolNameSelfDeclared();
 
   console.log("\nDone.");
 }
