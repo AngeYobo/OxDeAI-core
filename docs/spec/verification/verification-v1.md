@@ -45,9 +45,10 @@ Verifiers **MUST** operate on explicit, injected inputs:
 3. Key resolution via `issuer`, `kid`, `alg` in `trustedKeySets` (strict mode).
 4. Signature check over canonicalized payload excluding `signature` (canonicalization-v1).
 5. Expiry: `now < expiry` (**strict zero tolerance** — `now >= expiry` → `AUTH_EXPIRED`, no grace period; see `authorization-v1.md §17`).
-6. Audience match.
-7. Intent hash match to the proposed action (`intent_hash`).
-8. Replay check on `auth_id` (if replay store present).
+6. `issued_at` future-plausibility: `issued_at <= verificationTime + maxFutureIssuedAtSkewSeconds` → else `AUTH_ISSUED_AT_IMPLAUSIBLE`; compared only against the trusted `verificationTime`, never `Intent.timestamp` (see `authorization-v1.md §17.2`).
+7. Audience match.
+8. Intent hash match to the proposed action (`intent_hash`).
+9. Replay check on `auth_id` (if replay store present).
 
 Any failure **MUST** yield `DENY` with the corresponding reason code.
 

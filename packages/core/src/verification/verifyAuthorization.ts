@@ -13,6 +13,20 @@ import {
   verifyHmacDomain
 } from "../crypto/signatures.js";
 
+/**
+ * Default maximum number of seconds `issued_at` may lead the trusted
+ * verification time and still be considered plausible.
+ *
+ * Chosen to absorb ordinary issuer/verifier clock drift while rejecting
+ * grossly implausible future-dated authorizations.
+ *
+ * The default currently matches the recommended intent-freshness clock skew,
+ * but the two security controls are intentionally independent.
+ *
+ * @public
+ */
+export const DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS = 300;
+
 /** @public */
 export type VerifyAuthorizationOptions = {
   now?: number;
@@ -23,6 +37,15 @@ export type VerifyAuthorizationOptions = {
   consumedAuthIds?: readonly string[];
   trustedKeySets?: KeySet | readonly KeySet[];
   requireSignatureVerification?: boolean;
+  /**
+   * Maximum number of seconds `issued_at` may lead the trusted verification
+   * time (`opts.now`, never `intent.timestamp`) and still be accepted.
+   *
+   * Defaults to {@link DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS}. An
+   * `issued_at` beyond this bound is rejected with
+   * `AUTH_ISSUED_AT_IMPLAUSIBLE`, regardless of `expiry`.
+   */
+  maxFutureIssuedAtSkewSeconds?: number;
   /**
    * Shared secret for verifying HMAC-SHA256 signed authorization artifacts.
    *
@@ -90,6 +113,23 @@ function verifyEd25519Raw(payload: unknown, signatureBase64: string, publicKeyPe
 function nowOrThrow(now: number | undefined): number {
   if (now !== undefined) return now;
   return Math.floor(Date.now() / 1000);
+}
+
+/**
+ * `maxFutureIssuedAtSkewSeconds` is a trusted-caller configuration input,
+ * not attacker-reachable data. A malformed value is a caller precondition
+ * violation - it throws rather than silently falling back to the default
+ * or being coerced, so a broken deployment cannot be mistaken for a
+ * data-driven `ALLOW`/`DENY`.
+ */
+function resolveMaxFutureIssuedAtSkewSeconds(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(
+      "verifyAuthorization: maxFutureIssuedAtSkewSeconds must be a finite, non-negative safe integer (seconds)"
+    );
+  }
+  return value;
 }
 
 /**
@@ -202,6 +242,7 @@ export function verifyAuthorization(
 ): VerificationResult {
   const violations: VerificationViolation[] = [];
   const now = nowOrThrow(opts?.now);
+  const maxFutureIssuedAtSkewSeconds = resolveMaxFutureIssuedAtSkewSeconds(opts?.maxFutureIssuedAtSkewSeconds);
   const consumed = new Set(opts?.consumedAuthIds ?? []);
 
   if (!hasText(auth.decision) || auth.decision !== "ALLOW") {
@@ -227,6 +268,19 @@ export function verifyAuthorization(
   }
   if (!Number.isInteger(auth.issued_at)) {
     violations.push({ code: "AUTH_MISSING_FIELD", message: "issued_at must be integer unix seconds" });
+  } else if (
+    !Number.isSafeInteger(auth.issued_at) ||
+    auth.issued_at > now + maxFutureIssuedAtSkewSeconds
+  ) {
+    // issued_at is compared only against the trusted verificationTime (`now`,
+    // supplied by the caller as `opts.now`) - never against `intent.timestamp`,
+    // which this function does not receive. An unsafe-magnitude issued_at
+    // (e.g. beyond Number.MAX_SAFE_INTEGER) is inherently implausible and
+    // rejected without arithmetic that could overflow.
+    violations.push({
+      code: "AUTH_ISSUED_AT_IMPLAUSIBLE",
+      message: `issued_at must not be more than ${maxFutureIssuedAtSkewSeconds}s ahead of verification time`
+    });
   }
   const sig = signatureParts(auth);
 

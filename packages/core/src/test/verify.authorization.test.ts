@@ -2,7 +2,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { signAuthorizationEd25519, verifyAuthorization } from "../verification/index.js";
+import {
+  DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS,
+  signAuthorizationEd25519,
+  verifyAuthorization
+} from "../verification/index.js";
 import type { KeySet } from "../types/keyset.js";
 
 const TEST_RUNTIME_ED25519_KEYPAIR_DO_NOT_USE_IN_PRODUCTION = generateKeyPairSync("ed25519", {
@@ -16,7 +20,7 @@ const TEST_KEYSET: KeySet = {
   keys: [{ kid: "2026-01", alg: "Ed25519", public_key: TEST_RUNTIME_ED25519_KEYPAIR_DO_NOT_USE_IN_PRODUCTION.publicKey }]
 };
 
-function makeAuth() {
+function makeAuth(overrides?: { issued_at?: number; expiry?: number }) {
   return signAuthorizationEd25519(
     {
       auth_id: "f".repeat(64),
@@ -26,8 +30,8 @@ function makeAuth() {
       state_hash: "b".repeat(64),
       policy_id: "c".repeat(64),
       decision: "ALLOW",
-      issued_at: 1000,
-      expiry: 1060,
+      issued_at: overrides?.issued_at ?? 1000,
+      expiry: overrides?.expiry ?? 1060,
       kid: "2026-01"
     },
     TEST_RUNTIME_ED25519_KEYPAIR_DO_NOT_USE_IN_PRODUCTION.privateKey
@@ -102,4 +106,150 @@ test("invalid: unsupported alg", () => {
   });
   assert.equal(out.status, "invalid");
   assert.ok(out.violations.some((v) => v.code === "AUTH_ALG_UNSUPPORTED"));
+});
+
+// ── issued_at future-plausibility (#190) ────────────────────────────────────
+
+const NOW = 1_000_000;
+
+test("ok: issued_at exactly at the future-skew boundary is allowed", () => {
+  const issued_at = NOW + DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true
+  });
+  assert.equal(out.status, "ok");
+  assert.deepEqual(out.violations, []);
+});
+
+test("invalid: issued_at one second beyond the boundary is rejected", () => {
+  const issued_at = NOW + DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS + 1;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true
+  });
+  assert.equal(out.status, "invalid");
+  assert.ok(out.violations.some((v) => v.code === "AUTH_ISSUED_AT_IMPLAUSIBLE"));
+});
+
+test("invalid: issued_at 100 years in the future is rejected even though not expired", () => {
+  const ONE_HUNDRED_YEARS_SECONDS = 100 * 365 * 24 * 60 * 60;
+  const issued_at = NOW + ONE_HUNDRED_YEARS_SECONDS;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true
+  });
+  assert.equal(out.status, "invalid");
+  assert.ok(out.violations.some((v) => v.code === "AUTH_ISSUED_AT_IMPLAUSIBLE"));
+  // Would otherwise still be within its validity window - proves the old
+  // "expiry hasn't passed" check alone cannot catch this.
+  assert.ok(!out.violations.some((v) => v.code === "AUTH_EXPIRED"));
+});
+
+test("ok: normal authorization (issued_at in the recent past) is unaffected", () => {
+  const auth = makeAuth({ issued_at: NOW - 5, expiry: NOW + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    expectedIssuer: "issuer-A",
+    expectedAudience: "rp-A",
+    requireSignatureVerification: true
+  });
+  assert.equal(out.status, "ok");
+  assert.deepEqual(out.violations, []);
+});
+
+test("expiry behavior unchanged: expired authorization with a plausible issued_at still rejects with AUTH_EXPIRED only", () => {
+  const auth = makeAuth({ issued_at: NOW - 120, expiry: NOW });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true
+  });
+  assert.equal(out.status, "invalid");
+  assert.deepEqual(out.violations.map((v) => v.code), ["AUTH_EXPIRED"]);
+});
+
+test("determinism: identical inputs produce identical results", () => {
+  const issued_at = NOW + DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS + 1;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const opts = { now: NOW, trustedKeySets: TEST_KEYSET, requireSignatureVerification: true };
+  const first = verifyAuthorization(auth, opts);
+  const second = verifyAuthorization(auth, opts);
+  assert.deepEqual(first, second);
+});
+
+test("invalid: changing only an unrelated intent-shaped field cannot affect the issued_at check", () => {
+  // verifyAuthorization has no `intent` parameter; the comparison MUST use
+  // only opts.now (the trusted verificationTime) and auth.issued_at. Smuggle
+  // an extraneous 'timestamp' field onto the artifact (as if an agent tried
+  // to influence the check by supplying an Intent-shaped payload) and confirm
+  // it has zero effect on the outcome.
+  const issued_at = NOW + DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS + 1;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const opts = { now: NOW, trustedKeySets: TEST_KEYSET, requireSignatureVerification: true };
+
+  const baseline = verifyAuthorization(auth, opts);
+  const withFakeIntentTimestamp = verifyAuthorization(
+    { ...auth, timestamp: NOW } as any,
+    opts
+  );
+
+  assert.deepEqual(withFakeIntentTimestamp.violations, baseline.violations);
+  assert.ok(baseline.violations.some((v) => v.code === "AUTH_ISSUED_AT_IMPLAUSIBLE"));
+});
+
+test("ok: explicit maxFutureIssuedAtSkewSeconds overrides the default", () => {
+  const issued_at = NOW + 10_000;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true,
+    maxFutureIssuedAtSkewSeconds: 10_000
+  });
+  assert.equal(out.status, "ok");
+});
+
+test("invalid: explicit maxFutureIssuedAtSkewSeconds tightens the default and still rejects", () => {
+  const issued_at = NOW + 100;
+  const auth = makeAuth({ issued_at, expiry: issued_at + 60 });
+  const out = verifyAuthorization(auth, {
+    now: NOW,
+    trustedKeySets: TEST_KEYSET,
+    requireSignatureVerification: true,
+    maxFutureIssuedAtSkewSeconds: 10
+  });
+  assert.equal(out.status, "invalid");
+  assert.ok(out.violations.some((v) => v.code === "AUTH_ISSUED_AT_IMPLAUSIBLE"));
+});
+
+for (const malformed of [-1, NaN, Infinity, -Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+  test(`throws: malformed maxFutureIssuedAtSkewSeconds (${String(malformed)}) fails closed instead of silently accepting/defaulting`, () => {
+    const auth = makeAuth();
+    assert.throws(() =>
+      verifyAuthorization(auth, {
+        now: 1010,
+        trustedKeySets: TEST_KEYSET,
+        maxFutureIssuedAtSkewSeconds: malformed
+      })
+    );
+  });
+}
+
+test("invalid: unsafe-magnitude issued_at is rejected as implausible without overflowing", () => {
+  // canonicalJson itself refuses to sign an unsafe-magnitude number, so a real
+  // artifact can never carry one - construct the malformed field directly on
+  // an otherwise-valid artifact (as a tampered/non-conformant wire payload
+  // would) to exercise the overflow-safe guard in isolation from signing.
+  const auth = { ...makeAuth(), issued_at: Number.MAX_SAFE_INTEGER + 2, expiry: NOW + 60 };
+  const out = verifyAuthorization(auth, { now: NOW });
+  assert.equal(out.status, "invalid");
+  assert.ok(out.violations.some((v) => v.code === "AUTH_ISSUED_AT_IMPLAUSIBLE"));
 });
