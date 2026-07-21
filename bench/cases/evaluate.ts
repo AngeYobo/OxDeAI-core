@@ -38,7 +38,7 @@ export function create(seed: number): () => unknown {
   return () => {
     const out = engine.evaluatePure(fx.intent, cloneState(baseState), fx.intent.timestamp);
     if (out.decision === "ALLOW") {
-      return out.authorization.authorization_id;
+      return out.authorization.auth_id;
     }
     return out.decision;
   };

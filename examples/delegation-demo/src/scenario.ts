@@ -61,7 +61,7 @@ export interface AuthDecision {
   authType: "engine" | "delegation";
   tool: string;
   args: Record<string, string | number>;
-  /** For engine auth: the authorization_id */
+  /** For engine auth: the auth_id */
   authId?: string;
   /** For delegation: the delegation_id */
   delegationId?: string;
