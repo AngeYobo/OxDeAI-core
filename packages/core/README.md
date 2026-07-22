@@ -507,7 +507,7 @@ const releaseIntent: Intent = {
   metadata_hash: "0".repeat(64),
   signature: "",
   type: "RELEASE",
-  authorization_id: out.authorization.authorization_id,
+  authorization_id: out.authorization.auth_id,
   nonce: 43n,
   amount: 0n,
   timestamp: now

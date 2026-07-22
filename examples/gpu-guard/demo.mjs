@@ -55,7 +55,7 @@ const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
 
 console.log("decision:", out.decision);
 if (out.decision === "ALLOW") {
-  console.log("authorization_id:", out.authorization.authorization_id);
+  console.log("auth_id:", out.authorization.auth_id);
   console.log("policyId:", engine.computePolicyId());
   console.log("stateHash:", engine.computeStateHash(out.nextState));
   console.log("auditHeadHash:", engine.audit.headHash());
