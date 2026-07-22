@@ -279,8 +279,9 @@ The canonicalized preimage includes whichever expiry field name (`expiry` or `ex
 ### issued_at
 
 * Unix timestamp (seconds) recording when the authorization was issued
-* **Informational only** — the verifier validates that this field is an integer but does NOT enforce `now >= issued_at`. A verifier whose clock is slightly behind the issuer will still accept a valid-window authorization.
-* No "not yet valid" semantics exist in this protocol version
+* The verifier validates that this field is an integer but does NOT enforce `now >= issued_at` as a lower bound. A verifier whose clock is slightly behind the issuer will still accept a valid-window authorization.
+* No "not yet valid" (nbf) semantics exist in this protocol version — `issued_at` in the future relative to `now` is not, by itself, a rejection condition.
+* **Bounded future-plausibility check (upper bound):** `issued_at` **MUST NOT** exceed `verificationTime + maxFutureIssuedAtSkewSeconds`. This is a plausibility backstop, not an nbf check — it absorbs ordinary clock drift (default `maxFutureIssuedAtSkewSeconds` is 300s) but rejects grossly implausible future-dated artifacts (e.g. `issued_at` decades ahead of `now`), which would otherwise remain valid for their entire stated lifetime regardless of how far in the future they claim to have been issued. Violation code: `AUTH_ISSUED_AT_IMPLAUSIBLE`. The comparison **MUST** use the trusted `verificationTime` supplied to the verifier — never an agent-supplied `Intent.timestamp` or any other untrusted input.
 
 ---
 
@@ -375,14 +376,15 @@ A conforming verifier **MUST**:
 3. Identify wire encoding from `alg` value
 4. Resolve effective expiry (`expiry` or `expires_at` per §5)
 5. Check expiration: `now >= effectiveExpiry` → reject
-6. Reconstruct signing preimage per §5
-7. Resolve `kid` in trusted key sets for the artifact's issuer
-8. Verify signature
-9. Validate issuer against expected issuer
-10. Validate audience against expected audience
-11. Check replay: `auth_id` previously consumed → reject
-12. Recompute `intent_hash` and compare
-13. Reject ambiguous or unsupported encodings deterministically
+6. Check `issued_at` future-plausibility: `issued_at > verificationTime + maxFutureIssuedAtSkewSeconds` → reject (`AUTH_ISSUED_AT_IMPLAUSIBLE`; see §6 `issued_at`)
+7. Reconstruct signing preimage per §5
+8. Resolve `kid` in trusted key sets for the artifact's issuer
+9. Verify signature
+10. Validate issuer against expected issuer
+11. Validate audience against expected audience
+12. Check replay: `auth_id` previously consumed → reject
+13. Recompute `intent_hash` and compare
+14. Reject ambiguous or unsupported encodings deterministically
 
 ### Failure rule
 
@@ -417,6 +419,7 @@ Verification **MUST** fail closed.
 * Trust failure
 * Audience mismatch
 * Expiration
+* Implausible future `issued_at` (§6, §17.2)
 * Replay
 * Unsupported algorithm identifier
 
@@ -544,12 +547,25 @@ valid iff now < expiry
 
 ### 17.2 issued_at Semantics
 
-`issued_at` is **informational**. The verifier:
+`issued_at` is **not** a "not yet valid" (nbf) field. The verifier:
 
 - Validates that `issued_at` is an integer (required field)
-- Does **NOT** enforce `now >= issued_at`
+- Does **NOT** enforce `now >= issued_at` as a lower bound
 
-There is no "not yet valid" (nbf) concept in this protocol version. An authorization whose `now` is slightly behind `issued_at` (e.g., verifier clock drift of a few seconds) is still accepted, provided `now < expiry`.
+An authorization whose `now` is slightly behind `issued_at` (e.g., verifier clock drift of a few seconds) is still accepted, provided `now < expiry`.
+
+`issued_at` **is**, however, subject to a bounded future-plausibility upper bound (added to close a P0 gap where an artifact with `issued_at` set decades in the future was otherwise accepted for its entire stated validity window):
+
+```text
+valid iff issued_at <= verificationTime + maxFutureIssuedAtSkewSeconds
+```
+
+| `issued_at` vs `verificationTime + maxFutureIssuedAtSkewSeconds` | Result |
+|---|---|
+| `issued_at <= verificationTime + maxFutureIssuedAtSkewSeconds` | ok (subject to other checks) |
+| `issued_at > verificationTime + maxFutureIssuedAtSkewSeconds` | `AUTH_ISSUED_AT_IMPLAUSIBLE` |
+
+`maxFutureIssuedAtSkewSeconds` is verifier configuration (default 300s — chosen to absorb ordinary clock drift; see the reference implementation's `DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS`), not part of the signed artifact. The comparison **MUST** use the same trusted `verificationTime` used for expiry enforcement — **never** `Intent.timestamp` or any other agent-supplied value. This is a plausibility backstop distinct from, and independent of, the trusted-time intent-freshness gate (`docs/spec/core/trusted-time-v1.md`), which governs `Intent.timestamp` staleness during policy evaluation, not `AuthorizationV1.issued_at` during artifact verification.
 
 ### 17.3 Distributed Deployment Requirements
 
@@ -570,6 +586,9 @@ There is no "not yet valid" (nbf) concept in this protocol version. An authoriza
 | Verifier behind issuer | `now < issued_at`, `now < expiry` | ok — `issued_at` not enforced as lower bound |
 | Delayed delivery | `now = issued_at + large_offset`, `now < expiry` | ok — still within validity window |
 | Stale authorization | `now >= expiry` | `AUTH_EXPIRED` |
+| `issued_at` at future-skew boundary | `issued_at = now + maxFutureIssuedAtSkewSeconds` | ok |
+| `issued_at` one second beyond boundary | `issued_at = now + maxFutureIssuedAtSkewSeconds + 1` | `AUTH_ISSUED_AT_IMPLAUSIBLE` |
+| `issued_at` implausibly far in the future | `issued_at = now + 100 years`, `now < expiry` | `AUTH_ISSUED_AT_IMPLAUSIBLE` — rejected even though not expired |
 
 ### 17.5 Conformance Vectors
 
