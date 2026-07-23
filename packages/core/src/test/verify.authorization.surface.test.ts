@@ -74,8 +74,10 @@ test("missing trusted key set does not silently produce a fully verified result"
   // verification occurred.
   const out = verifyAuthorization(makeAuth(), { now: 1010 });
   assert.equal(out.ok, true);
+  // Configured posture is permissive (best-effort default); the *absence* of a
+  // signature check is conveyed by signatureVerified/coverage, not the mode.
   assert.equal(out.signatureVerified, false);
-  assert.equal(out.verificationMode, "structure-only");
+  assert.equal(out.verificationMode, "permissive");
   assert.equal(out.verificationCoverage, "none");
 });
 
@@ -101,13 +103,15 @@ test("forged signature rejected in strict mode and not marked verified", () => {
   assert.ok(out.violations.some((v) => v.code === "AUTH_SIGNATURE_INVALID"));
 });
 
-test("explicit non-crypto (structure-only) result is distinguishable from strict verification", () => {
+test("permissive-without-crypto is distinguishable from strict verification", () => {
   const structural = verifyAuthorization(makeAuth(), { now: 1010 });
   const strict = verifyAuthorization(makeAuth(), { now: 1010, mode: "strict", trustedKeySets: KEYSET });
+  // Distinguished by posture (mode) AND by whether a signature was checked.
   assert.notEqual(structural.verificationMode, strict.verificationMode);
-  assert.equal(structural.verificationMode, "structure-only");
+  assert.equal(structural.verificationMode, "permissive");
   assert.equal(strict.verificationMode, "strict");
   assert.equal(structural.signatureVerified, false);
+  assert.equal(structural.verificationCoverage, "none");
   assert.equal(strict.signatureVerified, true);
 });
 
@@ -139,9 +143,10 @@ test("unknown kid engages no cryptographic check and is not marked verified", ()
   });
   assert.equal(out.ok, false);
   assert.equal(out.signatureVerified, false);
-  // No verify function ran (trust could not be resolved), so posture is
-  // structure-only rather than permissive.
-  assert.equal(out.verificationMode, "structure-only");
+  // Trust could not be resolved so no signature was checked; the posture is
+  // still the configured "permissive" — the missing check shows in
+  // signatureVerified/coverage, not the mode.
+  assert.equal(out.verificationMode, "permissive");
   assert.equal(out.verificationCoverage, "none");
   assert.ok(out.violations.some((v) => v.code === "AUTH_KID_UNKNOWN"));
 });

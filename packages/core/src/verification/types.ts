@@ -3,26 +3,27 @@
 export type VerificationStatus = "ok" | "invalid" | "inconclusive";
 
 /**
- * How signature verification was performed, independent of the outcome.
+ * How the verifier was *configured* — its posture, independent of the outcome.
  *
- * This describes the verification *posture* actually applied, and is distinct
- * from the `mode` request option (`"strict" | "best-effort"`) passed into a
- * verifier:
+ * This deliberately describes configuration only, not whether cryptography
+ * actually ran. It maps from the `mode` request option (`"strict" |
+ * "best-effort"`, where `"best-effort"` reports as `"permissive"`):
  *
- * - `"strict"`          — strict verification was requested (a trusted key set
- *                         is mandatory and full cryptographic verification is
- *                         enforced).
- * - `"permissive"`      — best-effort verification in which a cryptographic
- *                         signature check was actually engaged.
- * - `"structure-only"`  — no cryptographic signature verification was engaged;
- *                         only structural / semantic checks ran.
+ * - `"strict"`     — strict verification was requested (a trusted key set is
+ *                    mandatory and full cryptographic verification is enforced).
+ * - `"permissive"` — best-effort verification was requested.
  *
- * A `"structure-only"` result must never be mistaken for a cryptographically
- * verified one — inspect {@link VerificationResult.signatureVerified}.
+ * Whether a signature was actually checked is a separate, orthogonal fact:
+ * inspect {@link VerificationResult.signatureVerified} and
+ * {@link VerificationResult.verificationCoverage}. A permissive verification
+ * that skipped signature verification (e.g. no trust anchor was available)
+ * reports `verificationMode: "permissive"`, `signatureVerified: false`,
+ * `verificationCoverage: "none"` — the absence of cryptography is conveyed by
+ * those fields, not by the mode.
  *
  * @public
  */
-export type VerificationMode = "strict" | "permissive" | "structure-only";
+export type VerificationMode = "strict" | "permissive";
 
 /**
  * Which authorization surface a signature check actually covered.
@@ -143,6 +144,12 @@ export type VerificationResult = {
  * mistake a structurally-checked authorization for a cryptographically verified
  * one. To decide whether to rely on an authorization, check `signatureVerified`
  * (and `verificationCoverage`), not merely `ok`.
+ *
+ * This verifier only ever emits `verificationCoverage` of
+ * `"authorization-v1-full"` (a full AuthorizationV1 signature was checked) or
+ * `"none"`. It never emits `"engine-hmac-subset"` — that value is reserved for
+ * the engine HMAC helper (`PolicyEngine.verifyAuthorization`). Consumers must
+ * not assume every verifier can produce every coverage level.
  *
  * @public
  */

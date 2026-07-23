@@ -251,13 +251,13 @@ export function verifyAuthorization(
   // mistake a merely-structural result for a cryptographically verified one:
   //   - `signatureVerified` flips true ONLY at the point a cryptographic check
   //     actually runs and succeeds;
-  //   - `cryptoEngaged` records that a verify function was invoked at all
-  //     (pass or fail), which distinguishes "permissive" from "structure-only";
   //   - `verificationCoverage` records which surface that check covered.
-  // The default/permissive path never sets `signatureVerified`, so a caller
-  // that only inspects `ok` cannot be silently misled.
+  // `verificationMode` is derived purely from the requested posture (below),
+  // independent of whether cryptography ran — the absence of a signature check
+  // is conveyed by `signatureVerified: false` / `verificationCoverage: "none"`,
+  // not by the mode. The default/permissive path never sets `signatureVerified`,
+  // so a caller that only inspects `ok` cannot be silently misled.
   let signatureVerified = false;
-  let cryptoEngaged = false;
   let verificationCoverage: VerificationCoverage = "none";
   const maxFutureIssuedAtSkewSeconds = resolveMaxFutureIssuedAtSkewSeconds(opts?.maxFutureIssuedAtSkewSeconds);
   const consumed = new Set(opts?.consumedAuthIds ?? []);
@@ -376,7 +376,6 @@ export function verifyAuthorization(
           violations.push({ code: "AUTH_KEY_INACTIVE", message: "key is not active at verification time" });
         } else {
           // A cryptographic check is actually performed here (pass or fail).
-          cryptoEngaged = true;
           if (
             !verifyEd25519(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, key.public_key) &&
             !verifyEd25519Raw(payload, sigValue, key.public_key)
@@ -392,7 +391,6 @@ export function verifyAuthorization(
       if (opts?.legacyHmacSecret) {
         // Legacy HMAC covers the full AuthorizationV1 signing payload (not the
         // narrower engine-HMAC subset), so successful coverage is "full".
-        cryptoEngaged = true;
         if (!verifyHmacDomain(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, opts.legacyHmacSecret)) {
           violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "legacy HMAC signature verification failed" });
         } else {
@@ -407,10 +405,11 @@ export function verifyAuthorization(
     }
   }
 
-  // Posture actually applied: "strict" when requested; otherwise "permissive"
-  // if a cryptographic check was engaged, else "structure-only".
-  const verificationMode: VerificationMode =
-    opts?.mode === "strict" ? "strict" : cryptoEngaged ? "permissive" : "structure-only";
+  // Configured posture only (independent of whether cryptography ran):
+  // "strict" when requested, otherwise "permissive" (the best-effort default).
+  // Whether a signature was actually checked is reported separately via
+  // `signatureVerified` / `verificationCoverage`.
+  const verificationMode: VerificationMode = opts?.mode === "strict" ? "strict" : "permissive";
 
   if (violations.length > 0) {
     return {
