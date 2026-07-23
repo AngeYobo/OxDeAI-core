@@ -2,6 +2,45 @@
 /** @public */
 export type VerificationStatus = "ok" | "invalid" | "inconclusive";
 
+/**
+ * How signature verification was performed, independent of the outcome.
+ *
+ * This describes the verification *posture* actually applied, and is distinct
+ * from the `mode` request option (`"strict" | "best-effort"`) passed into a
+ * verifier:
+ *
+ * - `"strict"`          — strict verification was requested (a trusted key set
+ *                         is mandatory and full cryptographic verification is
+ *                         enforced).
+ * - `"permissive"`      — best-effort verification in which a cryptographic
+ *                         signature check was actually engaged.
+ * - `"structure-only"`  — no cryptographic signature verification was engaged;
+ *                         only structural / semantic checks ran.
+ *
+ * A `"structure-only"` result must never be mistaken for a cryptographically
+ * verified one — inspect {@link VerificationResult.signatureVerified}.
+ *
+ * @public
+ */
+export type VerificationMode = "strict" | "permissive" | "structure-only";
+
+/**
+ * Which authorization surface a signature check actually covered.
+ *
+ * - `"authorization-v1-full"` — the full normative AuthorizationV1 signing
+ *                               payload was cryptographically verified.
+ * - `"engine-hmac-subset"`    — only the engine-HMAC field subset was
+ *                               authenticated (see `PolicyEngine.verifyAuthorization`);
+ *                               this is NOT full authorization verification.
+ * - `"none"`                  — no cryptographic coverage.
+ *
+ * @public
+ */
+export type VerificationCoverage =
+  | "authorization-v1-full"
+  | "engine-hmac-subset"
+  | "none";
+
 /** @public */
 export type VerificationViolationCode =
   | "MALFORMED_EVENT"
@@ -74,6 +113,43 @@ export type VerificationResult = {
   policyId?: string;
   stateHash?: string;
   auditHeadHash?: string;
+
+  /**
+   * Whether a cryptographic signature verification actually ran AND succeeded.
+   *
+   * This is `true` only when a real cryptographic check executed and passed —
+   * never for a result that was merely structurally or semantically validated.
+   * It is orthogonal to `ok`: a validly-signed but expired authorization has
+   * `signatureVerified: true` and `ok: false`.
+   *
+   * Optional on the shared result type so verifiers that do not perform a
+   * signature check can omit it; verifiers that expose a signature surface
+   * (e.g. {@link AuthorizationVerificationResult}) always populate it.
+   */
+  signatureVerified?: boolean;
+
+  /** How verification was performed. See {@link VerificationMode}. */
+  verificationMode?: VerificationMode;
+
+  /** Which authorization surface the signature check covered. See {@link VerificationCoverage}. */
+  verificationCoverage?: VerificationCoverage;
+};
+
+/**
+ * Result of {@link verifyAuthorization}.
+ *
+ * A specialization of {@link VerificationResult} in which the
+ * verification-surface descriptors are ALWAYS populated, so a caller can never
+ * mistake a structurally-checked authorization for a cryptographically verified
+ * one. To decide whether to rely on an authorization, check `signatureVerified`
+ * (and `verificationCoverage`), not merely `ok`.
+ *
+ * @public
+ */
+export type AuthorizationVerificationResult = VerificationResult & {
+  signatureVerified: boolean;
+  verificationMode: VerificationMode;
+  verificationCoverage: VerificationCoverage;
 };
 
 /** @public */

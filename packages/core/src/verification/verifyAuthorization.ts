@@ -2,7 +2,12 @@
 import { verify as nodeVerify } from "node:crypto";
 import type { AuthorizationV1 } from "../types/authorization.js";
 import type { KeySet } from "../types/keyset.js";
-import type { VerificationResult, VerificationViolation } from "./types.js";
+import type {
+  AuthorizationVerificationResult,
+  VerificationCoverage,
+  VerificationMode,
+  VerificationViolation
+} from "./types.js";
 import { canonicalJson } from "../crypto/hashes.js";
 import {
   SIGNING_DOMAINS,
@@ -239,9 +244,21 @@ export function signAuthorizationEd25519(
 export function verifyAuthorization(
   auth: AuthorizationV1,
   opts?: VerifyAuthorizationOptions
-): VerificationResult {
+): AuthorizationVerificationResult {
   const violations: VerificationViolation[] = [];
   const now = nowOrThrow(opts?.now);
+  // Verification-surface descriptors (#172). These make it impossible to
+  // mistake a merely-structural result for a cryptographically verified one:
+  //   - `signatureVerified` flips true ONLY at the point a cryptographic check
+  //     actually runs and succeeds;
+  //   - `cryptoEngaged` records that a verify function was invoked at all
+  //     (pass or fail), which distinguishes "permissive" from "structure-only";
+  //   - `verificationCoverage` records which surface that check covered.
+  // The default/permissive path never sets `signatureVerified`, so a caller
+  // that only inspects `ok` cannot be silently misled.
+  let signatureVerified = false;
+  let cryptoEngaged = false;
+  let verificationCoverage: VerificationCoverage = "none";
   const maxFutureIssuedAtSkewSeconds = resolveMaxFutureIssuedAtSkewSeconds(opts?.maxFutureIssuedAtSkewSeconds);
   const consumed = new Set(opts?.consumedAuthIds ?? []);
 
@@ -327,10 +344,15 @@ export function verifyAuthorization(
     : [];
 
   if (opts?.mode === "strict" && trusted.length === 0) {
+    // Strict was requested but cannot run: report the requested posture
+    // ("strict") while making clear no signature was verified.
     return {
       ok: false,
       status: "invalid",
-      violations: [{ code: "TRUSTED_KEYSETS_REQUIRED", message: "strict mode requires trustedKeySets to be provided" }]
+      violations: [{ code: "TRUSTED_KEYSETS_REQUIRED", message: "strict mode requires trustedKeySets to be provided" }],
+      signatureVerified: false,
+      verificationMode: "strict",
+      verificationCoverage: "none"
     };
   }
 
@@ -352,17 +374,30 @@ export function verifyAuthorization(
           violations.push({ code: "AUTH_KID_UNKNOWN", message: "kid not found for issuer/alg" });
         } else if (!keyIsActiveAt(key, now)) {
           violations.push({ code: "AUTH_KEY_INACTIVE", message: "key is not active at verification time" });
-        } else if (
-          !verifyEd25519(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, key.public_key) &&
-          !verifyEd25519Raw(payload, sigValue, key.public_key)
-        ) {
-          violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "signature verification failed" });
+        } else {
+          // A cryptographic check is actually performed here (pass or fail).
+          cryptoEngaged = true;
+          if (
+            !verifyEd25519(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, key.public_key) &&
+            !verifyEd25519Raw(payload, sigValue, key.public_key)
+          ) {
+            violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "signature verification failed" });
+          } else {
+            signatureVerified = true;
+            verificationCoverage = "authorization-v1-full";
+          }
         }
       }
     } else if (sigAlg === "HMAC-SHA256") {
       if (opts?.legacyHmacSecret) {
+        // Legacy HMAC covers the full AuthorizationV1 signing payload (not the
+        // narrower engine-HMAC subset), so successful coverage is "full".
+        cryptoEngaged = true;
         if (!verifyHmacDomain(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, opts.legacyHmacSecret)) {
           violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "legacy HMAC signature verification failed" });
+        } else {
+          signatureVerified = true;
+          verificationCoverage = "authorization-v1-full";
         }
       } else if (requireSig) {
         violations.push({ code: "AUTH_TRUST_MISSING", message: "legacyHmacSecret required for HMAC verification" });
@@ -372,13 +407,21 @@ export function verifyAuthorization(
     }
   }
 
+  // Posture actually applied: "strict" when requested; otherwise "permissive"
+  // if a cryptographic check was engaged, else "structure-only".
+  const verificationMode: VerificationMode =
+    opts?.mode === "strict" ? "strict" : cryptoEngaged ? "permissive" : "structure-only";
+
   if (violations.length > 0) {
     return {
       ok: false,
       status: "invalid",
       violations: sortViolations(violations),
       policyId: hasText(auth.policy_id) ? auth.policy_id : undefined,
-      stateHash: hasText(auth.state_hash) ? auth.state_hash : undefined
+      stateHash: hasText(auth.state_hash) ? auth.state_hash : undefined,
+      signatureVerified,
+      verificationMode,
+      verificationCoverage
     };
   }
 
@@ -387,6 +430,9 @@ export function verifyAuthorization(
     status: "ok",
     violations: [],
     policyId: auth.policy_id,
-    stateHash: auth.state_hash
+    stateHash: auth.state_hash,
+    signatureVerified,
+    verificationMode,
+    verificationCoverage
   };
 }
