@@ -248,15 +248,20 @@ export function verifyAuthorization(
   const violations: VerificationViolation[] = [];
   const now = nowOrThrow(opts?.now);
   // Verification-surface descriptors (#172). These make it impossible to
-  // mistake a merely-structural result for a cryptographically verified one:
-  //   - `signatureVerified` flips true ONLY at the point a cryptographic check
-  //     actually runs and succeeds;
-  //   - `verificationCoverage` records which surface that check covered.
+  // mistake a merely-structural result for a cryptographically verified one,
+  // and they are fully orthogonal:
+  //   - `signatureVerified` reports the OUTCOME of authentication: it flips true
+  //     ONLY when a cryptographic check actually runs AND succeeds;
+  //   - `verificationCoverage` reports which surface a cryptographic check was
+  //     run AGAINST, independent of that outcome. It becomes
+  //     "authorization-v1-full" the moment the check is engaged — so a forged
+  //     signature reports full coverage with `signatureVerified: false` — and
+  //     stays "none" only when no cryptographic verifier ran at all (missing
+  //     trust material, unknown/inactive kid, or absent HMAC secret).
   // `verificationMode` is derived purely from the requested posture (below),
-  // independent of whether cryptography ran — the absence of a signature check
-  // is conveyed by `signatureVerified: false` / `verificationCoverage: "none"`,
-  // not by the mode. The default/permissive path never sets `signatureVerified`,
-  // so a caller that only inspects `ok` cannot be silently misled.
+  // independent of whether cryptography ran. A permissive result sets
+  // `signatureVerified` only when a cryptographic check was available, executed,
+  // and succeeded, so a caller that only inspects `ok` cannot be silently misled.
   let signatureVerified = false;
   let verificationCoverage: VerificationCoverage = "none";
   const maxFutureIssuedAtSkewSeconds = resolveMaxFutureIssuedAtSkewSeconds(opts?.maxFutureIssuedAtSkewSeconds);
@@ -356,7 +361,15 @@ export function verifyAuthorization(
     };
   }
 
-  const requireSig = opts?.requireSignatureVerification ?? false;
+  // Strict mode implies signature verification is mandatory: a strict result
+  // must never be able to pass without a cryptographic check having actually
+  // run and succeeded (pinned by the strict + ok invariant test). Without this,
+  // an HMAC authorization under `mode: "strict"` with a non-empty trusted key
+  // set but no `legacyHmacSecret` would slip through with `ok: true` and
+  // `signatureVerified: false`.
+  const requireSig =
+    opts?.mode === "strict" ||
+    (opts?.requireSignatureVerification ?? false);
   const hasSigMaterial = hasText(sig.alg) && hasText(sig.kid) && hasText(sig.sig);
 
   if (hasSigMaterial) {
@@ -376,6 +389,10 @@ export function verifyAuthorization(
           violations.push({ code: "AUTH_KEY_INACTIVE", message: "key is not active at verification time" });
         } else {
           // A cryptographic check is actually performed here (pass or fail).
+          // Coverage records the surface evaluated and is set the moment the
+          // check is engaged, independent of the outcome; `signatureVerified`
+          // flips true only if it succeeds.
+          verificationCoverage = "authorization-v1-full";
           if (
             !verifyEd25519(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, key.public_key) &&
             !verifyEd25519Raw(payload, sigValue, key.public_key)
@@ -383,19 +400,19 @@ export function verifyAuthorization(
             violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "signature verification failed" });
           } else {
             signatureVerified = true;
-            verificationCoverage = "authorization-v1-full";
           }
         }
       }
     } else if (sigAlg === "HMAC-SHA256") {
       if (opts?.legacyHmacSecret) {
         // Legacy HMAC covers the full AuthorizationV1 signing payload (not the
-        // narrower engine-HMAC subset), so successful coverage is "full".
+        // narrower engine-HMAC subset). Coverage reflects the surface evaluated
+        // and is set once the check is engaged, independent of the outcome.
+        verificationCoverage = "authorization-v1-full";
         if (!verifyHmacDomain(SIGNING_DOMAINS.AUTH_V1, payload, sigValue, opts.legacyHmacSecret)) {
           violations.push({ code: "AUTH_SIGNATURE_INVALID", message: "legacy HMAC signature verification failed" });
         } else {
           signatureVerified = true;
-          verificationCoverage = "authorization-v1-full";
         }
       } else if (requireSig) {
         violations.push({ code: "AUTH_TRUST_MISSING", message: "legacyHmacSecret required for HMAC verification" });

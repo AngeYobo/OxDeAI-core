@@ -26,14 +26,23 @@ export type VerificationStatus = "ok" | "invalid" | "inconclusive";
 export type VerificationMode = "strict" | "permissive";
 
 /**
- * Which authorization surface a signature check actually covered.
+ * Which authorization surface a cryptographic check was run against.
  *
- * - `"authorization-v1-full"` — the full normative AuthorizationV1 signing
- *                               payload was cryptographically verified.
+ * This reports the surface that was cryptographically *evaluated*, independent
+ * of whether authentication succeeded — a forged signature that was checked
+ * against the full payload still reports `"authorization-v1-full"` (with
+ * `signatureVerified: false`). Whether the check passed is the separate,
+ * orthogonal fact on {@link VerificationResult.signatureVerified}.
+ *
+ * - `"authorization-v1-full"` — a cryptographic check ran against the full
+ *                               normative AuthorizationV1 signing payload
+ *                               (verified or rejected).
  * - `"engine-hmac-subset"`    — only the engine-HMAC field subset was
- *                               authenticated (see `PolicyEngine.verifyAuthorization`);
+ *                               evaluated (see `PolicyEngine.verifyAuthorization`);
  *                               this is NOT full authorization verification.
- * - `"none"`                  — no cryptographic coverage.
+ * - `"none"`                  — no cryptographic verifier ran at all (e.g.
+ *                               missing trust material, unknown/inactive kid,
+ *                               or absent HMAC secret).
  *
  * @public
  */
@@ -146,8 +155,9 @@ export type VerificationResult = {
  * (and `verificationCoverage`), not merely `ok`.
  *
  * This verifier only ever emits `verificationCoverage` of
- * `"authorization-v1-full"` (a full AuthorizationV1 signature was checked) or
- * `"none"`. It never emits `"engine-hmac-subset"` — that value is reserved for
+ * `"authorization-v1-full"` (a cryptographic check ran against the full
+ * AuthorizationV1 payload, whether it passed or was rejected) or `"none"`. It
+ * never emits `"engine-hmac-subset"` — that value is reserved for
  * the engine HMAC helper (`PolicyEngine.verifyAuthorization`). Consumers must
  * not assume every verifier can produce every coverage level.
  *

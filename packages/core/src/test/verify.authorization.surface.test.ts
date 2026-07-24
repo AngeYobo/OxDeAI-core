@@ -81,25 +81,28 @@ test("missing trusted key set does not silently produce a fully verified result"
   assert.equal(out.verificationCoverage, "none");
 });
 
-test("forged signature not reported as fully verified in default/permissive mode", () => {
+test("forged signature not reported as verified, but coverage reflects the surface that was checked", () => {
   // Tamper a signed field so the Ed25519 signature no longer matches, then
   // verify in best-effort mode WITH a trusted key set (so a crypto check runs).
+  // The check DID execute against the full AuthorizationV1 payload, so coverage
+  // is "authorization-v1-full" even though authentication failed — the failure
+  // is conveyed by signatureVerified, keeping the two descriptors orthogonal.
   const forged = { ...makeAuth(), state_hash: "d".repeat(64) };
   const out = verifyAuthorization(forged, { now: 1010, trustedKeySets: KEYSET });
   assert.equal(out.ok, false);
   assert.equal(out.signatureVerified, false);
   assert.equal(out.verificationMode, "permissive");
-  assert.equal(out.verificationCoverage, "none");
+  assert.equal(out.verificationCoverage, "authorization-v1-full");
   assert.ok(out.violations.some((v) => v.code === "AUTH_SIGNATURE_INVALID"));
 });
 
-test("forged signature rejected in strict mode and not marked verified", () => {
+test("forged signature rejected in strict mode: not verified, full coverage (a check ran)", () => {
   const forged = { ...makeAuth(), audience: "rp-EVIL" };
   const out = verifyAuthorization(forged, { now: 1010, mode: "strict", trustedKeySets: KEYSET });
   assert.equal(out.ok, false);
   assert.equal(out.signatureVerified, false);
   assert.equal(out.verificationMode, "strict");
-  assert.equal(out.verificationCoverage, "none");
+  assert.equal(out.verificationCoverage, "authorization-v1-full");
   assert.ok(out.violations.some((v) => v.code === "AUTH_SIGNATURE_INVALID"));
 });
 
@@ -149,4 +152,29 @@ test("unknown kid engages no cryptographic check and is not marked verified", ()
   assert.equal(out.verificationMode, "permissive");
   assert.equal(out.verificationCoverage, "none");
   assert.ok(out.violations.some((v) => v.code === "AUTH_KID_UNKNOWN"));
+});
+
+test("strict + ok invariant: a passing strict verification always ran and passed full cryptographic coverage", () => {
+  const out = verifyAuthorization(makeAuth(), { now: 1010, mode: "strict", trustedKeySets: KEYSET });
+  assert.equal(out.verificationMode, "strict");
+  assert.equal(out.ok, true);
+  // The invariant: verificationMode === "strict" && ok === true ALWAYS implies
+  // signatureVerified === true && verificationCoverage === "authorization-v1-full".
+  assert.equal(out.signatureVerified, true);
+  assert.equal(out.verificationCoverage, "authorization-v1-full");
+});
+
+test("strict mode cannot pass an HMAC authorization without a shared secret (no silent crypto bypass)", () => {
+  // mode:strict + non-empty trustedKeySets + HMAC-SHA256 alg + no legacyHmacSecret
+  // must NOT yield ok:true. Strict now implies signature verification is required,
+  // so the missing HMAC secret surfaces as AUTH_TRUST_MISSING rather than an
+  // unauthenticated ALLOW. This is the precise gap the requireSig fix closes.
+  const hmacAuth = { ...makeAuth(), alg: "HMAC-SHA256" as const };
+  const out = verifyAuthorization(hmacAuth, { now: 1010, mode: "strict", trustedKeySets: KEYSET });
+  assert.equal(out.ok, false);
+  assert.equal(out.signatureVerified, false);
+  assert.equal(out.verificationMode, "strict");
+  // No cryptographic verifier ran (no secret to check against), so coverage is "none".
+  assert.equal(out.verificationCoverage, "none");
+  assert.ok(out.violations.some((v) => v.code === "AUTH_TRUST_MISSING"));
 });
