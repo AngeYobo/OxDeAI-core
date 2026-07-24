@@ -138,7 +138,7 @@ export type VerificationResult = {
    */
   signatureVerified?: boolean;
 
-  /** How verification was performed. See {@link VerificationMode}. */
+  /** Configured verification posture. See {@link VerificationMode}. */
   verificationMode?: VerificationMode;
 
   /** Which authorization surface the signature check covered. See {@link VerificationCoverage}. */
