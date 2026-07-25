@@ -4,6 +4,7 @@ import type { Intent } from "../types/intent.js";
 import type { State, CanonicalState } from "../types/state.js";
 import type { Authorization, AuthorizationV1 } from "../types/authorization.js";
 import type { ReasonCode, PolicyModule } from "../types/policy.js";
+import type { VerificationMode, VerificationCoverage } from "../verification/types.js";
 
 import { canonicalJson, intentHash, sha256HexFromJson } from "../crypto/hashes.js";
 import { engineSignHmac } from "../crypto/sign.js";
@@ -34,6 +35,43 @@ import { MODULE_CODECS } from "./modules/registry.js";
 /** @public */
 export type EngineEvalOptions = {
   mode?: "fail-fast" | "collect-all";
+};
+
+/**
+ * Result of {@link PolicyEngine.verifyAuthorization}.
+ *
+ * ⚠️ LIMITED SCOPE — NOT full authorization verification. This method
+ * authenticates only the engine-HMAC field subset (`intent_hash`,
+ * `policy_version`, `state_snapshot_hash`, `decision`, `expires_at`). A
+ * `valid: true` result therefore means only that the engine-HMAC subset is
+ * authentic; it is NOT equivalent to full `AuthorizationV1` verification, and
+ * fields OUTSIDE the subset (e.g. `audience`, `capability`, `state_hash`) are
+ * not authenticated by this check. Relying parties enforcing an authorization
+ * MUST use the strict standalone {@link verifyAuthorization} instead.
+ *
+ * The #172 verification-surface descriptors are ALWAYS populated here (they are
+ * required, not merely inherited as optional fields from the shared
+ * {@link VerificationResult}), so a caller can never mistake this limited-scope
+ * check for full cryptographic verification:
+ *
+ *   - `signatureVerified` is `true` ONLY when the engine HMAC actually ran and
+ *     passed; a failed or unperformed HMAC never reports `true`.
+ *   - `verificationMode` is always `"permissive"` — this helper has no strict
+ *     posture.
+ *   - `verificationCoverage` is `"engine-hmac-subset"` once the HMAC check is
+ *     engaged (whether it passes or is rejected), and `"none"` when no HMAC
+ *     check ran (e.g. an earlier structural check short-circuited).
+ *     It NEVER reports `"authorization-v1-full"` — that surface is only
+ *     produced by the strict standalone verifier.
+ *
+ * @public
+ */
+export type EngineAuthorizationVerificationResult = {
+  valid: boolean;
+  reason?: ReasonCode;
+  signatureVerified: boolean;
+  verificationMode: VerificationMode;
+  verificationCoverage: VerificationCoverage;
 };
 
 /** @public */
@@ -276,12 +314,28 @@ export class PolicyEngine {
     return { decision: "ALLOW", reasons: [], authorization: out.authorization };
   }
 
+  /**
+   * ⚠️ LIMITED SCOPE — authenticates ONLY the engine-HMAC field subset
+   * (`intent_hash`, `policy_version`, `state_snapshot_hash`, `decision`,
+   * `expires_at`). A `valid: true` result is NOT equivalent to full
+   * `AuthorizationV1` verification: fields outside that subset (e.g.
+   * `audience`, `capability`, `state_hash`) are not authenticated here, so a
+   * mutation to one of them leaves this result `valid`. Relying parties
+   * enforcing an authorization MUST use the strict standalone
+   * {@link verifyAuthorization} instead. See
+   * {@link EngineAuthorizationVerificationResult}.
+   */
   verifyAuthorization(
     intent: Intent,
     authorization: Authorization,
     state: State,
     now?: number
-  ): { valid: boolean; reason?: ReasonCode } {
+  ): EngineAuthorizationVerificationResult {
+    // This helper has no strict posture; its configured mode is always
+    // "permissive". Whether an engine-HMAC check actually ran and passed is
+    // conveyed orthogonally by `signatureVerified` / `verificationCoverage`
+    // (#172), never by the mode.
+    const verificationMode: VerificationMode = "permissive";
     try {
       const t =
         now ??
@@ -292,12 +346,18 @@ export class PolicyEngine {
           return Math.floor(Date.now() / 1000);
         })();
 
+      // Structural checks below run BEFORE any cryptographic check; a failure
+      // here means no engine HMAC was ever engaged, so coverage stays "none".
       const intent_hash = intentHash(intent);
-      if (intent_hash !== authorization.intent_hash) return { valid: false, reason: "AUTH_INTENT_MISMATCH" };
+      if (intent_hash !== authorization.intent_hash)
+        return { valid: false, reason: "AUTH_INTENT_MISMATCH", signatureVerified: false, verificationMode, verificationCoverage: "none" };
       const expiry = authorization.expiry ?? authorization.expires_at;
-      if (t > expiry) return { valid: false, reason: "AUTH_EXPIRED" };
-      if (authorization.decision !== "ALLOW") return { valid: false, reason: "AUTH_SIGNATURE_INVALID" };
-      if (state.policy_version !== authorization.policy_version) return { valid: false, reason: "POLICY_VERSION_MISMATCH" };
+      if (t > expiry)
+        return { valid: false, reason: "AUTH_EXPIRED", signatureVerified: false, verificationMode, verificationCoverage: "none" };
+      if (authorization.decision !== "ALLOW")
+        return { valid: false, reason: "AUTH_SIGNATURE_INVALID", signatureVerified: false, verificationMode, verificationCoverage: "none" };
+      if (state.policy_version !== authorization.policy_version)
+        return { valid: false, reason: "POLICY_VERSION_MISMATCH", signatureVerified: false, verificationMode, verificationCoverage: "none" };
 
       const authPayload = {
         intent_hash: authorization.intent_hash,
@@ -307,12 +367,19 @@ export class PolicyEngine {
         expires_at: authorization.expires_at
       };
 
+      // The engine-HMAC subset check is engaged here. Coverage records the
+      // surface actually evaluated (the engine-HMAC subset — NEVER the full
+      // AuthorizationV1 surface) and is set the moment the check runs,
+      // independent of its outcome; `signatureVerified` flips true only if the
+      // check passes.
+      const verificationCoverage: VerificationCoverage = "engine-hmac-subset";
       const ok = engineVerifyHmac(authPayload, authorization.engine_signature, this.opts.engine_secret);
-      if (!ok) return { valid: false, reason: "AUTH_SIGNATURE_INVALID" };
+      if (!ok)
+        return { valid: false, reason: "AUTH_SIGNATURE_INVALID", signatureVerified: false, verificationMode, verificationCoverage };
 
-      return { valid: true };
+      return { valid: true, signatureVerified: true, verificationMode, verificationCoverage };
     } catch {
-      return { valid: false, reason: "INTERNAL_ERROR" };
+      return { valid: false, reason: "INTERNAL_ERROR", signatureVerified: false, verificationMode, verificationCoverage: "none" };
     }
   }
 

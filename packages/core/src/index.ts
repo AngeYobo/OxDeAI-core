@@ -39,7 +39,7 @@ export type { VerifyDelegationOptions } from "./verification/verifyDelegation.js
 export { createDelegation } from "./delegation/createDelegation.js";
 export type { CreateDelegationParams } from "./delegation/createDelegation.js";
 export { PolicyEngine } from "./policy/PolicyEngine.js";
-export type { EngineOptions, EngineEvalOptions, EvaluateOutput, EvaluatePureOutput, SimulationResult } from "./policy/PolicyEngine.js";
+export type { EngineOptions, EngineEvalOptions, EvaluateOutput, EvaluatePureOutput, SimulationResult, EngineAuthorizationVerificationResult } from "./policy/PolicyEngine.js";
 export { RECOMMENDED_TRUSTED_TIME_PROFILE } from "./policy/trustedTimeProfile.js";
 export { HashChainedLog } from "./audit/HashChainedLog.js";
 export {
