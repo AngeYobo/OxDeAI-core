@@ -44,10 +44,28 @@ export type PolicyResult =
   | { decision: "ALLOW"; reasons: []; stateDelta?: Partial<State> }
   | { decision: "DENY"; reasons: ReasonCode[] };
 
+/**
+ * Trusted evaluator inputs handed to every policy module.
+ *
+ * This is a single extensible context object rather than a positional
+ * parameter list: later trusted-evaluator work adds *fields* here instead of
+ * widening `PolicyModule.evaluate` again for each new input.
+ *
+ * `evaluationTime` is the trusted PEP clock (unix seconds), sampled once per
+ * evaluation and threaded down from `PolicyEngine.evaluatePure`. It is already
+ * validated by `assertProtocolSeconds` before any module runs, and it is NOT
+ * `intent.timestamp` — that value is attacker-controlled.
+ *
+ * @public
+ */
+export interface PolicyEvaluationContext {
+  evaluationTime: number;
+}
+
 /** @public */
 export interface PolicyModule {
   id: string;
-  evaluate(intent: Intent, state: State): PolicyResult;
+  evaluate(intent: Intent, state: State, context: PolicyEvaluationContext): PolicyResult;
   codec: ModuleStateCodec;
 }
 

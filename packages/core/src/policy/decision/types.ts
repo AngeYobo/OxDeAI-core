@@ -7,12 +7,20 @@ import type { ReasonCode } from "../../types/policy.js";
  * Input to the decision phase.
  *
  * Contains only what is needed to make a deterministic authorization
- * decision: the proposed intent, the current policy state, and the
- * evaluation mode. No external IO or entropy is required.
+ * decision: the proposed intent, the current policy state, the trusted
+ * evaluation clock, and the evaluation mode. No external IO or entropy is
+ * required — `evaluationTime` is supplied by the caller rather than sampled,
+ * which is what keeps this phase pure and replayable.
  */
 export interface DecisionInput {
   intent: Intent;
   state:  State;
+  /**
+   * Trusted PEP clock (unix seconds), sampled once per evaluation by the
+   * caller and already validated by `assertProtocolSeconds`. Distinct from
+   * `intent.timestamp`, which is attacker-controlled.
+   */
+  evaluationTime: number;
   mode:   "fail-fast" | "collect-all";
 }
 

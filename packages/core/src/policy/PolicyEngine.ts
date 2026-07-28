@@ -479,7 +479,7 @@ export class PolicyEngine {
 
       // ── Decision phase ──────────────────────────────────────────────────
       // (intent + state + module policies) → ALLOW | DENY + nextState
-      const decisionResult = runDecisionModules({ intent, state, mode }, modules);
+      const decisionResult = runDecisionModules({ intent, state, evaluationTime, mode }, modules);
 
       if (decisionResult.decision === "DENY") {
         this.emitAudit({
