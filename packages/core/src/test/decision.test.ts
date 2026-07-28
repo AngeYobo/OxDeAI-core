@@ -85,6 +85,9 @@ function baseInput(overrides?: Partial<DecisionInput>): DecisionInput {
   return {
     intent: minimalIntent(),
     state: minimalState(),
+    // Deliberately distinct from minimalIntent().timestamp (1_000_000) so any
+    // module that reads the intent clock instead of the trusted one is visible.
+    evaluationTime: 1_000_500,
     mode: "fail-fast",
     ...overrides,
   };
