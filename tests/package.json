@@ -12,6 +12,6 @@
     "@oxdeai/core": "workspace:*"
   },
   "devDependencies": {
-    "tsx": "^4.21.0"
+    "tsx": "^4.23.1"
   }
 }

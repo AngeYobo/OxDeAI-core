@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-FILE="packages/core/dist/index.d.ts"
+REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+REPORT=${1:-"$REPO_ROOT/packages/core/etc/core.api.md"}
 
-if [ ! -f "$FILE" ]; then
-  echo "Declaration file not found: $FILE"
+if [ ! -f "$REPORT" ]; then
+  echo "API report not found: $REPORT"
   exit 1
 fi
 
-sha256sum "$FILE" | awk '{print $1}'
+LC_ALL=C sed 's/\r$//' "$REPORT" | sha256sum | awk '{print $1}'

@@ -29,10 +29,11 @@ export type AuthorizationLegacy = {
 };
 
 // @public (undocumented)
-export function authorizationSigningPayload(auth: AuthorizationV1): Omit<AuthorizationV1, "signature">;
+export function authorizationSigningPayload(auth: AuthorizationV1): Omit<AuthorizationV1, "signature"> | Record<string, unknown>;
 
 // @public (undocumented)
 export type AuthorizationV1 = {
+    version?: "AuthorizationV1";
     auth_id: string;
     issuer: string;
     audience: string;
@@ -44,13 +45,30 @@ export type AuthorizationV1 = {
     expiry: number;
     alg: "Ed25519" | "HMAC-SHA256";
     kid: string;
-    signature: string;
+    signature: string | {
+        alg: "Ed25519" | "HMAC-SHA256";
+        kid: string;
+        sig: string;
+    };
     nonce?: string;
     capability?: string;
 };
 
+// @public
+export type AuthorizationVerificationResult = VerificationResult & {
+    signatureVerified: boolean;
+    verificationMode: VerificationMode;
+    verificationCoverage: VerificationCoverage;
+};
+
 // @public (undocumented)
 export function authPayloadString(auth: Omit<Authorization, "engine_signature">): string;
+
+// @public (undocumented)
+export type BoundVerifier = {
+    verifyAuthorization(auth: AuthorizationV1, opts?: BoundAuthOptions): VerificationResult;
+    verifyEnvelope(envelopeBytes: Uint8Array, opts?: BoundEnvelopeOptions): VerificationResult;
+};
 
 // @public (undocumented)
 export type BudgetState = {
@@ -79,6 +97,24 @@ export function createCanonicalState(args: {
     policyId: string;
 }): CanonicalState_2;
 
+// @public
+export function createDelegation(parent: AuthorizationV1, params: CreateDelegationParams, privateKeyPem: string): DelegationV1;
+
+// @public (undocumented)
+export type CreateDelegationParams = {
+    delegatee: string;
+    scope: DelegationScope;
+    expiry: number;
+    kid: string;
+    issuer?: string;
+    audience?: string;
+    delegationId?: string;
+    issuedAt?: number;
+};
+
+// @public
+export function createVerifier(config: VerifierConfig): BoundVerifier;
+
 // @public (undocumented)
 export const Decision: {
     readonly ALLOW: "ALLOW";
@@ -96,11 +132,59 @@ export function decodeCanonicalState(bytes: Uint8Array): CanonicalState_2;
 // @public (undocumented)
 export function decodeEnvelope(bytes: Uint8Array): VerificationEnvelopeV1;
 
+// @public
+export const DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS = 300;
+
+// @public
+export function delegationParentHash(parent: AuthorizationV1): string;
+
+// @public (undocumented)
+export type DelegationScope = {
+    tools?: string[];
+    max_amount?: bigint;
+    max_actions?: number;
+    max_depth?: number;
+};
+
+// @public (undocumented)
+export function delegationSigningPayload(d: DelegationV1): Omit<DelegationV1, "signature">;
+
+// @public
+export type DelegationV1 = {
+    delegation_id: string;
+    issuer: string;
+    audience: string;
+    parent_auth_hash: string;
+    delegator: string;
+    delegatee: string;
+    scope: DelegationScope;
+    policy_id: string;
+    issued_at: number;
+    expiry: number;
+    alg: "Ed25519";
+    kid: string;
+    signature: string;
+};
+
 // @public (undocumented)
 export function encodeCanonicalState(state: CanonicalState_2): Uint8Array;
 
 // @public (undocumented)
 export function encodeEnvelope(envelope: VerificationEnvelopeV1): Uint8Array;
+
+// @public
+export type EngineAuthorizationVerificationResult = {
+    valid: boolean;
+    reason?: ReasonCode;
+    signatureVerified: boolean;
+    verificationMode: VerificationMode;
+    verificationCoverage: VerificationCoverage;
+};
+
+// @public (undocumented)
+export type EngineEvalOptions = {
+    mode?: "fail-fast" | "collect-all";
+};
 
 // @public (undocumented)
 export type EngineOptions = {
@@ -133,6 +217,27 @@ export function engineVerifyHmac(payload: unknown, signatureHex: string, secret:
 //
 // @public (undocumented)
 export function envelopeSigningPayload(envelope: VerificationEnvelopeV1): Omit<EnvelopeWire, "signature">;
+
+// @public (undocumented)
+export type EvaluateOutput = {
+    decision: "ALLOW";
+    reasons: [];
+    authorization: AuthorizationV1;
+} | {
+    decision: "DENY";
+    reasons: ReasonCode[];
+};
+
+// @public (undocumented)
+export type EvaluatePureOutput = {
+    decision: "ALLOW";
+    reasons: [];
+    authorization: AuthorizationV1;
+    nextState: State;
+} | {
+    decision: "DENY";
+    reasons: ReasonCode[];
+};
 
 // @public (undocumented)
 export function findKeyInKeySets(keysets: readonly KeySet[], issuer: string, kid: string, alg: SignatureAlgorithm): KeySetKey | undefined;
@@ -221,14 +326,7 @@ export class PolicyEngine {
     computeStateHash(): string;
     // (undocumented)
     computeStateHash(state: State): string;
-    // Warning: (ae-forgotten-export) The symbol "EvaluateOutput" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
     evaluate(intent: Intent, state: State, evaluationTime: number): EvaluateOutput;
-    // Warning: (ae-forgotten-export) The symbol "EngineEvalOptions" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "EvaluatePureOutput" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
     evaluatePure(intent: Intent, state: State, evaluationTime: number, opts?: EngineEvalOptions): EvaluatePureOutput;
     // (undocumented)
     exportState(): CanonicalState;
@@ -242,15 +340,14 @@ export class PolicyEngine {
     importState(state: CanonicalState): void;
     // (undocumented)
     importState(target: State, state: CanonicalState): void;
-    // Warning: (ae-forgotten-export) The symbol "SimulationResult" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
     simulateSequence(intents: Intent[], evaluationTime: number, opts?: EngineEvalOptions): SimulationResult;
+    verifyAuthorization(intent: Intent, authorization: Authorization, state: State, now?: number): EngineAuthorizationVerificationResult;
+}
+
+// @public
+export interface PolicyEvaluationContext {
     // (undocumented)
-    verifyAuthorization(intent: Intent, authorization: Authorization, state: State, now?: number): {
-        valid: boolean;
-        reason?: ReasonCode;
-    };
+    evaluationTime: number;
 }
 
 // @public (undocumented)
@@ -261,7 +358,7 @@ export interface PolicyModule {
     // (undocumented)
     codec: ModuleStateCodec;
     // (undocumented)
-    evaluate(intent: Intent, state: State): PolicyResult;
+    evaluate(intent: Intent, state: State, context: PolicyEvaluationContext): PolicyResult;
     // (undocumented)
     id: string;
 }
@@ -334,6 +431,25 @@ export function signAuthorizationEd25519(auth: Omit<AuthorizationV1, "signature"
 // @public (undocumented)
 export function signEd25519(domain: SigningDomain, payload: unknown, privateKeyPem: string): string;
 
+// @public
+export function signedKrlSigningPayload(envelope: SignedKRLV1): Record<string, unknown>;
+
+// @public
+export type SignedKRLV1 = {
+    version: "SignedKRLV1";
+    issuer: string;
+    krl_version: number;
+    issued_at: number;
+    not_after: number;
+    revoked_kids: string[];
+    nonce?: string;
+    signature: {
+        alg: "Ed25519";
+        kid: string;
+        sig: string;
+    };
+};
+
 // @public (undocumented)
 export function signEnvelopeEd25519(envelope: VerificationEnvelopeV1, opts: {
     issuer: string;
@@ -349,6 +465,14 @@ export const SIGNING_DOMAINS: {
     readonly AUTH_V1: "OXDEAI_AUTH_V1";
     readonly ENVELOPE_V1: "OXDEAI_ENVELOPE_V1";
     readonly CHECKPOINT_V1: "OXDEAI_CHECKPOINT_V1";
+    readonly DELEGATION_V1: "OXDEAI_DELEGATION_V1";
+    readonly KRL_V1: "OXDEAI_KRL_V1";
+};
+
+// @public (undocumented)
+export type SimulationResult = {
+    outputs: EvaluatePureOutput[];
+    finalState: State;
 };
 
 // @public (undocumented)
@@ -387,7 +511,7 @@ export type State = {
     recursion: {
         max_depth: Record<string, number>;
     };
-    tool_limits?: ToolLimitsState;
+    tool_limits: ToolLimitsState;
 };
 
 // @public (undocumented)
@@ -407,6 +531,9 @@ export type ToolLimitsState = {
     }> | undefined>;
 };
 
+// @public
+export function toPublicAuthorizationV1(auth: AuthorizationV1): AuthorizationV1;
+
 // @public (undocumented)
 export type VelocityConfig = {
     window_seconds: number;
@@ -419,6 +546,12 @@ export type VelocityCounters = Record<string, {
     count: number;
 } | undefined>;
 
+// @public
+export type VerificationCoverage = "authorization-v1-full" | "engine-hmac-subset" | "none";
+
+// @public
+export type VerificationMode = "strict" | "permissive";
+
 // @public (undocumented)
 export type VerificationResult = {
     ok: boolean;
@@ -427,6 +560,9 @@ export type VerificationResult = {
     policyId?: string;
     stateHash?: string;
     auditHeadHash?: string;
+    signatureVerified?: boolean;
+    verificationMode?: VerificationMode;
+    verificationCoverage?: VerificationCoverage;
 };
 
 // @public (undocumented)
@@ -440,7 +576,13 @@ export type VerificationViolation = {
 };
 
 // @public (undocumented)
-export type VerificationViolationCode = "MALFORMED_EVENT" | "POLICY_ID_MISSING" | "POLICY_ID_MISMATCH" | "MIXED_POLICY_ID" | "NON_MONOTONIC_TIMESTAMP" | "HASH_CHAIN_INVALID" | "NO_STATE_ANCHOR" | "SNAPSHOT_CORRUPT" | "ENVELOPE_MALFORMED" | "AUTH_DECISION_INVALID" | "AUTH_EXPIRED" | "AUTH_MISSING_FIELD" | "AUTH_ISSUER_MISMATCH" | "AUTH_AUDIENCE_MISMATCH" | "AUTH_POLICY_ID_MISMATCH" | "AUTH_REPLAY" | "AUTH_ALG_UNSUPPORTED" | "AUTH_KID_UNKNOWN" | "AUTH_SIGNATURE_INVALID" | "AUTH_TRUST_MISSING" | "AUTH_KEY_INACTIVE" | "ENVELOPE_SIGNATURE_MISSING" | "ENVELOPE_SIGNATURE_INVALID" | "ENVELOPE_ALG_UNSUPPORTED" | "ENVELOPE_KID_UNKNOWN" | "ENVELOPE_TRUST_MISSING" | "ENVELOPE_KEY_INACTIVE";
+export type VerificationViolationCode = "MALFORMED_EVENT" | "POLICY_ID_MISSING" | "POLICY_ID_MISMATCH" | "MIXED_POLICY_ID" | "NON_MONOTONIC_TIMESTAMP" | "HASH_CHAIN_INVALID" | "NO_STATE_ANCHOR" | "SNAPSHOT_CORRUPT" | "ENVELOPE_MALFORMED" | "AUTH_DECISION_INVALID" | "AUTH_EXPIRED" | "AUTH_ISSUED_AT_IMPLAUSIBLE" | "AUTH_MISSING_FIELD" | "AUTH_ISSUER_MISMATCH" | "AUTH_AUDIENCE_MISMATCH" | "AUTH_POLICY_ID_MISMATCH" | "AUTH_REPLAY" | "AUTH_ALG_UNSUPPORTED" | "AUTH_KID_UNKNOWN" | "AUTH_SIGNATURE_INVALID" | "AUTH_TRUST_MISSING" | "AUTH_KEY_INACTIVE" | "ENVELOPE_SIGNATURE_MISSING" | "ENVELOPE_SIGNATURE_INVALID" | "ENVELOPE_ALG_UNSUPPORTED" | "ENVELOPE_KID_UNKNOWN" | "ENVELOPE_TRUST_MISSING" | "ENVELOPE_KEY_INACTIVE" | "DELEGATION_MISSING_FIELD" | "DELEGATION_ALG_UNSUPPORTED" | "DELEGATION_SIGNATURE_INVALID" | "DELEGATION_KID_UNKNOWN" | "DELEGATION_TRUST_MISSING" | "DELEGATION_KEY_INACTIVE" | "DELEGATION_EXPIRED" | "DELEGATION_PARENT_HASH_MISMATCH" | "DELEGATION_PARENT_EXPIRED" | "DELEGATION_DELEGATOR_MISMATCH" | "DELEGATION_POLICY_ID_MISMATCH" | "DELEGATION_EXPIRY_EXCEEDS_PARENT" | "DELEGATION_AUDIENCE_MISMATCH" | "DELEGATION_POLICY_MISMATCH" | "DELEGATION_SCOPE_VIOLATION" | "DELEGATION_MULTIHOP_DENIED" | "DELEGATION_REPLAY" | "TRUSTED_KEYSETS_REQUIRED" | "KRL_MALFORMED" | "KRL_UNSUPPORTED_ALG" | "KRL_UNKNOWN_SIGNING_KID" | "KRL_SIGNING_KEY_INACTIVE" | "KRL_SIG_INVALID" | "KRL_EXPIRED" | "KRL_VERSION_REGRESSION";
+
+// @public (undocumented)
+export type VerifierConfig = {
+    trustedKeySets: KeySet[];
+    expectedIssuer?: string;
+};
 
 // @public (undocumented)
 export function verifyAuditEvents(events: readonly AuditEvent[], opts?: VerifyAuditOptions): VerificationResult;
@@ -455,7 +597,24 @@ export type VerifyAuditOptions = {
 // Warning: (ae-forgotten-export) The symbol "VerifyAuthorizationOptions" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export function verifyAuthorization(auth: AuthorizationV1, opts?: VerifyAuthorizationOptions): VerificationResult;
+export function verifyAuthorization(auth: AuthorizationV1, opts?: VerifyAuthorizationOptions): AuthorizationVerificationResult;
+
+// @public
+export function verifyDelegation(delegation: DelegationV1, opts?: VerifyDelegationOptions): VerificationResult;
+
+// @public
+export function verifyDelegationChain(delegation: DelegationV1, parent: AuthorizationV1, opts?: VerifyDelegationOptions): VerificationResult;
+
+// @public (undocumented)
+export type VerifyDelegationOptions = {
+    now?: number;
+    trustedKeySets?: KeySet | readonly KeySet[];
+    requireSignatureVerification?: boolean;
+    expectedDelegatee?: string;
+    expectedPolicyId?: string;
+    parentScope?: DelegationScope;
+    consumedDelegationIds?: readonly string[];
+};
 
 // @public (undocumented)
 export function verifyEd25519(domain: SigningDomain, payload: unknown, signatureBase64: string, publicKeyPem: string): boolean;
@@ -476,6 +635,16 @@ export type VerifyEnvelopeOptions = {
 // @public (undocumented)
 export function verifyHmacDomain(domain: SigningDomain, payload: unknown, signatureHex: string, secret: string): boolean;
 
+// @public
+export function verifySignedKrl(envelope: unknown, opts?: VerifySignedKrlOptions): VerificationResult;
+
+// @public
+export type VerifySignedKrlOptions = {
+    now?: number;
+    trustedKeySets?: KeySet | readonly KeySet[];
+    previousKrlVersionByIssuer?: Readonly<Record<string, number>>;
+};
+
 // @public (undocumented)
 export function verifySnapshot(snapshotBytes: Uint8Array, opts?: {
     expectedPolicyId?: string;
@@ -483,6 +652,13 @@ export function verifySnapshot(snapshotBytes: Uint8Array, opts?: {
 
 // @public (undocumented)
 export function withModuleState(state: CanonicalState_2, moduleId: string, payload: unknown): CanonicalState_2;
+
+// Warnings were encountered during analysis:
+//
+// dist/policy/PolicyEngine.d.ts:113:5 - (ae-forgotten-export) The symbol "StateStore" needs to be exported by the entry point index.d.ts
+// dist/policy/PolicyEngine.d.ts:114:5 - (ae-forgotten-export) The symbol "AuditSink" needs to be exported by the entry point index.d.ts
+// dist/verification/createVerifier.d.ts:17:5 - (ae-forgotten-export) The symbol "BoundAuthOptions" needs to be exported by the entry point index.d.ts
+// dist/verification/createVerifier.d.ts:18:5 - (ae-forgotten-export) The symbol "BoundEnvelopeOptions" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
