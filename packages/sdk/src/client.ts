@@ -90,12 +90,32 @@ export class OxDeAIClient {
     return { output, state, auditEvents: emitted.events };
   }
 
-  async verifyAuthorization(intent: Intent, authorization: AuthorizationV1): Promise<{ valid: boolean; reason?: string }> {
+  /**
+   * Verifies an authorization against a trusted verification time.
+   *
+   * Verifier time is taken from the client's trusted clock boundary, or from an
+   * explicit `verificationTime` when the caller already holds one from the trusted
+   * execution boundary. It is never derived from `intent.timestamp`: that value is
+   * attacker-supplied and is hash-bound into the authorization at issuance, so using
+   * it as "now" pins the expiry comparison to issuance time and the authorization
+   * never expires.
+   *
+   * ⚠️ Inherits the LIMITED SCOPE of `PolicyEngine.verifyAuthorization` — it
+   * authenticates only the engine-HMAC field subset. Relying parties enforcing an
+   * authorization issued by an external party must use the strict standalone
+   * verifier with explicit `trustedKeySets` instead.
+   */
+  async verifyAuthorization(
+    intent: Intent,
+    authorization: AuthorizationV1,
+    opts?: { verificationTime?: number }
+  ): Promise<{ valid: boolean; reason?: string }> {
     const state = await this.stateAdapter.load();
+    const verificationTime = opts?.verificationTime ?? this.clock.now();
     // Cast as Authorization: internal engine.verifyAuthorization() uses legacy fields
     // (engine_signature, state_snapshot_hash) for HMAC binding verification.
     // Authorization objects returned by evaluatePure() retain these at runtime.
-    const result = this.engine.verifyAuthorization(intent, authorization as Authorization, state, intent.timestamp);
+    const result = this.engine.verifyAuthorization(intent, authorization as Authorization, state, verificationTime);
     return result.valid ? { valid: true } : { valid: false, reason: result.reason };
   }
 

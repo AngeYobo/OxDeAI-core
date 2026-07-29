@@ -133,7 +133,10 @@ export function createGuard(opts: GuardOptions): GuardFn {
     if (opts.verifyAuthorization !== false) {
       // Cast as Authorization: runtime object retains internal engine fields even
       // though the TypeScript type was narrowed to AuthorizationV1 at the evaluatePure boundary.
-      const authCheck = opts.engine.verifyAuthorization(intent, out.authorization as Authorization, out.nextState, intent.timestamp);
+      // Verifier time is the single trusted `evaluationTime` sample taken above, never
+      // intent.timestamp — that value is attacker-supplied, so reading it as "now" would
+      // let the intent decide whether its own authorization has expired.
+      const authCheck = opts.engine.verifyAuthorization(intent, out.authorization as Authorization, out.nextState, evaluationTime);
       if (!authCheck.valid) {
         return {
           output: { decision: "DENY", reasons: [`AUTH_INVALID:${authCheck.reason ?? "unknown"}`] },
