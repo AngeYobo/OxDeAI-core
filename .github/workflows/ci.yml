@@ -38,6 +38,15 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Core public API compatibility
+        run: pnpm -C packages/core api:check
+
+      - name: Core public API guard regression tests
+        run: pnpm -C packages/core api:guard:test
+
+      - name: Core API report fingerprint
+        run: pnpm -C packages/core api:fingerprint:check
+
       - name: Website lint (best-effort)
         run: pnpm -C website lint || echo "website lint skipped (format locally)"
 

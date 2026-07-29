@@ -73,9 +73,10 @@
     "test": "pnpm build && pnpm test:node",
     "api:report": "pnpm build && api-extractor run --local --config api-extractor.json",
     "api:check": "pnpm build && api-extractor run --config api-extractor.json",
+    "api:guard:test": "node ../../scripts/test-api-guard.mjs",
     "schema:validate": "node scripts/schema-validate.mjs",
-    "api:fingerprint": "pnpm build && ../../scripts/api-fingerprint.sh",
-    "api:fingerprint:check": "pnpm build && ../../scripts/check-api-fingerprint.sh"
+    "api:fingerprint": "../../scripts/api-fingerprint.sh",
+    "api:fingerprint:check": "../../scripts/check-api-fingerprint.sh"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.57.6",
