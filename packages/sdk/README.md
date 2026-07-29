@@ -112,6 +112,29 @@ await guard(intent, async () => {
 });
 ```
 
+## Verification Time
+
+Authorization verification has two clock domains, and they are not interchangeable:
+
+| Value | Trust |
+| --- | --- |
+| `intent.timestamp` | Untrusted. Supplied by the agent. |
+| verifier time | Trusted. Supplied by the execution boundary. |
+
+The SDK takes verifier time from the trusted `clock` passed to `OxDeAIClient` and `createGuard`,
+never from the intent. A caller that already holds a trusted time from the execution boundary can
+pass it explicitly:
+
+```ts
+await client.verifyAuthorization(intent, authorization, {
+  verificationTime: trustedClock.now()
+});
+```
+
+Deriving verifier time from `intent.timestamp` compares an authorization against a deadline the
+same untrusted value produced, so expiry can never be enforced. `clock` defaults to
+`Date.now() / 1000`; supply a `ClockAdapter` when the host has an independently trusted time source.
+
 ## Main Exports
 
 - `buildIntent`, `buildState`

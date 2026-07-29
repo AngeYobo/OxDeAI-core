@@ -337,11 +337,12 @@ test("decision can be verified independently", async () => {
 
   // Cast as Authorization: runtime object retains internal engine fields even
   // though the TypeScript type was narrowed to AuthorizationV1 at evaluatePure boundary.
+  // Verifier time is the trusted clock (NOW), never intent.timestamp.
   const verification = engine.verifyAuthorization(
     intent,
     result.authorization! as Authorization,
     result.nextState!,
-    intent.timestamp
+    NOW
   );
 
   assert.equal(verification.valid, true);
@@ -380,11 +381,12 @@ test("tampered intent fails verification", async () => {
   };
 
   // Cast as Authorization: same rationale as above — internal HMAC verification.
+  // Verifier time is the trusted clock (NOW), never intent.timestamp.
   const verification = engine.verifyAuthorization(
     tamperedIntent,
     result.authorization! as Authorization,
     result.nextState!,
-    intent.timestamp
+    NOW
   );
 
   assert.equal(verification.valid, false);
