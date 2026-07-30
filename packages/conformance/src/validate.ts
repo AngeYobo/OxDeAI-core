@@ -66,7 +66,7 @@ type ConformanceAdapter = {
   name: string;
   canonicalJson(value: unknown): string;
   intentHash(intent: Intent): string;
-  evaluateAuthorization(intent: Intent): { authorization: AuthorizationLike; policyId: string };
+  evaluateAuthorization(intent: Intent, evaluationTime: number): { authorization: AuthorizationLike; policyId: string };
   encodeSnapshot(state: State): { bytes: Uint8Array; policyId: string };
   verifySnapshot(bytes: Uint8Array, expectedPolicyId?: string): VerificationResult;
   verifyAuditEvents(
@@ -126,11 +126,11 @@ const INTENT_BINDING_FIELDS = [
   "tool_call"
 ] as const;
 
-function makeEngine(): PolicyEngine {
+function makeEngine(authorizationTtlSeconds = 60): PolicyEngine {
   return new PolicyEngine({
     policy_version: "v1.0.0",
     engine_secret: CORE_ENGINE_SECRET, // now typed as string
-    authorization_ttl_seconds: 60,
+    authorization_ttl_seconds: authorizationTtlSeconds,
     policyId: CORE_POLICY_ID,
     ...RECOMMENDED_TRUSTED_TIME_PROFILE
   });
@@ -311,9 +311,9 @@ const coreAdapter: ConformanceAdapter = {
     }
     return sha256HexFromJson(binding);
   },
-  evaluateAuthorization(intent: Intent) {
+  evaluateAuthorization(intent: Intent, evaluationTime: number) {
     const engine = makeEngine();
-    const out = engine.evaluatePure(intent, makeBaseState(), intent.timestamp);
+    const out = engine.evaluatePure(intent, makeBaseState(), evaluationTime);
     if (out.decision !== "ALLOW") {
       throw new Error(`expected ALLOW, got DENY: ${out.reasons.join(",")}`);
     }
@@ -390,15 +390,21 @@ function validateAuthorizationVectors(ctx: CheckCtx, adapter: ConformanceAdapter
 
   for (const v of file.vectors) {
     const id = String(v.id);
-    const intent = parseIntent(v.input);
-    const { authorization, policyId } = adapter.evaluateAuthorization(intent);
+    const input = asRecord(v.input);
+    const intent = parseIntent(input.intent);
+    const evaluationTime = Number(input.evaluation_time);
+    const effectiveTtl = Number(input.effective_ttl);
+    eq(ctx, `${id} intent_timestamp`, intent.timestamp, Number(input.intent_timestamp));
+    const { authorization, policyId } = adapter.evaluateAuthorization(intent, evaluationTime);
     const expected = asRecord(v.expected);
 
     eq(ctx, `${id} intent_hash`, authorization.intent_hash, String(expected.intent_hash));
     if (expected.state_hash !== undefined) {
       eq(ctx, `${id} state_hash`, authorization.state_snapshot_hash, String(expected.state_hash));
     }
-    eq(ctx, `${id} expires_at`, authorization.expires_at, Number(expected.expires_at));
+    eq(ctx, `${id} issued_at`, authorization.issued_at, Number(expected.expected_issued_at));
+    eq(ctx, `${id} expiry`, authorization.expires_at, Number(expected.expected_expiry));
+    eq(ctx, `${id} effective_ttl`, authorization.expires_at - authorization.issued_at, effectiveTtl);
 
     const payload = adapter.canonicalJson({
       expires_at: authorization.expires_at,
@@ -409,6 +415,131 @@ function validateAuthorizationVectors(ctx: CheckCtx, adapter: ConformanceAdapter
     eq(ctx, `${id} canonical_signing_payload`, payload, String(expected.canonical_signing_payload));
     eq(ctx, `${id} signature`, authorization.engine_signature, String(expected.signature));
   }
+}
+
+function validateTrustedTimeIssuanceVectors(ctx: CheckCtx): void {
+  type TrustedTimeFile = {
+    issuance_vectors: Array<JsonRecord>;
+  };
+  const file = loadJson<TrustedTimeFile>("trusted-time.json");
+  const comparisonWindows = new Map<string, Array<[number, number]>>();
+
+  for (const [index, vector] of file.issuance_vectors.entries()) {
+    const id = String(vector.id);
+    const intentTimestamp = Number(vector.intent_timestamp);
+    const evaluationTime = Number(vector.evaluation_time);
+    const effectiveTtl = Number(vector.effective_ttl);
+    const action = String(vector.authorization_action);
+    const expected = asRecord(vector.expected);
+
+    if (String(expected.decision) === "CONFIG_INVALID") {
+      let message = "";
+      try {
+        makeEngine(effectiveTtl);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      eq(ctx, `${id} config rejection`, message.includes(String(expected.error)), true);
+      continue;
+    }
+
+    const engine = makeEngine(effectiveTtl);
+    const releasedId = "existing-authorization";
+    const state = makeBaseState();
+    if (action === "RELEASE") {
+      state.concurrency.active = { "agent-1": 1 };
+      state.concurrency.active_auths = {
+        "agent-1": {
+          [releasedId]: { expires_at: evaluationTime + 600 },
+        },
+      };
+    }
+    const intent: Intent = {
+      intent_id: `${id}-intent`,
+      agent_id: "agent-1",
+      action_type: "PAYMENT",
+      amount: 100n,
+      asset: "wallet",
+      target: "merchant-1",
+      timestamp: intentTimestamp,
+      metadata_hash: "0".repeat(64),
+      nonce: BigInt(index + 1000),
+      signature: "sig-placeholder",
+      depth: 0,
+      ...(action === "RELEASE"
+        ? { type: "RELEASE" as const, authorization_id: releasedId }
+        : { type: "EXECUTE" as const }),
+    };
+
+    if (String(expected.decision) === "PRECONDITION_INVALID") {
+      let message = "";
+      try {
+        engine.evaluatePure(intent, state, evaluationTime);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      eq(ctx, `${id} precondition rejection`, message.includes(String(expected.error)), true);
+      eq(ctx, `${id} no audit before rejection`, engine.audit.snapshot(), []);
+      continue;
+    }
+
+    const out = engine.evaluatePure(intent, state, evaluationTime);
+    eq(ctx, `${id} decision`, out.decision, String(expected.decision));
+
+    if (out.decision === "DENY") {
+      eq(ctx, `${id} reason`, out.reasons[0], String(expected.reason));
+      eq(ctx, `${id} authorization absent`, "authorization" in out, false);
+      continue;
+    }
+
+    eq(ctx, `${id} issued_at`, out.authorization.issued_at, Number(expected.expected_issued_at));
+    eq(ctx, `${id} expiry`, out.authorization.expiry, Number(expected.expected_expiry));
+    eq(
+      ctx,
+      `${id} effective_ttl`,
+      out.authorization.expiry - out.authorization.issued_at,
+      effectiveTtl,
+    );
+    if (vector.comparison_group !== undefined) {
+      const group = String(vector.comparison_group);
+      const windows = comparisonWindows.get(group) ?? [];
+      windows.push([out.authorization.issued_at, out.authorization.expiry]);
+      comparisonWindows.set(group, windows);
+    }
+
+    if (Number(vector.repeat) === 2) {
+      const repeated = makeEngine(effectiveTtl).evaluatePure(
+        intent,
+        action === "RELEASE" ? structuredClone(state) : makeBaseState(),
+        evaluationTime,
+      );
+      eq(ctx, `${id} repeated decision`, repeated.decision, "ALLOW");
+      if (repeated.decision === "ALLOW") {
+        eq(
+          ctx,
+          `${id} identical authorization`,
+          repeated.authorization,
+          out.authorization,
+        );
+      }
+    }
+  }
+
+  const sameEvaluationWindows = comparisonWindows.get("same-evaluation-time") ?? [];
+  eq(
+    ctx,
+    "trusted-time intent timestamp noninterference",
+    sameEvaluationWindows[0],
+    sameEvaluationWindows[1],
+  );
+  const differentEvaluationWindows =
+    comparisonWindows.get("different-evaluation-time") ?? [];
+  eq(
+    ctx,
+    "trusted-time evaluation sensitivity",
+    differentEvaluationWindows[1]?.[0] - differentEvaluationWindows[0]?.[0],
+    10,
+  );
 }
 
 function validateAuthorizationVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
@@ -1568,6 +1699,7 @@ function main(): void {
 
   validateIntentHashVectors(ctx, adapter);
   validateAuthorizationVectors(ctx, adapter);
+  validateTrustedTimeIssuanceVectors(ctx);
   validateAuthorizationVerificationVectors(ctx, adapter);
   validateAuthorizationSignatureVectors(ctx, adapter);
   validateSnapshotVectors(ctx, adapter);

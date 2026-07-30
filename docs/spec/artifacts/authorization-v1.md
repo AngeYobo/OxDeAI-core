@@ -279,6 +279,10 @@ The canonicalized preimage includes whichever expiry field name (`expiry` or `ex
 ### issued_at
 
 * Unix timestamp (seconds) recording when the authorization was issued
+* A `PolicyEngine` issuer conforming to the trusted-time core profile **MUST**
+  set `issued_at = evaluation_time`, using the same single trusted clock sample
+  used for freshness and policy evaluation. `intent.timestamp` remains part of
+  intent binding but **MUST NOT** drive this field.
 * The verifier validates that this field is an integer but does NOT enforce `now >= issued_at` as a lower bound. A verifier whose clock is slightly behind the issuer will still accept a valid-window authorization.
 * No "not yet valid" (nbf) semantics exist in this protocol version — `issued_at` in the future relative to `now` is not, by itself, a rejection condition.
 * **Bounded future-plausibility check (upper bound):** `issued_at` **MUST NOT** exceed `verificationTime + maxFutureIssuedAtSkewSeconds`. This is a plausibility backstop, not an nbf check — it absorbs ordinary clock drift (default `maxFutureIssuedAtSkewSeconds` is 300s) but rejects grossly implausible future-dated artifacts (e.g. `issued_at` decades ahead of `now`), which would otherwise remain valid for their entire stated lifetime regardless of how far in the future they claim to have been issued. Violation code: `AUTH_ISSUED_AT_IMPLAUSIBLE`. The comparison **MUST** use the trusted `verificationTime` supplied to the verifier — never an agent-supplied `Intent.timestamp` or any other untrusted input.
@@ -288,6 +292,11 @@ The canonicalized preimage includes whichever expiry field name (`expiry` or `ex
 ### expiry / expires_at
 
 * Unix timestamp (seconds) recording when the authorization expires
+* A `PolicyEngine` issuer conforming to the trusted-time core profile **MUST**
+  derive this field as `evaluation_time + effective_ttl`, where
+  `effective_ttl` is the single validated fixed authorization TTL defined by
+  `trusted-time-v1.md` §5.1. Invalid TTL or unsafe arithmetic fails before
+  construction or signing.
 * **MUST** be strictly enforced: valid iff `now < expiry`; `now >= expiry` → `AUTH_EXPIRED`
 * **No clock skew tolerance** — the protocol uses strict zero tolerance. There is no `skew` parameter and no grace period.
 * Wire-format field name depends on encoding (see §5)

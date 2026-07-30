@@ -114,7 +114,7 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 2. **Trusted issuance.** `issued_at` MUST be minted from trusted time:
    `issued_at = evaluation_time`.
 3. **Trusted, bounded expiry.** `expiry` MUST be derived from trusted time and a
-   bounded TTL: `expiry = evaluation_time + maxTtlSeconds`.
+   validated fixed TTL: `expiry = evaluation_time + effective_ttl`.
 4. **Enforcement stays zero-tolerance.** Trusted-time *mints* the expiry;
    downstream expiry verification remains zero-tolerance (`now < expiry`),
    unchanged from `eta-core-v1`. This profile does not relax enforcement.
@@ -128,17 +128,73 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 | `maxClockSkewSeconds` | max `intent.timestamp − evaluation_time` tolerated as fresh (future side) | REQUIRED |
 | `maxIntentAgeSeconds` | max `evaluation_time − intent.timestamp` tolerated as fresh (stale side) | REQUIRED |
 | `replayWindowSeconds` | nonce retention window, keyed to `evaluation_time` | REQUIRED |
-| `maxTtlSeconds` | upper bound on the minted expiry TTL | REQUIRED |
+| `maxTtlSeconds` | specification name for the resolved fixed issuance TTL; implementation mapping: `authorization_ttl_seconds ?? 60` | REQUIRED after resolution; implementation default 60 |
 | `maxInterPepSkewSeconds` | bound on inter-PEP clock disagreement (§2.1) | profile-defined; REQUIRED for multi-PEP |
 | `velocity.maxActions`, `velocity.windowSeconds` | actions per trusted-time window | profile-defined |
 
-- **REQUIRED** fields MUST be present for a conformant trusted-time evaluation.
+- **REQUIRED** fields MUST be present after configuration resolution for a
+  conformant trusted-time evaluation. The fixed authorization TTL is resolved
+  through the explicit 60-second default defined below; this does not make a
+  second TTL authority.
 - **profile-defined** fields MAY be set or omitted by a profile, which MUST
   document its default when omitted. `maxInterPepSkewSeconds` is REQUIRED only
   for a deployment that runs more than one PEP without a single authoritative
   clock (§2.1).
 
-### 5.1 Numeric Domain
+### 5.1 Fixed Authorization TTL
+
+The current profile has exactly one authorization TTL authority. It does not
+support a caller-requested TTL, a policy-selected shorter TTL, or a
+`min(requested_ttl, max_ttl)` selection rule.
+
+Normatively:
+
+```text
+effective_ttl = configured fixed authorization TTL
+issued_at = evaluation_time
+expiry = evaluation_time + effective_ttl
+```
+
+For `PolicyEngine`, the implementation mapping is:
+
+```text
+effective_ttl =
+  authorization_ttl_seconds, when explicitly configured
+  60, when authorization_ttl_seconds is undefined
+```
+
+Where older trusted-time documents or vectors use `maxTtlSeconds`, that term
+names this same resolved fixed TTL. It is not an independent runtime control.
+Because there is no requested or policy-selected shorter TTL, the fixed
+configured maximum is also the effective TTL.
+
+The 60-second default applies only when `authorization_ttl_seconds` is
+`undefined`. `null`, strings, NaN, infinities, fractional values, zero,
+negative values, and unsafe integers are invalid configuration and MUST NOT be
+coerced, clamped, or replaced by the default.
+
+`evaluation_time + effective_ttl` MUST be a non-negative safe integer.
+Overflow or any value outside the protocol numeric domain MUST refuse the
+evaluation before authorization construction, canonicalization, or signing.
+The same single `evaluation_time` sample MUST be used by freshness evaluation,
+policy evaluation, `issued_at`, and expiry derivation. Timestamps MUST NOT be
+mutated after signing.
+
+The resulting authorization validity interval remains `[issued_at, expiry)`:
+verification at `expiry - 1` succeeds when all other checks pass, while
+verification at `expiry` fails with `AUTH_EXPIRED`.
+
+This derivation changes signed field values whenever `evaluation_time` differs
+from `intent.timestamp`. Consequently, canonical authorization bytes,
+authorization hashes and `auth_id`, signatures, ALLOW/AUTH_EMITTED audit
+timestamps, and EXECUTE concurrency expiry entries also change. Field names,
+wire encodings, canonicalization rules, signing domains, algorithms, and intent
+binding are unchanged, so no AuthorizationV1 schema-version increment is
+required. Previously stored authorizations remain verifiable under their
+original signed timestamps; mixed-version issuers may mint different artifacts
+for the same logical intent until rollout is complete.
+
+### 5.2 Numeric Domain
 
 All time and duration quantities MUST lie in a well-defined numeric domain;
 values outside it MUST cause the evaluation to fail closed, never a silent
@@ -150,7 +206,7 @@ coercion:
   `replayWindowSeconds`, `maxTtlSeconds`, `maxInterPepSkewSeconds`,
   `velocity.windowSeconds` — MUST be a finite non-negative
   integer; `velocity.maxActions` MUST be a finite non-negative integer count.
-  `maxTtlSeconds` MUST additionally be `≥ 1` (a zero TTL
+  `maxTtlSeconds` / `effective_ttl` MUST additionally be `≥ 1` (a zero TTL
   would mint `expiry == issued_at`).
 - A malformed `intent.timestamp` (NaN, Infinity, non-integer, negative, or
   unsafe magnitude) MUST `DENY` with `STATE_INVALID` at the freshness gate (§6),
@@ -166,7 +222,7 @@ Let `Δ = intent.timestamp − evaluation_time`. The freshness gate is evaluated
 `intent.timestamp`.
 
 **Precondition.** A malformed `intent.timestamp` (NaN, Infinity, non-integer,
-negative, or unsafe magnitude) fails closed with `STATE_INVALID` per §5.1
+negative, or unsafe magnitude) fails closed with `STATE_INVALID` per §5.2
 *before* `Δ` is computed; the freshness comparisons below assume a well-formed
 `intent.timestamp`.
 
@@ -242,13 +298,13 @@ No code is final until the enum change is reviewed and merged separately.
 
 ## 9. Out of Scope
 
-This document specifies rules only. The following are explicitly deferred to
-separate, independently reviewed changes and MUST NOT be inferred from this
-profile:
+The following are explicitly outside the trusted-issuance rule and MUST NOT be
+inferred from this profile:
 
-- `verifyTrustedTime` verifier wiring
-- engine / runtime integration of `evaluation_time`
-- conformance vectors, including the stale-intent negative/positive pair
+- verifier-side future-`issued_at` policy changes
+- SDK verifier-time changes
+- replay-store clock changes
+- velocity-window changes
 - trusted-time rules for **tool-call windows**. This profile does not make
   tool-call-window accounting (the existing `TOOL_CALL_LIMIT_EXCEEDED`
   enforcement path) trusted-time-aware. A follow-up MAY do so, keying the window

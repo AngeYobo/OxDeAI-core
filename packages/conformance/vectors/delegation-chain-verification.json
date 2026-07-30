@@ -23,13 +23,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "J4dE0PDdlUEYQWD8TqPxNM6PeroJx4ZpW5MrfLke/8bzFbX7FNRTADSfI4O/vY47BqyNXGw2srOk2hab57bLAA=="
+          "signature": "r2+gZu1GsLL4HpNAwD61IUTGax1C8GDADopFLgnr2ZCIjvlLZaob6kO5qnirYpgnJf+eF2YFj3zJNpw6RoVkCg=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -42,7 +42,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1001000
@@ -75,13 +75,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "pVDnYaZTQdF5x7Is0COISIG2V78KPzDT6Vn736/qT8Lya5mv4HvrxWRD0ok5IG1AgLjVK0qqK/WEjbm86rAhBg=="
+          "signature": "O7KI55KHW8ofKMZo65eOlM+IMAAvdKYoiki5eqFjklZHMfgo/2T5XhCeovj1aC1WhEUufdLqqG85c2o5CB6GDQ=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -94,7 +94,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1001000
@@ -127,13 +127,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "J4dE0PDdlUEYQWD8TqPxNM6PeroJx4ZpW5MrfLke/8bzFbX7FNRTADSfI4O/vY47BqyNXGw2srOk2hab57bLAA=="
+          "signature": "r2+gZu1GsLL4HpNAwD61IUTGax1C8GDADopFLgnr2ZCIjvlLZaob6kO5qnirYpgnJf+eF2YFj3zJNpw6RoVkCg=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "wrong-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -146,7 +146,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1001000
@@ -179,13 +179,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "J4dE0PDdlUEYQWD8TqPxNM6PeroJx4ZpW5MrfLke/8bzFbX7FNRTADSfI4O/vY47BqyNXGw2srOk2hab57bLAA=="
+          "signature": "r2+gZu1GsLL4HpNAwD61IUTGax1C8GDADopFLgnr2ZCIjvlLZaob6kO5qnirYpgnJf+eF2YFj3zJNpw6RoVkCg=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -198,7 +198,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1003000
@@ -231,13 +231,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "J4dE0PDdlUEYQWD8TqPxNM6PeroJx4ZpW5MrfLke/8bzFbX7FNRTADSfI4O/vY47BqyNXGw2srOk2hab57bLAA=="
+          "signature": "r2+gZu1GsLL4HpNAwD61IUTGax1C8GDADopFLgnr2ZCIjvlLZaob6kO5qnirYpgnJf+eF2YFj3zJNpw6RoVkCg=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-ex1ry0verrun",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {},
@@ -246,7 +246,7 @@
           "expiry": 1003001,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "Agwg5ylQqoBU0JQPTQhlwqchoq1MR40+OoMJMAmWxUZ1C+L4x2S4JdcX16wU7twGfuTfcu1YUUf3smBY5/DHBQ=="
+          "signature": "3qN638hL81WjfFKIQHTgaIySksn5BLZhkmrEcngzhiuGzLmhEkLvNgU2z+hp+88enneY4zFDrgMq+3lsFB9VCA=="
         },
         "opts": {
           "now": 1001000
@@ -271,7 +271,7 @@
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -284,13 +284,13 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -303,7 +303,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1001000
@@ -336,13 +336,13 @@
           "expiry": 1003000,
           "kid": "2026-01",
           "alg": "Ed25519",
-          "signature": "J4dE0PDdlUEYQWD8TqPxNM6PeroJx4ZpW5MrfLke/8bzFbX7FNRTADSfI4O/vY47BqyNXGw2srOk2hab57bLAA=="
+          "signature": "r2+gZu1GsLL4HpNAwD61IUTGax1C8GDADopFLgnr2ZCIjvlLZaob6kO5qnirYpgnJf+eF2YFj3zJNpw6RoVkCg=="
         },
         "delegation": {
           "delegation_id": "d1d1d1d1-0000-0000-0000-c0nf0rm4nce",
           "issuer": "parent-agent",
           "audience": "child-agent",
-          "parent_auth_hash": "8b8c5074b713974303a4781a554c9b41d2dcb595e46a0b013197410b19438c95",
+          "parent_auth_hash": "bc25c98576d0f7f7d674e7c3485cdce0597f7091a389b75a89daf831c649b80d",
           "delegator": "parent-agent",
           "delegatee": "child-agent",
           "scope": {
@@ -355,7 +355,7 @@
           "expiry": 1002000,
           "alg": "Ed25519",
           "kid": "2026-01",
-          "signature": "wMxxXxCUu1my+MiL3hjT6HlGfemDGRwzeJvOlrSMqtBgkpQ4Sm0WcghPnURpJrwb/kV6bGyIeiAVGQAdD/yfAg=="
+          "signature": "OKfqOEMyQpnd0HGwN8mMZTWMM84AOZvARgqM/ttrDCluAoROJxxPqN3Bhx5nsRt7uQYgM7FrOTXRh1ApowrFAQ=="
         },
         "opts": {
           "now": 1001000
