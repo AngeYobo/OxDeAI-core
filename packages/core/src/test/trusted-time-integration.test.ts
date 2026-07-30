@@ -7,10 +7,9 @@
  *
  * These tests exercise the integration boundary only — evaluate/evaluatePure
  * with the new required `evaluationTime` parameter and the freshness gate's
- * interaction with the module pipeline, audit trail, and constructor/call
- * preconditions. `verifyTrustedTime` itself is unit-tested in
- * verify.trusted-time.test.ts; issuance/expiry derivation is intentionally
- * untouched and guarded by property.decision.test.ts's D-6 tripwire.
+ * interaction with the module pipeline, audit trail, constructor/call
+ * preconditions, and trusted-time authorization issuance. `verifyTrustedTime`
+ * itself is unit-tested in verify.trusted-time.test.ts.
  *
  * "No module ran" is proven the way the repository's own tooling requires:
  * a positive control (collect-all mode against a state where BOTH Replay and
@@ -343,22 +342,17 @@ test("freshness-DENY audit shape: INTENT_RECEIVED then DECISION, in order, with 
   assert.deepEqual(decisionEvent?.reasons, ["INTENT_FRESHNESS_FUTURE"]);
 });
 
-// ── 16. Existing issuance tripwire ──────────────────────────────────────────
-// D-6 in property.decision.test.ts already asserts
-// authorization.issued_at === intent.timestamp and is left unmodified by
-// #184 — re-asserted here at the integration-test level as a second,
-// independent tripwire against accidental scope creep into issuance
-// derivation.
+// ── 16. Trusted-time issuance tripwire ──────────────────────────────────────
+// Deliberately inverted by #193 from the old intent.timestamp-based assertion.
+// D-6 in property.decision.test.ts independently enforces the same boundary.
 
-test("issuance tripwire: issued_at still derives from intent.timestamp, not evaluationTime", () => {
+test("issuance tripwire: issued_at and expiry derive from evaluationTime, not intent.timestamp", () => {
   const engine = makeEngine();
-  // evaluationTime deliberately differs from intent.timestamp (both fresh,
-  // within tolerance) so this test would fail loudly if issuance were ever
-  // switched to key off evaluationTime instead.
   const intent = makeIntent({ timestamp: T0 + 10 });
   const out = engine.evaluatePure(intent, freshState(), T0);
   assert.equal(out.decision, "ALLOW");
   if (out.decision !== "ALLOW") return;
-  assert.equal(out.authorization.issued_at, intent.timestamp);
-  assert.notEqual(out.authorization.issued_at, T0);
+  assert.equal(out.authorization.issued_at, T0);
+  assert.equal(out.authorization.expiry, T0 + 60);
+  assert.notEqual(out.authorization.issued_at, intent.timestamp);
 });

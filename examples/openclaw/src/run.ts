@@ -84,7 +84,9 @@ export async function runDemo(log: (msg: string) => void = (msg) => console.log(
   log(`\n${c(C.dim, "── Agent proposals ─────────────────────────────────────────────────")}`);
 
   for (const call of PLANNED_CALLS) {
-    const timestamp = baseTimestamp + callIndex;
+    // Keep the intent clock stable across this synchronous demo run. Authorization
+    // issuance is stamped from the engine's evaluation clock, not this client time.
+    const timestamp = baseTimestamp;
 
     const result = await guardedProvision(
       call.asset,

@@ -1,30 +1,36 @@
 {
   "version": "1.0.0",
-  "ttl_seconds": 60,
+  "effective_ttl": 60,
   "signing_algorithm": "HMAC-SHA256",
   "vectors": [
     {
       "id": "auth-payload-001",
       "input": {
-        "intent_id": "intent-100",
-        "agent_id": "agent-1",
-        "action_type": "PAYMENT",
-        "amount": "1000000",
-        "target": "merchant-1",
-        "timestamp": 1730000000,
-        "metadata_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-        "nonce": "100",
-        "signature": "sig-placeholder",
-        "depth": 0,
-        "tool": "openai.responses",
-        "tool_call": true,
-        "type": "EXECUTE"
+        "intent_timestamp": 1730000000,
+        "evaluation_time": 1730000000,
+        "effective_ttl": 60,
+        "intent": {
+          "intent_id": "intent-100",
+          "agent_id": "agent-1",
+          "action_type": "PAYMENT",
+          "amount": "1000000",
+          "target": "merchant-1",
+          "timestamp": 1730000000,
+          "metadata_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "nonce": "100",
+          "signature": "sig-placeholder",
+          "depth": 0,
+          "tool": "openai.responses",
+          "tool_call": true,
+          "type": "EXECUTE"
+        }
       },
       "expected": {
         "intent_hash": "c272c586c9c9bd258cc1e794322401f3de021882f255ba16ff921255776066a5",
         "policy_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "state_hash": "af09972eef400827903e75e75ff0b0be7cb467167433ae01e38686b18f02550f",
-        "expires_at": 1730000060,
+        "expected_issued_at": 1730000000,
+        "expected_expiry": 1730000060,
         "canonical_signing_payload": "{\"expires_at\":1730000060,\"intent_hash\":\"c272c586c9c9bd258cc1e794322401f3de021882f255ba16ff921255776066a5\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"af09972eef400827903e75e75ff0b0be7cb467167433ae01e38686b18f02550f\"}",
         "signature": "1358bc29f268003247ce54aa80ad4ee2931ff56bc8158b3dab099e1e811d406c"
       }
@@ -32,26 +38,32 @@
     {
       "id": "auth-payload-002",
       "input": {
-        "intent_id": "intent-101",
-        "agent_id": "agent-1",
-        "action_type": "PAYMENT",
-        "amount": "1000000",
-        "target": "merchant-1",
-        "timestamp": 0,
-        "metadata_hash": "0000000000000000000000000000000000000000000000000000000000000000",
-        "nonce": "101",
-        "signature": "sig-placeholder",
-        "depth": 0,
-        "tool": "openai.responses",
-        "tool_call": true,
-        "type": "EXECUTE"
+        "intent_timestamp": 0,
+        "evaluation_time": 30,
+        "effective_ttl": 60,
+        "intent": {
+          "intent_id": "intent-101",
+          "agent_id": "agent-1",
+          "action_type": "PAYMENT",
+          "amount": "1000000",
+          "target": "merchant-1",
+          "timestamp": 0,
+          "metadata_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "nonce": "101",
+          "signature": "sig-placeholder",
+          "depth": 0,
+          "tool": "openai.responses",
+          "tool_call": true,
+          "type": "EXECUTE"
+        }
       },
       "expected": {
         "intent_hash": "cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e",
-        "expires_at": 60,
-        "expires_at_derivation": "intent.timestamp(0) + ttl_seconds(60) = 60",
-        "canonical_signing_payload": "{\"expires_at\":60,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"b6546e0417c651053f6150bfd4c8c33ccbe12be2faf67f646aad5397397d5cb5\"}",
-        "signature": "b00612ffd4c16a57eb2f311b63bcc3fd648b89493cfb78c2580ffa7c3651416e"
+        "expected_issued_at": 30,
+        "expected_expiry": 90,
+        "expiry_derivation": "evaluation_time(30) + effective_ttl(60) = 90",
+        "canonical_signing_payload": "{\"expires_at\":90,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"2abf87e8b312be8a27edbf9e45fb9df493b9feb671da2ccaab16785f551bdc6b\"}",
+        "signature": "c7b11a0a360e828399df6513bee12611fb9cc49f08b062dca5304a633131500f"
       }
     }
   ]

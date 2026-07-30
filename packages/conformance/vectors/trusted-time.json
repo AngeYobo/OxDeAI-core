@@ -1,14 +1,118 @@
 {
   "version": "0.1.0-draft",
-  "description": "Trusted-time authorization conformance vectors (issue #171). intent.timestamp is a bounded freshness claim only; evaluation_time is the trusted PEP clock used for issuance, expiry, replay retention, and velocity windows. Times are abstract epoch-seconds; T0 is the trusted evaluation_time baseline. Evaluation order: the freshness gate (intent.timestamp vs evaluation_time) is checked BEFORE replay and velocity, so a future-dated intent denies with INTENT_FRESHNESS_FUTURE even when a retained nonce or an active window would also fail — the replay/velocity vectors therefore use fresh timestamps to isolate those gates. Both freshness directions are now covered: future-dating (Δ = intent.timestamp − evaluation_time > maxClockSkewSeconds → INTENT_FRESHNESS_FUTURE) and staleness (−Δ > maxIntentAgeSeconds → INTENT_STALE), each with a basic denial, an evaluation-order case (freshness precedes replay), and a positive control on its side of the band. Reason codes are PROVISIONAL pending the spec enum. Each vector is a pure evaluate(intent, state, evaluation_time) call. Sketch for review before wiring.",
+  "description": "Trusted-time authorization conformance vectors. intent.timestamp is a bounded freshness claim only; evaluation_time is the trusted PEP clock used for issuance. In this fixed-TTL profile, maxTtlSeconds names the same resolved fixed issuance TTL as EngineOptions.authorization_ttl_seconds ?? 60. It is not an independent runtime control and there is no requested-TTL selection.",
   "config": {
     "maxClockSkewSeconds": 300,
     "maxIntentAgeSeconds": 300,
     "replayWindowSeconds": 600,
     "velocity": { "maxActions": 1, "windowSeconds": 60 },
     "maxTtlSeconds": 60,
+    "effective_ttl": 60,
     "T0": 1730000000
   },
+  "issuance_vectors": [
+    {
+      "id": "tt-issuance-before",
+      "intent_timestamp": 1729999990,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-issuance-equal",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-issuance-after",
+      "intent_timestamp": 1730000010,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-noninterference-earlier",
+      "comparison_group": "same-evaluation-time",
+      "intent_timestamp": 1729999980,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-noninterference-later",
+      "comparison_group": "same-evaluation-time",
+      "intent_timestamp": 1730000020,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-evaluation-sensitivity-first",
+      "comparison_group": "different-evaluation-time",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-evaluation-sensitivity-second",
+      "comparison_group": "different-evaluation-time",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000010,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000010, "expected_expiry": 1730000070 }
+    },
+    {
+      "id": "tt-release-issuance",
+      "intent_timestamp": 1730000001,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "RELEASE",
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
+    },
+    {
+      "id": "tt-invalid-ttl-zero",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 0,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "CONFIG_INVALID", "error": "authorization_ttl_seconds" }
+    },
+    {
+      "id": "tt-expiry-overflow",
+      "intent_timestamp": 9007199254740932,
+      "evaluation_time": 9007199254740932,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "PRECONDITION_INVALID", "error": "safe integer" }
+    },
+    {
+      "id": "tt-freshness-denial",
+      "intent_timestamp": 1730000301,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "expected": { "decision": "DENY", "reason": "INTENT_FRESHNESS_FUTURE", "authorization_present": false }
+    },
+    {
+      "id": "tt-deterministic",
+      "intent_timestamp": 1730000005,
+      "evaluation_time": 1730000000,
+      "effective_ttl": 60,
+      "authorization_action": "EXECUTE",
+      "repeat": 2,
+      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060, "identical_authorization": true }
+    }
+  ],
   "vectors": [
     {
       "id": "tt-neg-001",

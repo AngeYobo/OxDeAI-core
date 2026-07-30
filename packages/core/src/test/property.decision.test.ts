@@ -555,10 +555,9 @@ test("D-6 strict mode: verifyAuthorization requires explicit now", () => {
   }
 });
 
-test("D-6 strict mode: evaluatePure uses intent.timestamp, not Date.now()", () => {
-  // evaluatePure must derive issued_at from intent.timestamp, never from
-  // Date.now(). Two calls with the same intent must produce the same issued_at
-  // and the same auth_id even when the wall clock advances between calls.
+test("D-6 strict mode: evaluatePure mints the validity window from evaluationTime", () => {
+  // Deliberately inverted by #193: intent.timestamp remains hash-bound, but
+  // issued_at and expiry derive exclusively from the explicit trusted clock.
   for (const seed of seeds()) {
     const engine = makeEngine(); // strictDeterminism: true
     const state = genState(seed);
@@ -567,15 +566,18 @@ test("D-6 strict mode: evaluatePure uses intent.timestamp, not Date.now()", () =
 
     const intent = buildExecIntent(op, seed, 0, 5_000n);
 
-    const out1 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
-    const out2 = engine.evaluatePure(intent, structuredClone(state), intent.timestamp, { mode: "fail-fast" });
+    const evaluationTime = intent.timestamp + 1;
+    const out1 = engine.evaluatePure(intent, structuredClone(state), evaluationTime, { mode: "fail-fast" });
+    const out2 = engine.evaluatePure(intent, structuredClone(state), evaluationTime, { mode: "fail-fast" });
 
     assert.equal(out1.decision, out2.decision,
       `seed=${seed} strict mode evaluatePure decision not stable`);
 
     if (out1.decision === "ALLOW" && out2.decision === "ALLOW") {
-      assert.equal(out1.authorization.issued_at, intent.timestamp,
-        `seed=${seed} issued_at must equal intent.timestamp, not Date.now()`);
+      assert.equal(out1.authorization.issued_at, evaluationTime,
+        `seed=${seed} issued_at must equal evaluationTime`);
+      assert.equal(out1.authorization.expiry - out1.authorization.issued_at, 120,
+        `seed=${seed} validity window must equal the configured fixed TTL`);
       assert.equal(out1.authorization.issued_at, out2.authorization.issued_at,
         `seed=${seed} issued_at not stable across calls`);
       assert.equal(out1.authorization.auth_id, out2.authorization.auth_id,

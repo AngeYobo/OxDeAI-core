@@ -18,7 +18,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "extract": "pnpm build && node dist/scripts/extract-vectors.js",
+    "extract": "pnpm -C ../core build && pnpm build && node dist/scripts/extract-vectors.js",
     "validate": "pnpm -C ../core build && pnpm build && node dist/src/validate.js"
   },
   "dependencies": {

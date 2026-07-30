@@ -138,6 +138,17 @@ export type EngineOptions = {
 
 // Keep canonical snapshot hashes stable across host package managers/runners.
 const ENGINE_VERSION = "unknown";
+const DEFAULT_AUTHORIZATION_TTL_SECONDS = 60;
+
+function resolveAuthorizationTtlSeconds(value: unknown): number {
+  const ttl = value === undefined ? DEFAULT_AUTHORIZATION_TTL_SECONDS : value;
+  if (typeof ttl !== "number" || !Number.isSafeInteger(ttl) || ttl <= 0) {
+    throw new Error(
+      "authorization_ttl_seconds must be a positive finite safe integer (seconds)"
+    );
+  }
+  return ttl;
+}
 
 const RELEASE_MODULES: readonly PolicyModule[] = [
   { id: "KillSwitchModule", evaluate: KillSwitchModule, codec: MODULE_CODECS.KillSwitchModule },
@@ -159,6 +170,7 @@ const EXECUTE_MODULES: readonly PolicyModule[] = [
 /** @public */
 export class PolicyEngine {
   private readonly opts: EngineOptions;
+  private readonly authorizationTtl: number;
   private currentState?: State;
   private auditEventCount = 0;
   // Adapter writes are sequenced here so evaluate/evaluatePure remain synchronous.
@@ -180,11 +192,12 @@ export class PolicyEngine {
     }
     assertProtocolSeconds(opts.maxClockSkewSeconds, "EngineOptions.maxClockSkewSeconds");
     assertProtocolSeconds(opts.maxIntentAgeSeconds, "EngineOptions.maxIntentAgeSeconds");
+    this.authorizationTtl = resolveAuthorizationTtlSeconds(opts.authorization_ttl_seconds);
     this.opts = opts;
   }
 
   private authorizationTtlSeconds(): number {
-    return this.opts.authorization_ttl_seconds ?? 60;
+    return this.authorizationTtl;
   }
 
   private authorizationIssuer(): string {
@@ -404,6 +417,10 @@ export class PolicyEngine {
    * synchronously, before entering its evaluation `try` block, rather than
    * returning any `EvaluatePureOutput` (no decision, no `nextState`, no
    * audit event is produced for a rejected precondition).
+   * The same validated value drives freshness, module evaluation, and every
+   * emitted authorization validity window: `issued_at = evaluationTime` and
+   * `expiry = evaluationTime + authorization_ttl_seconds` (default 60 only
+   * when the option is undefined).
    *
    * Trusted-time freshness is evaluated before module execution - before
    * `ReplayModule` and (on EXECUTE) `VelocityModule`. When freshness denies,
@@ -433,6 +450,12 @@ export class PolicyEngine {
     // the try block below: this must never be caught and converted into a
     // DENY/INTERNAL_ERROR policy result.
     assertProtocolSeconds(evaluationTime, "evaluationTime");
+    const effectiveTtl = this.authorizationTtlSeconds();
+    if (evaluationTime > Number.MAX_SAFE_INTEGER - effectiveTtl) {
+      throw new Error(
+        "evaluationTime + authorization_ttl_seconds must be a safe integer (unix seconds)"
+      );
+    }
 
     try {
       const intent_hash = intentHash(intent);
@@ -499,8 +522,8 @@ export class PolicyEngine {
       // working carries all module deltas from the decision phase.
       let working = decisionResult.nextState;
       const state_snapshot_hash = this.computeStateHashFor(working);
-      const issued_at = intent.timestamp;
-      const expires_at = issued_at + this.authorizationTtlSeconds();
+      const issued_at = evaluationTime;
+      const expires_at = issued_at + effectiveTtl;
       const policy_id = policyId;
       const issuer = this.authorizationIssuer();
       const audience = this.authorizationAudience();
