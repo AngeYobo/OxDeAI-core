@@ -113,6 +113,109 @@
       "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060, "identical_authorization": true }
     }
   ],
+  "velocity_vectors": [
+    {
+      "id": "tt-velocity-first",
+      "intent_timestamp": 1730000010,
+      "evaluation_time": 1730000000,
+      "stored_window_start": null,
+      "window_seconds": 60,
+      "current_count": null,
+      "max_actions": 1,
+      "expected": { "decision": "ALLOW", "window_start": 1730000000, "count": 1 }
+    },
+    {
+      "id": "tt-velocity-limit-active",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000000,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
+    },
+    {
+      "id": "tt-velocity-future-intent-active",
+      "intent_timestamp": 1730000030,
+      "evaluation_time": 1730000010,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
+    },
+    {
+      "id": "tt-velocity-stale-boundary-active",
+      "intent_timestamp": 1729999710,
+      "evaluation_time": 1730000010,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
+    },
+    {
+      "id": "tt-velocity-before-boundary",
+      "intent_timestamp": 1730000059,
+      "evaluation_time": 1730000059,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
+    },
+    {
+      "id": "tt-velocity-exact-boundary",
+      "intent_timestamp": 1730000030,
+      "evaluation_time": 1730000060,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "ALLOW", "window_start": 1730000060, "count": 1 }
+    },
+    {
+      "id": "tt-velocity-after-boundary",
+      "intent_timestamp": 1730000061,
+      "evaluation_time": 1730000061,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 1,
+      "max_actions": 1,
+      "expected": { "decision": "ALLOW", "window_start": 1730000061, "count": 1 }
+    },
+    {
+      "id": "tt-velocity-backward-evaluation",
+      "intent_timestamp": 1729999999,
+      "evaluation_time": 1729999999,
+      "stored_window_start": 1730000000,
+      "window_seconds": 60,
+      "current_count": 0,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "STATE_INVALID" }
+    },
+    {
+      "id": "tt-velocity-malformed-window-start",
+      "intent_timestamp": 1730000000,
+      "evaluation_time": 1730000000,
+      "stored_window_start": -1,
+      "window_seconds": 60,
+      "current_count": 0,
+      "max_actions": 1,
+      "expected": { "decision": "DENY", "reason": "STATE_INVALID" }
+    },
+    {
+      "id": "tt-velocity-deterministic",
+      "repeat": 2,
+      "intent_timestamp": 1729999990,
+      "evaluation_time": 1730000000,
+      "stored_window_start": 1729999990,
+      "window_seconds": 60,
+      "current_count": 0,
+      "max_actions": 2,
+      "expected": { "decision": "ALLOW", "window_start": 1729999990, "count": 1, "identical_result": true }
+    }
+  ],
   "vectors": [
     {
       "id": "tt-neg-001",

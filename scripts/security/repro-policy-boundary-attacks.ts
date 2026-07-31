@@ -24,11 +24,11 @@ function engine(): PolicyEngine {
 
 // Fixed trusted "now" for every attack below — deliberately NOT derived from
 // each attack's (attacker-controlled) intent.timestamp. This is the two-clock
-// model itself: attacks that future-date intent.timestamp are now expected to
-// be caught by the freshness gate (INTENT_FRESHNESS_FUTURE) before they ever
-// reach replay/velocity/tool-window logic. Attacks C, K3, J, and I probe
-// exactly this boundary and are expected to flip from VULNERABLE to
-// RESISTED/FIXED now that freshness is wired in ahead of those gates.
+// model itself: attacks that grossly future-date intent.timestamp are expected
+// to be caught by freshness before later policy modules. Attack J deliberately
+// stays inside the valid freshness band so it proves velocity itself is driven
+// by evaluationTime; the other future-dating cases continue to probe the
+// freshness boundary.
 const EVAL_TIME = BASE_TS;
 
 function baseState(overrides?: (s: State) => void): State {
@@ -257,28 +257,35 @@ function attackK_replayFutureDating(): void {
 }
 
 /**
- * J — velocity window bypass by future-dating every action.
+ * J — velocity window bypass by varying caller time inside the freshness band.
  *
  * Expected vulnerable behavior:
  *   max_actions = 1
- *   5 sequential actions with timestamps beyond window
+ *   sequential actions vary freshness-valid intent timestamps
  *   all ALLOW
+ *
+ * Expected fixed behavior:
+ *   first ALLOW, all later actions VELOCITY_EXCEEDED while evaluationTime
+ *   remains inside the same trusted window.
  */
 function attackJ_velocityFutureDating(): void {
   const e = engine();
   let s = baseState((st) => {
-    st.velocity.config.window_seconds = 3600;
+    // Each attacker timestamp step is larger than this window, while all
+    // timestamps remain inside the ±300-second freshness band.
+    st.velocity.config.window_seconds = 100;
     st.velocity.config.max_actions = 1;
     st.tool_limits.max_calls[AGENT] = 1000;
   });
 
   const outs: Outcome[] = [];
+  const freshnessValidOffsets = [-300, -150, 0, 150, 300];
 
   for (let i = 0; i < 5; i++) {
     const out = e.evaluatePure(
       intent({
         nonce: BigInt(100 + i),
-        timestamp: BASE_TS + i * 7200,
+        timestamp: BASE_TS + freshnessValidOffsets[i]!,
       }),
       s,
       EVAL_TIME,
@@ -287,7 +294,7 @@ function attackJ_velocityFutureDating(): void {
     if (out.decision === "ALLOW") s = out.nextState;
   }
 
-  console.log("\n=== J: velocity future-dating ===");
+  console.log("\n=== J: velocity timestamp noninterference ===");
   console.log("decisions:", outs.map((o) => o.decision).join(", "));
   console.log("reasons:", outs.map((o) => JSON.stringify(o.reasons ?? [])).join(" | "));
 
@@ -295,7 +302,7 @@ function attackJ_velocityFutureDating(): void {
     "J",
     outs.every((o) => o.decision === "ALLOW"),
     "VULNERABLE: velocity limit reset by attacker-controlled future timestamps",
-    "velocity future-dating rejected or bounded",
+    "freshness-valid caller timestamps cannot reset trusted velocity quota",
   );
 }
 

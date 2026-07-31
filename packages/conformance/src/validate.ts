@@ -542,6 +542,73 @@ function validateTrustedTimeIssuanceVectors(ctx: CheckCtx): void {
   );
 }
 
+function validateTrustedTimeVelocityVectors(ctx: CheckCtx): void {
+  type TrustedTimeFile = {
+    velocity_vectors: Array<JsonRecord>;
+  };
+  const file = loadJson<TrustedTimeFile>("trusted-time.json");
+
+  for (const [index, vector] of file.velocity_vectors.entries()) {
+    const id = String(vector.id);
+    const intentTimestamp = Number(vector.intent_timestamp);
+    const evaluationTime = Number(vector.evaluation_time);
+    const storedWindowStart = vector.stored_window_start;
+    const currentCount = vector.current_count;
+    const expected = asRecord(vector.expected);
+    const state = makeBaseState();
+    state.velocity.config = {
+      window_seconds: Number(vector.window_seconds),
+      max_actions: Number(vector.max_actions),
+    };
+    state.velocity.counters =
+      storedWindowStart === null
+        ? {}
+        : {
+            "agent-1": {
+              window_start: Number(storedWindowStart),
+              count: Number(currentCount),
+            },
+          };
+
+    const intent: Intent = {
+      intent_id: `${id}-intent`,
+      agent_id: "agent-1",
+      action_type: "PAYMENT",
+      type: "EXECUTE",
+      amount: 100n,
+      asset: "wallet",
+      target: "merchant-1",
+      timestamp: intentTimestamp,
+      metadata_hash: "0".repeat(64),
+      nonce: BigInt(index + 20_000),
+      signature: "sig-placeholder",
+      depth: 0,
+    };
+
+    const before = structuredClone(state);
+    const evaluate = () => makeEngine().evaluatePure(intent, structuredClone(state), evaluationTime);
+    const out = evaluate();
+    eq(ctx, `${id} decision`, out.decision, String(expected.decision));
+
+    if (out.decision === "DENY") {
+      eq(ctx, `${id} reason`, out.reasons[0], String(expected.reason));
+      eq(ctx, `${id} input velocity unchanged`, state.velocity, before.velocity);
+    } else {
+      const counter = out.nextState.velocity.counters["agent-1"];
+      eq(ctx, `${id} window_start`, counter?.window_start, Number(expected.window_start));
+      eq(ctx, `${id} count`, counter?.count, Number(expected.count));
+    }
+
+    if (Number(vector.repeat) === 2) {
+      const repeated = evaluate();
+      eq(ctx, `${id} repeated decision`, repeated.decision, out.decision);
+      if (repeated.decision === "ALLOW" && out.decision === "ALLOW") {
+        eq(ctx, `${id} repeated velocity state`, repeated.nextState.velocity, out.nextState.velocity);
+      }
+    }
+  }
+}
+
 function validateAuthorizationVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
   const file = loadJson<VectorFile>("authorization-verification.json");
 
@@ -1700,6 +1767,7 @@ function main(): void {
   validateIntentHashVectors(ctx, adapter);
   validateAuthorizationVectors(ctx, adapter);
   validateTrustedTimeIssuanceVectors(ctx);
+  validateTrustedTimeVelocityVectors(ctx);
   validateAuthorizationVerificationVectors(ctx, adapter);
   validateAuthorizationSignatureVectors(ctx, adapter);
   validateSnapshotVectors(ctx, adapter);

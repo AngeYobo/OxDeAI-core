@@ -248,8 +248,31 @@ Replay and velocity MUST key off `evaluation_time` only.
   still inside it. Reuse of a retained nonce → `DENY`.
 - **Velocity.** The action window is
   `[window_start, window_start + velocity.windowSeconds)` in `evaluation_time`.
-  A future-dated intent MUST NOT reset or advance it. Exceeding `maxActions`
-  within the trusted window → `DENY`.
+  `window_start` and every reset decision MUST derive exclusively from
+  `evaluation_time`; `intent.timestamp`, authorization timestamps, metadata,
+  ambient clocks, and fallback clocks MUST NOT affect them. The exact rule is:
+
+  ```text
+  while evaluation_time - window_start < window_seconds:
+    the current window remains active
+
+  when evaluation_time - window_start >= window_seconds:
+    begin a new window with window_start = evaluation_time and count = 1
+  ```
+
+  The subtraction form avoids overflowing the protocol safe-integer domain.
+  At the exact boundary a new window begins. If `evaluation_time <
+  window_start`, evaluation MUST fail closed with `STATE_INVALID`; it MUST NOT
+  reset, grant quota, decrease `window_start`, or substitute another clock.
+  Exceeding `maxActions` within an active trusted window →
+  `VELOCITY_EXCEEDED`. A denied action does not consume quota or mutate
+  velocity state.
+
+  Velocity configuration and persisted counter leaves MUST be validated
+  without coercion. `windowSeconds` MUST be a positive safe integer;
+  `maxActions`, `window_start`, and `count` MUST be non-negative safe integers.
+  Missing or malformed required containers and non-finite, fractional,
+  negative, or unsafe values MUST fail closed with `STATE_INVALID`.
 
 The honest path MUST remain admissible: a distinct, unused nonce inside the
 retention window, and a velocity window that legitimately reset because
@@ -262,6 +285,38 @@ not mandate a complete global module order: other `eta-core-v1` gates
 (kill-switch, allowlists, budget, auth) MAY be evaluated before, between, or
 after these, provided that the relative freshness → replay → velocity order among
 the trusted-time gates is preserved.
+
+### 7.1 Persisted velocity state and deployment migration
+
+The state schema is unchanged. Before the trusted-clock migration, existing
+`window_start` values may have been derived from attacker-controlled
+`intent.timestamp`; trusted and legacy values cannot be distinguished
+structurally. Deployments SHOULD flush legacy velocity counters during rollout.
+If flushing is operationally impossible, they MUST conservatively prevent
+quota grants until each legacy window has expired against trusted time; a
+legacy start ahead of `evaluation_time` fails closed rather than self-healing
+through a backward reset. No state-version bump or automatic timestamp
+conversion is defined.
+
+In-memory state is affected whenever it survives an engine upgrade. External
+state providers, including Redis-backed or database-backed deployments that
+persist the full policy state, require the same operational treatment.
+Mixed-version PEP deployments can disagree because older evaluators use
+`intent.timestamp`; they SHOULD NOT share mutable velocity state during a
+rolling upgrade. Upgrade evaluators together or drain/flush counters at the
+version boundary.
+
+Distributed PEPs MUST supply non-decreasing, sufficiently synchronized trusted
+evaluation clocks. Clock rollback relative to a stored `window_start` fails
+closed. Clock skew between PEPs can change when a reset becomes eligible even
+though caller timestamps cannot. Deterministic evaluation performs no ambient
+clock read; the supplied `evaluation_time` is its sole security-relevant
+velocity clock.
+
+State-provider compare-and-set, transactional update, serialization, or
+equivalent conflict rejection remains REQUIRED for concurrent quota updates.
+Trusted time prevents caller-controlled window movement but does not solve
+lost-update races or make concurrent quota consumption atomic.
 
 ---
 

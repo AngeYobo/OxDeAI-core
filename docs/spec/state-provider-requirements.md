@@ -72,6 +72,15 @@ The guard enforces that the version read by `getState()` matches the version exp
 
 The state store backing `getState()` and `setState()` MUST provide atomicity guarantees sufficient to make this detection reliable. Implementations SHOULD use database-level CAS, optimistic locking, or conditional write operations.
 
+Trusted-time velocity accounting does not replace this requirement. Although
+velocity window progression is derived exclusively from the trusted
+`evaluation_time` defined in `docs/spec/core/trusted-time-v1.md` §7, concurrent
+evaluators can still read the same counter and each attempt to consume the same
+remaining slot. The provider MUST serialize those updates or reject all but one
+through atomic compare-and-set. Distributed PEP clocks SHOULD be synchronized
+and non-decreasing; a clock behind a persisted velocity `window_start` causes a
+fail-closed `STATE_INVALID` decision.
+
 ### 2.3 Stale replica reads
 
 For Profile C deployments, `getState()` MUST read from the authoritative replica of the state store, not from a potentially stale secondary replica. Reading from a lagging replica can produce a hash that matches an old authorization but not the current authoritative state.

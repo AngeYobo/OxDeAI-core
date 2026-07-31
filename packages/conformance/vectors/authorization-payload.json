@@ -62,8 +62,8 @@
         "expected_issued_at": 30,
         "expected_expiry": 90,
         "expiry_derivation": "evaluation_time(30) + effective_ttl(60) = 90",
-        "canonical_signing_payload": "{\"expires_at\":90,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"2abf87e8b312be8a27edbf9e45fb9df493b9feb671da2ccaab16785f551bdc6b\"}",
-        "signature": "c7b11a0a360e828399df6513bee12611fb9cc49f08b062dca5304a633131500f"
+        "canonical_signing_payload": "{\"expires_at\":90,\"intent_hash\":\"cbe2f7253a1696395cb8353e6995038aa664ac56ac6d1d0e84927b3f5e22ca6e\",\"policy_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_hash\":\"e9fbc6823124eec8c94d860732458343a563342b0dae736030db5a6f581916ca\"}",
+        "signature": "dee7645ceaf86caf6513ccebe163e0491799c42bceee3daff4db2198b8d79363"
       }
     }
   ]
