@@ -1,401 +1,47 @@
 {
-  "version": "0.1.0-draft",
-  "description": "Trusted-time authorization conformance vectors. intent.timestamp is a bounded freshness claim only; evaluation_time is the trusted PEP clock used for issuance. In this fixed-TTL profile, maxTtlSeconds names the same resolved fixed issuance TTL as EngineOptions.authorization_ttl_seconds ?? 60. It is not an independent runtime control and there is no requested-TTL selection.",
-  "config": {
-    "maxClockSkewSeconds": 300,
-    "maxIntentAgeSeconds": 300,
-    "replayWindowSeconds": 600,
-    "velocity": { "maxActions": 1, "windowSeconds": 60 },
-    "maxTtlSeconds": 60,
-    "effective_ttl": 60,
-    "T0": 1730000000
-  },
-  "issuance_vectors": [
-    {
-      "id": "tt-issuance-before",
-      "intent_timestamp": 1729999990,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-issuance-equal",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-issuance-after",
-      "intent_timestamp": 1730000010,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-noninterference-earlier",
-      "comparison_group": "same-evaluation-time",
-      "intent_timestamp": 1729999980,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-noninterference-later",
-      "comparison_group": "same-evaluation-time",
-      "intent_timestamp": 1730000020,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-evaluation-sensitivity-first",
-      "comparison_group": "different-evaluation-time",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-evaluation-sensitivity-second",
-      "comparison_group": "different-evaluation-time",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000010,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000010, "expected_expiry": 1730000070 }
-    },
-    {
-      "id": "tt-release-issuance",
-      "intent_timestamp": 1730000001,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "RELEASE",
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060 }
-    },
-    {
-      "id": "tt-invalid-ttl-zero",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 0,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "CONFIG_INVALID", "error": "authorization_ttl_seconds" }
-    },
-    {
-      "id": "tt-expiry-overflow",
-      "intent_timestamp": 9007199254740932,
-      "evaluation_time": 9007199254740932,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "PRECONDITION_INVALID", "error": "safe integer" }
-    },
-    {
-      "id": "tt-freshness-denial",
-      "intent_timestamp": 1730000301,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "expected": { "decision": "DENY", "reason": "INTENT_FRESHNESS_FUTURE", "authorization_present": false }
-    },
-    {
-      "id": "tt-deterministic",
-      "intent_timestamp": 1730000005,
-      "evaluation_time": 1730000000,
-      "effective_ttl": 60,
-      "authorization_action": "EXECUTE",
-      "repeat": 2,
-      "expected": { "decision": "ALLOW", "expected_issued_at": 1730000000, "expected_expiry": 1730000060, "identical_authorization": true }
-    }
-  ],
-  "velocity_vectors": [
-    {
-      "id": "tt-velocity-first",
-      "intent_timestamp": 1730000010,
-      "evaluation_time": 1730000000,
-      "stored_window_start": null,
-      "window_seconds": 60,
-      "current_count": null,
-      "max_actions": 1,
-      "expected": { "decision": "ALLOW", "window_start": 1730000000, "count": 1 }
-    },
-    {
-      "id": "tt-velocity-limit-active",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000000,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
-    },
-    {
-      "id": "tt-velocity-future-intent-active",
-      "intent_timestamp": 1730000030,
-      "evaluation_time": 1730000010,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
-    },
-    {
-      "id": "tt-velocity-stale-boundary-active",
-      "intent_timestamp": 1729999710,
-      "evaluation_time": 1730000010,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
-    },
-    {
-      "id": "tt-velocity-before-boundary",
-      "intent_timestamp": 1730000059,
-      "evaluation_time": 1730000059,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "VELOCITY_EXCEEDED" }
-    },
-    {
-      "id": "tt-velocity-exact-boundary",
-      "intent_timestamp": 1730000030,
-      "evaluation_time": 1730000060,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "ALLOW", "window_start": 1730000060, "count": 1 }
-    },
-    {
-      "id": "tt-velocity-after-boundary",
-      "intent_timestamp": 1730000061,
-      "evaluation_time": 1730000061,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 1,
-      "max_actions": 1,
-      "expected": { "decision": "ALLOW", "window_start": 1730000061, "count": 1 }
-    },
-    {
-      "id": "tt-velocity-backward-evaluation",
-      "intent_timestamp": 1729999999,
-      "evaluation_time": 1729999999,
-      "stored_window_start": 1730000000,
-      "window_seconds": 60,
-      "current_count": 0,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "STATE_INVALID" }
-    },
-    {
-      "id": "tt-velocity-malformed-window-start",
-      "intent_timestamp": 1730000000,
-      "evaluation_time": 1730000000,
-      "stored_window_start": -1,
-      "window_seconds": 60,
-      "current_count": 0,
-      "max_actions": 1,
-      "expected": { "decision": "DENY", "reason": "STATE_INVALID" }
-    },
-    {
-      "id": "tt-velocity-deterministic",
-      "repeat": 2,
-      "intent_timestamp": 1729999990,
-      "evaluation_time": 1730000000,
-      "stored_window_start": 1729999990,
-      "window_seconds": 60,
-      "current_count": 0,
-      "max_actions": 2,
-      "expected": { "decision": "ALLOW", "window_start": 1729999990, "count": 1, "identical_result": true }
-    }
-  ],
+  "schema_version": "1.0.0",
+  "description": "Strict trusted-time conformance vectors. Every active vector is release-blocking. Pending vectors describe unsupported normative categories and never count as passing.",
   "vectors": [
-    {
-      "id": "tt-neg-001",
-      "mode": "future-dated-authorization",
-      "description": "V1 — intent future-dated ~100y beyond trusted time; freshness gate must deny before issuance.",
-      "input": {
-        "evaluation_time": 1730000000,
-        "intent": { "timestamp": 4883600000, "nonce": "n1", "action": "a1" },
-        "preconditions": []
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "INTENT_FRESHNESS_FUTURE", "provisional": true, "message": "intent.timestamp > evaluation_time + maxClockSkew; no issued_at/expiry minted" }
-        ]
-      }
-    },
-    {
-      "id": "tt-neg-002",
-      "mode": "replay-fresh-intent-retained-nonce",
-      "description": "V2 — fresh intent (within maxClockSkew) reuses nonce n7 still retained under trusted evaluation_time; the replay gate denies. Fresh timestamp isolates replay from the freshness gate.",
-      "input": {
-        "evaluation_time": 1730000005,
-        "intent": { "timestamp": 1730000005, "nonce": "n7", "action": "a1" },
-        "preconditions": [
-          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
-        ]
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "REPLAY_NONCE", "provisional": true, "message": "nonce n7 still retained at evaluation_time 1730000005 (< retained_until 1730000600); reuse denied" }
-        ]
-      }
-    },
-    {
-      "id": "tt-neg-003",
-      "mode": "velocity-fresh-intent-active-window",
-      "description": "V3 — fresh intent (within maxClockSkew); trusted evaluation_time is still inside the active velocity window, so the second action is denied. Fresh timestamp isolates velocity from the freshness gate.",
-      "input": {
-        "evaluation_time": 1730000005,
-        "intent": { "timestamp": 1730000005, "nonce": "n2", "action": "a2" },
-        "preconditions": [
-          { "event": "action_consumed_slot", "action": "a1", "at_evaluation_time": 1730000000, "window": [1730000000, 1730000060], "count": 1 }
-        ]
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "VELOCITY_EXCEEDED", "provisional": true, "message": "second action at evaluation_time 1730000005 still inside window [T0, T0+60); maxActions=1 exceeded" }
-        ]
-      }
-    },
-    {
-      "id": "tt-neg-004",
-      "mode": "freshness-precedes-replay",
-      "description": "V4 (evaluation order) — a future-dated intent that would ALSO be a replay (nonce n7 still retained). The freshness gate is evaluated first, so the reason is INTENT_FRESHNESS_FUTURE, not REPLAY_NONCE. Pins the ordering: freshness before replay and velocity.",
-      "input": {
-        "evaluation_time": 1730000005,
-        "intent": { "timestamp": 1730600010, "nonce": "n7", "action": "a1" },
-        "preconditions": [
-          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
-        ]
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "INTENT_FRESHNESS_FUTURE", "provisional": true, "message": "intent.timestamp > evaluation_time + maxClockSkew; freshness denies before replay is evaluated, even though nonce n7 is retained" }
-        ]
-      }
-    },
-    {
-      "id": "tt-neg-005",
-      "mode": "stale-dated-authorization",
-      "description": "V5 (mirrors V1 for the stale direction) — intent staler than maxIntentAgeSeconds; freshness gate must deny before issuance.",
-      "input": {
-        "evaluation_time": 1730000000,
-        "intent": { "timestamp": 1729999400, "nonce": "n3", "action": "a1" },
-        "preconditions": []
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "INTENT_STALE", "provisional": true, "message": "evaluation_time - intent.timestamp = 600 > maxIntentAgeSeconds (300); intent too stale, no issued_at/expiry minted" }
-        ]
-      }
-    },
-    {
-      "id": "tt-neg-006",
-      "mode": "freshness-precedes-replay-stale",
-      "description": "V6 (evaluation order, mirrors V4 for the stale direction) — a stale intent that would ALSO be a replay (nonce n7 still retained). The freshness gate is evaluated first, so the reason is INTENT_STALE, not REPLAY_NONCE. Pins the ordering for the stale direction: freshness before replay and velocity.",
-      "input": {
-        "evaluation_time": 1730000005,
-        "intent": { "timestamp": 1729999400, "nonce": "n7", "action": "a1" },
-        "preconditions": [
-          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
-        ]
-      },
-      "expected": {
-        "decision": "DENY",
-        "status": "denied",
-        "violations": [
-          { "code": "INTENT_STALE", "provisional": true, "message": "evaluation_time - intent.timestamp = 605 > maxIntentAgeSeconds (300); freshness denies before replay is evaluated, even though nonce n7 is retained" }
-        ]
-      }
-    },
-    {
-      "id": "tt-pos-001",
-      "mode": "honest-fresh-authorization",
-      "description": "P1 (mirrors V1) — honest intent within maxClockSkew; freshness gate passes and issuance proceeds from trusted time.",
-      "input": {
-        "evaluation_time": 1730000000,
-        "intent": { "timestamp": 1730000030, "nonce": "p1", "action": "a1" },
-        "preconditions": []
-      },
-      "expected": {
-        "decision": "ALLOW",
-        "status": "ok",
-        "issued_at": 1730000000,
-        "expiry": 1730000060,
-        "expiry_rule": "evaluation_time + maxTtlSeconds (60)",
-        "violations": []
-      }
-    },
-    {
-      "id": "tt-pos-002",
-      "mode": "new-nonce-inside-retention",
-      "description": "P2 (mirrors V2) — a distinct unused nonce inside the retention window is not a replay; retention must not block legitimate new actions.",
-      "input": {
-        "evaluation_time": 1730000005,
-        "intent": { "timestamp": 1730000005, "nonce": "n8", "action": "a1" },
-        "preconditions": [
-          { "event": "nonce_seen", "nonce": "n7", "at_evaluation_time": 1730000000, "retained_until": 1730000600 }
-        ]
-      },
-      "expected": {
-        "decision": "ALLOW",
-        "status": "ok",
-        "violations": []
-      }
-    },
-    {
-      "id": "tt-pos-003",
-      "mode": "velocity-after-trusted-window-expiry",
-      "description": "P3 (mirrors V3) — the window legitimately reset because enough trusted time elapsed; the sharp contrast to V3 (same 'window looks expired' surface, opposite trusted-time truth).",
-      "input": {
-        "evaluation_time": 1730000065,
-        "intent": { "timestamp": 1730000065, "nonce": "p3", "action": "a2" },
-        "preconditions": [
-          { "event": "action_consumed_slot", "action": "a1", "at_evaluation_time": 1730000000, "window": [1730000000, 1730000060], "count": 1 }
-        ]
-      },
-      "expected": {
-        "decision": "ALLOW",
-        "status": "ok",
-        "violations": []
-      }
-    },
-    {
-      "id": "tt-pos-004",
-      "mode": "honest-recent-authorization",
-      "description": "P4 (mirrors V5) — honest intent slightly in the past but within maxIntentAgeSeconds; the freshness gate passes and issuance proceeds entirely from trusted time. Stale-side complement to P1 (which sits on the future side of the band).",
-      "input": {
-        "evaluation_time": 1730000000,
-        "intent": { "timestamp": 1729999750, "nonce": "p4", "action": "a1" },
-        "preconditions": []
-      },
-      "expected": {
-        "decision": "ALLOW",
-        "status": "ok",
-        "issued_at": 1730000000,
-        "expiry": 1730000060,
-        "expiry_rule": "evaluation_time + maxTtlSeconds (60); issuance derives entirely from trusted evaluation_time, independent of how far intent.timestamp lags within the freshness band",
-        "violations": []
-      }
-    }
+    {"id":"tt-issuance-before","category":"authorization_issuance","status":"active","description":"Fresh intent before evaluation time.","input":{"intent_timestamp":1729999990,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-issuance-equal","category":"authorization_issuance","status":"active","description":"Intent and evaluation clocks equal.","input":{"intent_timestamp":1730000000,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-issuance-after","category":"authorization_issuance","status":"active","description":"Fresh intent after evaluation time.","input":{"intent_timestamp":1730000010,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-noninterference-earlier","category":"authorization_issuance","status":"active","description":"Earlier freshness-valid intent has the trusted issuance window.","comparison_group":"issuance-intent-noninterference","input":{"intent_timestamp":1729999980,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-noninterference-later","category":"authorization_issuance","status":"active","description":"Later freshness-valid intent has the trusted issuance window.","comparison_group":"issuance-intent-noninterference","input":{"intent_timestamp":1730000020,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-evaluation-sensitivity-first","category":"authorization_issuance","status":"active","description":"First trusted evaluation time.","comparison_group":"issuance-evaluation-sensitivity","input":{"intent_timestamp":1730000000,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-evaluation-sensitivity-second","category":"authorization_issuance","status":"active","description":"Advancing trusted time advances issuance.","comparison_group":"issuance-evaluation-sensitivity","input":{"intent_timestamp":1730000000,"evaluation_time":1730000010,"effective_ttl":60,"authorization_action":"EXECUTE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000010,"authorization_expiry":1730000070}},
+    {"id":"tt-release-issuance","category":"authorization_issuance","status":"active","description":"RELEASE uses the shared trusted issuance block.","input":{"intent_timestamp":1730000001,"evaluation_time":1730000000,"effective_ttl":60,"authorization_action":"RELEASE"},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060}},
+    {"id":"tt-freshness-denial","category":"intent_freshness","status":"active","description":"Intent one second beyond future skew denies before issuance.","input":{"intent_timestamp":1730000301,"evaluation_time":1730000000,"max_clock_skew_seconds":300,"max_intent_age_seconds":300},"expected":{"decision":"DENY","reasons":["INTENT_FRESHNESS_FUTURE"]}},
+    {"id":"tt-deterministic","category":"determinism","status":"active","description":"Identical issuance inputs produce identical normalized output.","input":{"intent_timestamp":1730000005,"evaluation_time":1730000000,"effective_ttl":60,"repeat":2},"expected":{"decision":"ALLOW","reasons":[],"authorization_issued_at":1730000000,"authorization_expiry":1730000060,"identical_output":true}},
+    {"id":"tt-invalid-ttl-zero","category":"malformed_configuration","status":"active","description":"Zero fixed issuance TTL is rejected.","input":{"configuration_field":"authorization_ttl_seconds","configuration_value":0},"expected":{"throws":true,"error_includes":"authorization_ttl_seconds"}},
+    {"id":"tt-invalid-verifier-skew-fraction","category":"malformed_configuration","status":"active","description":"Fractional verifier future-issued skew is rejected.","input":{"configuration_field":"maxFutureIssuedAtSkewSeconds","configuration_value":1.5},"expected":{"throws":true,"error_includes":"maxFutureIssuedAtSkewSeconds"}},
+    {"id":"tt-expiry-overflow","category":"protocol_seconds_validation","status":"active","description":"Issuance refuses unsafe expiry arithmetic.","input":{"case":"issuance_expiry_overflow","intent_timestamp":9007199254740932,"evaluation_time":9007199254740932,"effective_ttl":60},"expected":{"throws":true,"error_includes":"safe integer"}},
+    {"id":"tt-protocol-negative-intent","category":"protocol_seconds_validation","status":"active","description":"Negative intent protocol seconds deny.","input":{"case":"intent_timestamp","intent_timestamp":-1,"evaluation_time":1730000000},"expected":{"decision":"DENY","reasons":["STATE_INVALID"]}},
+    {"id":"tt-protocol-fractional-intent","category":"protocol_seconds_validation","status":"active","description":"Fractional intent protocol seconds deny.","input":{"case":"intent_timestamp","intent_timestamp":1729999999.5,"evaluation_time":1730000000},"expected":{"decision":"DENY","reasons":["STATE_INVALID"]}},
+    {"id":"tt-protocol-negative-evaluation","category":"protocol_seconds_validation","status":"active","description":"Negative trusted evaluation time refuses evaluation.","input":{"case":"evaluation_time","intent_timestamp":1730000000,"evaluation_time":-1},"expected":{"throws":true,"error_includes":"evaluationTime"}},
+    {"id":"tt-neg-001","category":"intent_freshness","status":"active","description":"Grossly future-dated intent denies.","input":{"intent_timestamp":4883600000,"evaluation_time":1730000000,"max_clock_skew_seconds":300,"max_intent_age_seconds":300},"expected":{"decision":"DENY","reasons":["INTENT_FRESHNESS_FUTURE"]}},
+    {"id":"tt-neg-005","category":"intent_freshness","status":"active","description":"Stale intent denies.","input":{"intent_timestamp":1729999400,"evaluation_time":1730000000,"max_clock_skew_seconds":300,"max_intent_age_seconds":300},"expected":{"decision":"DENY","reasons":["INTENT_STALE"]}},
+    {"id":"tt-pos-001","category":"intent_freshness","status":"active","description":"Fresh future-side boundary intent passes.","input":{"intent_timestamp":1730000300,"evaluation_time":1730000000,"max_clock_skew_seconds":300,"max_intent_age_seconds":300},"expected":{"decision":"ALLOW","reasons":[]}},
+    {"id":"tt-pos-004","category":"intent_freshness","status":"active","description":"Fresh stale-side boundary intent passes.","input":{"intent_timestamp":1729999700,"evaluation_time":1730000000,"max_clock_skew_seconds":300,"max_intent_age_seconds":300},"expected":{"decision":"ALLOW","reasons":[]}},
+    {"id":"tt-neg-002","category":"replay","status":"active","description":"First use is allowed and immediate replay is denied using persisted nextState.","input":{"replay_window_seconds":600,"max_nonces_per_agent":256,"steps":[{"intent_timestamp":1730000000,"evaluation_time":1730000000,"nonce":"7"},{"intent_timestamp":1730000005,"evaluation_time":1730000005,"nonce":"7"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"nonce_state":[{"nonce":"7","nonce_first_seen_time":1730000000}]},{"decision":"DENY","reasons":["REPLAY_NONCE"],"nonce_state":[{"nonce":"7","nonce_first_seen_time":1730000000}]}]}},
+    {"id":"tt-pos-002","category":"replay","status":"active","description":"A distinct nonce inside retention is allowed and appended.","input":{"replay_window_seconds":600,"max_nonces_per_agent":256,"steps":[{"intent_timestamp":1730000000,"evaluation_time":1730000000,"nonce":"7"},{"intent_timestamp":1730000005,"evaluation_time":1730000005,"nonce":"8"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"nonce_state":[{"nonce":"7","nonce_first_seen_time":1730000000}]},{"decision":"ALLOW","reasons":[],"nonce_state":[{"nonce":"7","nonce_first_seen_time":1730000000},{"nonce":"8","nonce_first_seen_time":1730000005}]}]}},
+    {"id":"tt-neg-004","category":"replay","status":"active","description":"Future freshness denial precedes retained-nonce replay.","input":{"replay_window_seconds":600,"max_nonces_per_agent":256,"initial_nonce_state":[{"nonce":"n7","nonce_first_seen_time":1730000000}],"steps":[{"intent_timestamp":1730600010,"evaluation_time":1730000005,"nonce":"n7"}]},"expected":{"steps":[{"decision":"DENY","reasons":["INTENT_FRESHNESS_FUTURE"],"nonce_state":[{"nonce":"n7","nonce_first_seen_time":1730000000}]}]}},
+    {"id":"tt-neg-006","category":"replay","status":"active","description":"Stale freshness denial precedes retained-nonce replay.","input":{"replay_window_seconds":600,"max_nonces_per_agent":256,"initial_nonce_state":[{"nonce":"n7","nonce_first_seen_time":1730000000}],"steps":[{"intent_timestamp":1729999400,"evaluation_time":1730000005,"nonce":"n7"}]},"expected":{"steps":[{"decision":"DENY","reasons":["INTENT_STALE"],"nonce_state":[{"nonce":"n7","nonce_first_seen_time":1730000000}]}]}},
+    {"id":"tt-replay-future-within-band","category":"replay","status":"active","description":"Freshness-valid future intent cannot evict trusted replay state.","input":{"replay_window_seconds":600,"max_nonces_per_agent":256,"steps":[{"intent_timestamp":1730000000,"evaluation_time":1730000000,"nonce":"9"},{"intent_timestamp":1730000300,"evaluation_time":1730000000,"nonce":"9"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"nonce_state":[{"nonce":"9","nonce_first_seen_time":1730000000}]},{"decision":"DENY","reasons":["REPLAY_NONCE"],"nonce_state":[{"nonce":"9","nonce_first_seen_time":1730000000}]}]}},
+    {"id":"tt-velocity-first","category":"velocity","status":"active","description":"First action starts at trusted time.","input":{"window_seconds":60,"max_actions":1,"steps":[{"intent_timestamp":1730000010,"evaluation_time":1730000000,"nonce":"v1"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-velocity-limit-active","category":"velocity","status":"active","description":"Persisted first action followed by active-window denial.","input":{"window_seconds":60,"max_actions":1,"steps":[{"intent_timestamp":1730000000,"evaluation_time":1730000000,"nonce":"v1"},{"intent_timestamp":1730000001,"evaluation_time":1730000000,"nonce":"v2"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"velocity_window_start":1730000000,"velocity_count":1},{"decision":"DENY","reasons":["VELOCITY_EXCEEDED"],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-velocity-future-intent-active","category":"velocity","status":"active","description":"Fresh future intent cannot reset the active window.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000030,"evaluation_time":1730000010,"nonce":"v2"}]},"expected":{"steps":[{"decision":"DENY","reasons":["VELOCITY_EXCEEDED"],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-velocity-stale-boundary-active","category":"velocity","status":"active","description":"Fresh stale-boundary intent cannot reset the active window.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1729999710,"evaluation_time":1730000010,"nonce":"v2"}]},"expected":{"steps":[{"decision":"DENY","reasons":["VELOCITY_EXCEEDED"],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-velocity-before-boundary","category":"velocity","status":"active","description":"Just before boundary remains exhausted.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000059,"evaluation_time":1730000059,"nonce":"v2"}]},"expected":{"steps":[{"decision":"DENY","reasons":["VELOCITY_EXCEEDED"],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-velocity-exact-boundary","category":"velocity","status":"active","description":"Exact boundary resets at trusted time.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000030,"evaluation_time":1730000060,"nonce":"v2"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"velocity_window_start":1730000060,"velocity_count":1}]}},
+    {"id":"tt-velocity-after-boundary","category":"velocity","status":"active","description":"After boundary resets at trusted time.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000061,"evaluation_time":1730000061,"nonce":"v2"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"velocity_window_start":1730000061,"velocity_count":1}]}},
+    {"id":"tt-velocity-backward-evaluation","category":"velocity","status":"active","description":"Backward trusted time fails closed.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":0},"steps":[{"intent_timestamp":1729999999,"evaluation_time":1729999999,"nonce":"v2"}]},"expected":{"steps":[{"decision":"DENY","reasons":["STATE_INVALID"],"velocity_window_start":1730000000,"velocity_count":0}]}},
+    {"id":"tt-velocity-malformed-window-start","category":"velocity","status":"active","description":"Negative stored start fails closed.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":-1,"velocity_count":0},"steps":[{"intent_timestamp":1730000000,"evaluation_time":1730000000,"nonce":"v2"}]},"expected":{"steps":[{"decision":"DENY","reasons":["STATE_INVALID"],"velocity_window_start":-1,"velocity_count":0}]}},
+    {"id":"tt-velocity-deterministic","category":"determinism","status":"active","description":"Repeated velocity sequence is deterministic.","input":{"kind":"velocity_sequence","repeat":2,"window_seconds":60,"max_actions":2,"initial_velocity":{"velocity_window_start":1729999990,"velocity_count":0},"steps":[{"intent_timestamp":1729999990,"evaluation_time":1730000000,"nonce":"vd1"}]},"expected":{"identical_output":true}},
+    {"id":"tt-neg-003","category":"velocity","status":"active","description":"Legacy active-window case is executable.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000005,"evaluation_time":1730000005,"nonce":"v3"}]},"expected":{"steps":[{"decision":"DENY","reasons":["VELOCITY_EXCEEDED"],"velocity_window_start":1730000000,"velocity_count":1}]}},
+    {"id":"tt-pos-003","category":"velocity","status":"active","description":"Trusted time after expiry resets the window.","input":{"window_seconds":60,"max_actions":1,"initial_velocity":{"velocity_window_start":1730000000,"velocity_count":1},"steps":[{"intent_timestamp":1730000065,"evaluation_time":1730000065,"nonce":"v4"}]},"expected":{"steps":[{"decision":"ALLOW","reasons":[],"velocity_window_start":1730000065,"velocity_count":1}]}},
+    {"id":"tt-auth-verify-future-boundary","category":"authorization_verification","status":"active","description":"Issued-at exactly at verifier skew boundary is accepted.","input":{"authorization_issued_at":1730000300,"authorization_expiry":1730000360,"verifier_time":1730000000,"max_future_issued_at_skew_seconds":300},"expected":{"status":"ok","violation_codes":[]}},
+    {"id":"tt-auth-verify-future-implausible","category":"authorization_verification","status":"active","description":"Issued-at beyond verifier skew is rejected.","input":{"authorization_issued_at":1730000301,"authorization_expiry":1730000361,"verifier_time":1730000000,"max_future_issued_at_skew_seconds":300},"expected":{"status":"invalid","violation_codes":["AUTH_ISSUED_AT_IMPLAUSIBLE"]}},
+    {"id":"tt-auth-verify-expiry-boundary","category":"authorization_verification","status":"active","description":"Verifier time at expiry rejects.","input":{"authorization_issued_at":1729999940,"authorization_expiry":1730000000,"verifier_time":1730000000,"max_future_issued_at_skew_seconds":300},"expected":{"status":"invalid","violation_codes":["AUTH_EXPIRED"]}},
+    {"id":"tt-tool-window-trusted-time","category":"tool_window","status":"pending","blocked_by":"https://github.com/oxdeai/oxdeai/issues/213","description":"Tool-call windows must eventually use trusted evaluation time.","input":{"intent_timestamp":1730000300,"evaluation_time":1730000000,"tool_window_start":1730000000,"window_seconds":60},"expected":{"decision":"DENY","reasons":["TOOL_CALL_LIMIT_EXCEEDED"]}}
   ]
 }
