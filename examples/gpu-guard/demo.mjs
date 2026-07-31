@@ -1,4 +1,4 @@
-import { PolicyEngine } from "../../packages/core/dist/index.js";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "../../packages/core/dist/index.js";
 
 const DEFAULT_DEMO_SECRET = "test-secret-must-be-at-least-32-chars!!";
 const _engineSecret = process.env.OXDEAI_ENGINE_SECRET || DEFAULT_DEMO_SECRET;
@@ -8,11 +8,16 @@ if (!process.env.OXDEAI_ENGINE_SECRET) {
   );
 }
 
+// Stable demo timestamp - no Date.now(), output is fully deterministic.
+// Supplied as the trusted evaluation time; the intent carries the same value.
+const DEMO_EVALUATION_TIME = 1730000000; // 2024-10-27T04:53:20Z
+
 const engine = new PolicyEngine({
   policy_version: "v1.0.0",
   engine_secret: _engineSecret,
   authorization_ttl_seconds: 60,
-  policyId: "a".repeat(64)
+  policyId: "a".repeat(64),
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE
 });
 
 const state = {
@@ -41,7 +46,7 @@ const intent = {
   action_type: "PROVISION",
   amount: 1_500_000n,
   target: "gpu:a100",
-  timestamp: 1730000000,
+  timestamp: DEMO_EVALUATION_TIME,
   metadata_hash: "0".repeat(64),
   nonce: 1n,
   signature: "sig",
@@ -51,7 +56,7 @@ const intent = {
   tool: "aws.ec2.runInstances"
 };
 
-const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+const out = engine.evaluatePure(intent, state, DEMO_EVALUATION_TIME, { mode: "fail-fast" });
 
 console.log("decision:", out.decision);
 if (out.decision === "ALLOW") {
