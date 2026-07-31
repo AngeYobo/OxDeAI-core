@@ -22,6 +22,7 @@ Shared references:
 - [Shared adapter contract](../adapters/adapter-contract.md)
 - [Production PEP wiring guide](../architecture/pep-production-guide.md)
 - [Adapter reference architecture](../adapters/adapter-reference-architecture.md)
+- [Policy and state modeling guidance](./policy-state-modeling.md)
 
 Maintained integration guides:
 
