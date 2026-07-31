@@ -19,7 +19,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "extract": "pnpm -C ../core build && pnpm build && node dist/scripts/extract-vectors.js",
-    "validate": "pnpm -C ../core build && pnpm build && node dist/src/validate.js"
+    "validate": "pnpm -C ../core build && pnpm build && node dist/src/validate.js",
+    "validate:trusted-time": "pnpm -C ../core build && pnpm build && node dist/src/validate-trusted-time.js",
+    "test": "pnpm -C ../core build && pnpm build && node --test dist/src/trustedTimeConformance.test.js"
   },
   "dependencies": {
     "@oxdeai/core": "workspace:*"

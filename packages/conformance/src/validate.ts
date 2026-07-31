@@ -32,6 +32,7 @@ import {
   KRL_TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
 } from "./fixtures/krl-ed25519.test-only.fixture.js";
 import { CONFORMANCE_ENGINE_SECRET } from "./fixtures/conformance-engine-secret.fixture.js";
+import { runTrustedTimeConformance } from "./trustedTimeConformance.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -414,198 +415,6 @@ function validateAuthorizationVectors(ctx: CheckCtx, adapter: ConformanceAdapter
     });
     eq(ctx, `${id} canonical_signing_payload`, payload, String(expected.canonical_signing_payload));
     eq(ctx, `${id} signature`, authorization.engine_signature, String(expected.signature));
-  }
-}
-
-function validateTrustedTimeIssuanceVectors(ctx: CheckCtx): void {
-  type TrustedTimeFile = {
-    issuance_vectors: Array<JsonRecord>;
-  };
-  const file = loadJson<TrustedTimeFile>("trusted-time.json");
-  const comparisonWindows = new Map<string, Array<[number, number]>>();
-
-  for (const [index, vector] of file.issuance_vectors.entries()) {
-    const id = String(vector.id);
-    const intentTimestamp = Number(vector.intent_timestamp);
-    const evaluationTime = Number(vector.evaluation_time);
-    const effectiveTtl = Number(vector.effective_ttl);
-    const action = String(vector.authorization_action);
-    const expected = asRecord(vector.expected);
-
-    if (String(expected.decision) === "CONFIG_INVALID") {
-      let message = "";
-      try {
-        makeEngine(effectiveTtl);
-      } catch (error) {
-        message = error instanceof Error ? error.message : String(error);
-      }
-      eq(ctx, `${id} config rejection`, message.includes(String(expected.error)), true);
-      continue;
-    }
-
-    const engine = makeEngine(effectiveTtl);
-    const releasedId = "existing-authorization";
-    const state = makeBaseState();
-    if (action === "RELEASE") {
-      state.concurrency.active = { "agent-1": 1 };
-      state.concurrency.active_auths = {
-        "agent-1": {
-          [releasedId]: { expires_at: evaluationTime + 600 },
-        },
-      };
-    }
-    const intent: Intent = {
-      intent_id: `${id}-intent`,
-      agent_id: "agent-1",
-      action_type: "PAYMENT",
-      amount: 100n,
-      asset: "wallet",
-      target: "merchant-1",
-      timestamp: intentTimestamp,
-      metadata_hash: "0".repeat(64),
-      nonce: BigInt(index + 1000),
-      signature: "sig-placeholder",
-      depth: 0,
-      ...(action === "RELEASE"
-        ? { type: "RELEASE" as const, authorization_id: releasedId }
-        : { type: "EXECUTE" as const }),
-    };
-
-    if (String(expected.decision) === "PRECONDITION_INVALID") {
-      let message = "";
-      try {
-        engine.evaluatePure(intent, state, evaluationTime);
-      } catch (error) {
-        message = error instanceof Error ? error.message : String(error);
-      }
-      eq(ctx, `${id} precondition rejection`, message.includes(String(expected.error)), true);
-      eq(ctx, `${id} no audit before rejection`, engine.audit.snapshot(), []);
-      continue;
-    }
-
-    const out = engine.evaluatePure(intent, state, evaluationTime);
-    eq(ctx, `${id} decision`, out.decision, String(expected.decision));
-
-    if (out.decision === "DENY") {
-      eq(ctx, `${id} reason`, out.reasons[0], String(expected.reason));
-      eq(ctx, `${id} authorization absent`, "authorization" in out, false);
-      continue;
-    }
-
-    eq(ctx, `${id} issued_at`, out.authorization.issued_at, Number(expected.expected_issued_at));
-    eq(ctx, `${id} expiry`, out.authorization.expiry, Number(expected.expected_expiry));
-    eq(
-      ctx,
-      `${id} effective_ttl`,
-      out.authorization.expiry - out.authorization.issued_at,
-      effectiveTtl,
-    );
-    if (vector.comparison_group !== undefined) {
-      const group = String(vector.comparison_group);
-      const windows = comparisonWindows.get(group) ?? [];
-      windows.push([out.authorization.issued_at, out.authorization.expiry]);
-      comparisonWindows.set(group, windows);
-    }
-
-    if (Number(vector.repeat) === 2) {
-      const repeated = makeEngine(effectiveTtl).evaluatePure(
-        intent,
-        action === "RELEASE" ? structuredClone(state) : makeBaseState(),
-        evaluationTime,
-      );
-      eq(ctx, `${id} repeated decision`, repeated.decision, "ALLOW");
-      if (repeated.decision === "ALLOW") {
-        eq(
-          ctx,
-          `${id} identical authorization`,
-          repeated.authorization,
-          out.authorization,
-        );
-      }
-    }
-  }
-
-  const sameEvaluationWindows = comparisonWindows.get("same-evaluation-time") ?? [];
-  eq(
-    ctx,
-    "trusted-time intent timestamp noninterference",
-    sameEvaluationWindows[0],
-    sameEvaluationWindows[1],
-  );
-  const differentEvaluationWindows =
-    comparisonWindows.get("different-evaluation-time") ?? [];
-  eq(
-    ctx,
-    "trusted-time evaluation sensitivity",
-    differentEvaluationWindows[1]?.[0] - differentEvaluationWindows[0]?.[0],
-    10,
-  );
-}
-
-function validateTrustedTimeVelocityVectors(ctx: CheckCtx): void {
-  type TrustedTimeFile = {
-    velocity_vectors: Array<JsonRecord>;
-  };
-  const file = loadJson<TrustedTimeFile>("trusted-time.json");
-
-  for (const [index, vector] of file.velocity_vectors.entries()) {
-    const id = String(vector.id);
-    const intentTimestamp = Number(vector.intent_timestamp);
-    const evaluationTime = Number(vector.evaluation_time);
-    const storedWindowStart = vector.stored_window_start;
-    const currentCount = vector.current_count;
-    const expected = asRecord(vector.expected);
-    const state = makeBaseState();
-    state.velocity.config = {
-      window_seconds: Number(vector.window_seconds),
-      max_actions: Number(vector.max_actions),
-    };
-    state.velocity.counters =
-      storedWindowStart === null
-        ? {}
-        : {
-            "agent-1": {
-              window_start: Number(storedWindowStart),
-              count: Number(currentCount),
-            },
-          };
-
-    const intent: Intent = {
-      intent_id: `${id}-intent`,
-      agent_id: "agent-1",
-      action_type: "PAYMENT",
-      type: "EXECUTE",
-      amount: 100n,
-      asset: "wallet",
-      target: "merchant-1",
-      timestamp: intentTimestamp,
-      metadata_hash: "0".repeat(64),
-      nonce: BigInt(index + 20_000),
-      signature: "sig-placeholder",
-      depth: 0,
-    };
-
-    const before = structuredClone(state);
-    const evaluate = () => makeEngine().evaluatePure(intent, structuredClone(state), evaluationTime);
-    const out = evaluate();
-    eq(ctx, `${id} decision`, out.decision, String(expected.decision));
-
-    if (out.decision === "DENY") {
-      eq(ctx, `${id} reason`, out.reasons[0], String(expected.reason));
-      eq(ctx, `${id} input velocity unchanged`, state.velocity, before.velocity);
-    } else {
-      const counter = out.nextState.velocity.counters["agent-1"];
-      eq(ctx, `${id} window_start`, counter?.window_start, Number(expected.window_start));
-      eq(ctx, `${id} count`, counter?.count, Number(expected.count));
-    }
-
-    if (Number(vector.repeat) === 2) {
-      const repeated = evaluate();
-      eq(ctx, `${id} repeated decision`, repeated.decision, out.decision);
-      if (repeated.decision === "ALLOW" && out.decision === "ALLOW") {
-        eq(ctx, `${id} repeated velocity state`, repeated.nextState.velocity, out.nextState.velocity);
-      }
-    }
   }
 }
 
@@ -1766,8 +1575,9 @@ function main(): void {
 
   validateIntentHashVectors(ctx, adapter);
   validateAuthorizationVectors(ctx, adapter);
-  validateTrustedTimeIssuanceVectors(ctx);
-  validateTrustedTimeVelocityVectors(ctx);
+  const trustedTime = runTrustedTimeConformance(loadJson<unknown>("trusted-time.json"));
+  ctx.passed += trustedTime.passed;
+  ctx.failures.push(...trustedTime.failures);
   validateAuthorizationVerificationVectors(ctx, adapter);
   validateAuthorizationSignatureVectors(ctx, adapter);
   validateSnapshotVectors(ctx, adapter);

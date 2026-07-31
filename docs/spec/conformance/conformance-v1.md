@@ -120,11 +120,41 @@ From repo root:
 - Python verifier: `pnpm test:vectors:py`
 - Authorization vectors: `pnpm test:vectors:auth`
 - PEP vectors: `pnpm test:vectors:pep`
+- Trusted-time vectors: `pnpm test:vectors:trusted-time`
 - Aggregate: `pnpm test:vectors:all`
 
 Pass/Fail rule: any mismatch in canonical JSON, SHA-256, or expected error code MUST exit non-zero and is non-conformant.
 
-### 4.2 Pending vectors
+### 4.2 Trusted-time vector schema
+
+`packages/conformance/vectors/trusted-time.json` uses strict schema version
+`1.0.0` and one category-discriminated `vectors` collection. Every vector has
+an ID unique across the file, an explicit `active` or `pending` status, a
+description, category-specific `input`, and category-specific `expected`
+behavior. Pending vectors additionally require a non-empty `blocked_by` and are
+reported separately; they never count as passing.
+
+The schema names clock domains explicitly (`intent_timestamp`,
+`evaluation_time`, `authorization_issued_at`, `authorization_expiry`,
+`nonce_first_seen_time`, `velocity_window_start`, `tool_window_start`, and
+`verifier_time`). Generic or overloaded timestamp fields are forbidden.
+
+The TypeScript reference runner rejects duplicate IDs, unknown categories or
+fields, malformed status, unsupported public reason codes, and malformed or
+unsafe protocol-second values before executing any vector. Active vectors run
+through Core reference surfaces and are release-blocking through both
+`pnpm -C packages/conformance validate` and `pnpm test:vectors:all`.
+
+TypeScript executes every active trusted-time category. The current Go and
+Python harnesses claim canonicalization, Profile C verification, and SignedKRL
+verification only; they do not expose PolicyEngine freshness, issuance,
+stateful replay, velocity, or the standalone trusted-time authorization
+verification surface. Those categories are explicitly unsupported in those
+runtimes and MUST NOT be emulated in a harness merely to claim parity. All
+languages enforce the JavaScript safe-integer bound for protocol numeric data
+in the categories they implement.
+
+### 4.3 Pending vectors
 
 Locked vectors exist for canonicalization, authorization, and PEP gateway behavior as listed above. Delegation conformance is presently validated via code-level harnesses; additional locked vectors MAY be added in future versions.
 
