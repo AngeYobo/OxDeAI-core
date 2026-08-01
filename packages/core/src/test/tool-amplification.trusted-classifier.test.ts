@@ -224,9 +224,8 @@ test("classified tool call with malformed tool_limits state fails closed", () =>
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
 });
 
-// 9: window reset keyed off intent.timestamp (pre-existing window semantics,
-// unchanged by this fix), with evaluationTime kept consistent to stay fresh.
-test("tool-call window resets once elapsed time exceeds window_seconds", () => {
+// 9: window reset is keyed only off trusted evaluationTime.
+test("tool-call window resets at the trusted exact boundary", () => {
   const engine = makeEngine();
   let state = makeState((s) => {
     s.tool_limits.window_seconds = 60;
@@ -238,11 +237,11 @@ test("tool-call window resets once elapsed time exceeds window_seconds", () => {
   assert.ok(first.decision === "ALLOW");
   state = first.nextState;
 
-  const withinWindow = engine.evaluatePure(makeIntent({ tool: TOOL, nonce: 61n, timestamp: BASE_TS + 30 }), state, BASE_TS + 30);
+  const withinWindow = engine.evaluatePure(makeIntent({ tool: TOOL, nonce: 61n, timestamp: BASE_TS + 30 }), state, BASE_TS + 59);
   assert.equal(withinWindow.decision, "DENY");
 
-  const afterWindow = engine.evaluatePure(makeIntent({ tool: TOOL, nonce: 62n, timestamp: BASE_TS + 61 }), state, BASE_TS + 61);
-  assert.equal(afterWindow.decision, "ALLOW");
+  const atBoundary = engine.evaluatePure(makeIntent({ tool: TOOL, nonce: 62n, timestamp: BASE_TS + 30 }), state, BASE_TS + 60);
+  assert.equal(atBoundary.decision, "ALLOW");
 });
 
 // 10: deterministic repeated evaluation.

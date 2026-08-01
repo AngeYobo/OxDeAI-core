@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Intent } from "../../types/intent.js";
 import type { State } from "../../types/state.js";
-import type { PolicyResult } from "../../types/policy.js";
+import type { PolicyEvaluationContext, PolicyResult } from "../../types/policy.js";
 import { statelessModuleCodec } from "./_codec.js";
 
-function prune(events: Array<{ ts: number; tool?: string }>, cutoff: number): Array<{ ts: number; tool?: string }> {
-  // deterministic prune: keep only events within window
-  return events.filter((e) => e.ts >= cutoff);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isValidEvent(value: unknown): value is { ts: number; tool?: string } {
+  if (!isRecord(value) || !isNonNegativeSafeInteger(value.ts)) return false;
+  return value.tool === undefined || (typeof value.tool === "string" && value.tool.length > 0);
 }
 
 /**
@@ -40,42 +48,90 @@ export function isRateLimitedToolCall(intent: Intent, state: State): boolean {
 }
 
 /** @public */
-export function ToolAmplificationModule(intent: Intent, state: State): PolicyResult {
+export function ToolAmplificationModule(
+  intent: Intent,
+  state: State,
+  context: PolicyEvaluationContext,
+): PolicyResult {
   const agent = intent.agent_id;
 
   // Do not block RELEASE lifecycle (avoid deadlocks)
   const t = intent.type ?? "EXECUTE";
   if (t === "RELEASE") return { decision: "ALLOW", reasons: [] };
 
-  // Trusted classification only — intent.tool_call is descriptive/compat
-  // data and MUST NOT gate enforcement. See isRateLimitedToolCall above.
-  if (!isRateLimitedToolCall(intent, state)) return { decision: "ALLOW", reasons: [] };
+  const toolName = intent.tool;
+  if (typeof toolName !== "string" || toolName.length === 0) {
+    return { decision: "ALLOW", reasons: [] };
+  }
 
   const tl = state.tool_limits;
-  if (!tl || typeof tl.window_seconds !== "number" || !tl.max_calls || !tl.calls) {
+  if (
+    !isRecord(tl) ||
+    !Number.isSafeInteger(tl.window_seconds) ||
+    (tl.window_seconds as number) <= 0 ||
+    !isRecord(tl.max_calls) ||
+    !isRecord(tl.calls) ||
+    (tl.max_calls_by_tool !== undefined && !isRecord(tl.max_calls_by_tool))
+  ) {
     return { decision: "DENY", reasons: ["STATE_INVALID"] };
   }
 
   const max = tl.max_calls[agent];
-  if (max === undefined) return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  if (!isNonNegativeSafeInteger(max)) return { decision: "DENY", reasons: ["STATE_INVALID"] };
 
-  const now = intent.timestamp;
-  const cutoff = now - tl.window_seconds;
+  const configuredToolLimits = tl.max_calls_by_tool?.[agent];
+  if (configuredToolLimits !== undefined && !isRecord(configuredToolLimits)) {
+    return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  }
 
-  const current = tl.calls[agent] ?? [];
-  const pruned = prune(current, cutoff);
+  for (const configuredMax of Object.values(configuredToolLimits ?? {})) {
+    // A per-tool cap may tighten, but cannot contradict, the aggregate cap.
+    if (!isNonNegativeSafeInteger(configuredMax) || configuredMax > max) {
+      return { decision: "DENY", reasons: ["STATE_INVALID"] };
+    }
+  }
+
+  // Trusted classification only — intent.tool_call is descriptive/compat
+  // data and MUST NOT gate enforcement. See isRateLimitedToolCall above.
+  if (!isRateLimitedToolCall(intent, state)) return { decision: "ALLOW", reasons: [] };
+
+  const now = context.evaluationTime;
+  const currentValue = tl.calls[agent];
+  if (currentValue !== undefined && !Array.isArray(currentValue)) {
+    return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  }
+  const current = currentValue ?? [];
+  if (!current.every(isValidEvent) || current.length > max) {
+    return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  }
+  for (const event of current) {
+    if (event.ts > now) return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  }
+
+  for (const [tool, configuredMax] of Object.entries(configuredToolLimits ?? {})) {
+    if (!isNonNegativeSafeInteger(configuredMax)) {
+      return { decision: "DENY", reasons: ["STATE_INVALID"] };
+    }
+    const persistedCount = current.reduce((count, event) => count + (event.tool === tool ? 1 : 0), 0);
+    if (persistedCount > configuredMax) return { decision: "DENY", reasons: ["STATE_INVALID"] };
+  }
+
+  // Subtraction is exact and safe: both operands are non-negative safe
+  // integers and the backward-time case was rejected above. Exact-boundary
+  // events expire, matching the trusted velocity-window rule.
+  const pruned = current.filter((event) => now - event.ts < tl.window_seconds);
 
   // total count check
-  if (pruned.length + 1 > max) {
+  if (pruned.length >= max) {
     return { decision: "DENY", reasons: ["TOOL_CALL_LIMIT_EXCEEDED"] };
   }
 
   // optional per-tool cap check
-  const toolName = intent.tool;
   if (toolName && tl.max_calls_by_tool?.[agent]?.[toolName] !== undefined) {
-    const toolMax = tl.max_calls_by_tool[agent][toolName];
+    const toolMax = configuredToolLimits?.[toolName];
+    if (toolMax === undefined) return { decision: "DENY", reasons: ["STATE_INVALID"] };
     const toolCount = pruned.reduce((acc, e) => (e.tool === toolName ? acc + 1 : acc), 0);
-    if (toolCount + 1 > toolMax) {
+    if (toolCount >= toolMax) {
       return { decision: "DENY", reasons: ["TOOL_CALL_LIMIT_EXCEEDED"] };
     }
   }

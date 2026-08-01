@@ -87,7 +87,7 @@ const INPUT_KEYS: Record<Category, Set<string>> = {
   determinism: new Set(["kind", "repeat", "intent_timestamp", "evaluation_time", "effective_ttl", "window_seconds", "max_actions", "initial_velocity", "steps"]),
   malformed_configuration: new Set(["configuration_field", "configuration_value"]),
   protocol_seconds_validation: new Set(["case", "intent_timestamp", "evaluation_time", "effective_ttl"]),
-  tool_window: new Set(["intent_timestamp", "evaluation_time", "tool_window_start", "window_seconds"]),
+  tool_window: new Set(["window_seconds", "max_calls", "max_calls_by_tool", "initial_tool_calls", "steps"]),
 };
 const EXPECTED_KEYS: Record<Category, Set<string>> = {
   intent_freshness: new Set(["decision", "reasons"]),
@@ -98,7 +98,7 @@ const EXPECTED_KEYS: Record<Category, Set<string>> = {
   determinism: new Set(["decision", "reasons", "authorization_issued_at", "authorization_expiry", "identical_output"]),
   malformed_configuration: new Set(["throws", "error_includes"]),
   protocol_seconds_validation: new Set(["decision", "reasons", "throws", "error_includes"]),
-  tool_window: new Set(["decision", "reasons"]),
+  tool_window: new Set(["steps"]),
 };
 
 function object(value: unknown, where: string): RecordValue {
@@ -144,6 +144,17 @@ function validateNonceState(value: unknown, id: string, where: string): void {
     safeSeconds(item.nonce_first_seen_time, `${id} ${where}[${i}].nonce_first_seen_time`);
   }
 }
+function validateToolCalls(value: unknown, id: string, where: string): void {
+  for (const [i, raw] of array(value, `${id} ${where}`).entries()) {
+    const item = object(raw, `${id} ${where}[${i}]`);
+    exactKeys(item, new Set(["tool_call_time", "tool"]), `${id} ${where}[${i}]`);
+    if (typeof item.tool_call_time !== "number" || !Number.isSafeInteger(item.tool_call_time)) {
+      throw new Error(`${id} ${where}[${i}].tool_call_time: expected safe integer`);
+    }
+    text(item.tool, `${id} ${where}[${i}].tool`);
+  }
+}
+
 function validateSteps(vector: TrustedTimeVector): void {
   const steps = array(vector.input.steps, `${vector.id} input.steps`);
   if (steps.length === 0) throw new Error(`${vector.id} input.steps: must not be empty`);
@@ -161,10 +172,13 @@ function validateSteps(vector: TrustedTimeVector): void {
     const step = object(raw, `${vector.id} expected.steps[${i}]`);
     const allowed = vector.category === "replay"
       ? new Set(["decision", "reasons", "nonce_state"])
-      : new Set(["decision", "reasons", "velocity_window_start", "velocity_count"]);
+      : vector.category === "tool_window"
+        ? new Set(["decision", "reasons", "tool_calls"])
+        : new Set(["decision", "reasons", "velocity_window_start", "velocity_count"]);
     exactKeys(step, allowed, `${vector.id} expected.steps[${i}]`);
     validateDecisionExpected(step, `${vector.id} step ${i + 1}`);
     if (vector.category === "replay") validateNonceState(step.nonce_state, vector.id, `expected.steps[${i}].nonce_state`);
+    else if (vector.category === "tool_window") validateToolCalls(step.tool_calls, vector.id, `expected.steps[${i}].tool_calls`);
     else {
       // Negative starts are permitted only as an expected preservation value for the malformed-state vector.
       if (typeof step.velocity_window_start !== "number" || !Number.isSafeInteger(step.velocity_window_start)) throw new Error(`${vector.id} expected.steps[${i}].velocity_window_start: expected safe integer`);
@@ -254,11 +268,11 @@ export function parseTrustedTimeFile(raw: unknown): TrustedTimeFile {
       if (expected.throws !== undefined && expected.throws !== true) throw new Error(`${id} expected.throws: must be true`);
       if (expected.error_includes !== undefined) text(expected.error_includes, `${id} expected.error_includes`);
     } else if (vector.category === "tool_window") {
-      safeSeconds(input.intent_timestamp, `${id} input.intent_timestamp`);
-      safeSeconds(input.evaluation_time, `${id} input.evaluation_time`);
-      safeSeconds(input.tool_window_start, `${id} input.tool_window_start`);
       safeSeconds(input.window_seconds, `${id} input.window_seconds`, true);
-      validateDecisionExpected(expected, id);
+      nonNegativeCount(input.max_calls, `${id} input.max_calls`);
+      if (input.max_calls_by_tool !== undefined) nonNegativeCount(input.max_calls_by_tool, `${id} input.max_calls_by_tool`);
+      if (input.initial_tool_calls !== undefined) validateToolCalls(input.initial_tool_calls, id, "input.initial_tool_calls");
+      validateSteps(vector);
     }
   }
   return file as unknown as TrustedTimeFile;
@@ -303,31 +317,43 @@ function normalize(value: unknown): unknown {
 }
 function equal(actual: unknown, expected: unknown): boolean { return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected)); }
 
-function runSequence(vector: TrustedTimeVector, category: "replay" | "velocity"): unknown[] {
+function runSequence(vector: TrustedTimeVector, category: "replay" | "velocity" | "tool_window"): unknown[] {
   const input = vector.input;
   let state = makeState();
   if (category === "replay") {
     state.replay.window_seconds = input.replay_window_seconds as number;
     state.replay.max_nonces_per_agent = input.max_nonces_per_agent as number;
     state.replay.nonces["agent-1"] = ((input.initial_nonce_state ?? []) as RecordValue[]).map(x => ({ nonce: x.nonce as string, ts: x.nonce_first_seen_time as number }));
-  } else {
+  } else if (category === "velocity") {
     state.velocity.config = { window_seconds: input.window_seconds as number, max_actions: input.max_actions as number };
     if (input.initial_velocity) {
       const initial = input.initial_velocity as RecordValue;
       state.velocity.counters["agent-1"] = { window_start: initial.velocity_window_start as number, count: initial.velocity_count as number };
     }
+  } else {
+    state.tool_limits.window_seconds = input.window_seconds as number;
+    state.tool_limits.max_calls["agent-1"] = input.max_calls as number;
+    if (input.max_calls_by_tool !== undefined) {
+      state.tool_limits.max_calls_by_tool = { "agent-1": { search: input.max_calls_by_tool as number } };
+    }
+    state.tool_limits.calls["agent-1"] = ((input.initial_tool_calls ?? []) as RecordValue[]).map(x => ({ ts: x.tool_call_time as number, tool: x.tool as string }));
   }
   const observations: unknown[] = [];
   for (const [index, rawStep] of (input.steps as RecordValue[]).entries()) {
     const before = structuredClone(state);
-    const stepIntent = intent(vector.id, rawStep.intent_timestamp as number, rawStep.nonce as string);
+    const stepIntent = {
+      ...intent(vector.id, rawStep.intent_timestamp as number, rawStep.nonce as string),
+      ...(category === "tool_window" ? { tool: "search", tool_call: true } : {}),
+    };
     const out = makeEngine().evaluatePure(stepIntent, state, rawStep.evaluation_time as number);
     if (out.decision === "ALLOW") state = out.nextState;
     else state = before;
     const base = { decision: out.decision, reasons: [...out.reasons] };
     observations.push(category === "replay"
       ? { ...base, nonce_state: (state.replay.nonces["agent-1"] ?? []).map(x => ({ nonce: x.nonce, nonce_first_seen_time: x.ts })) }
-      : { ...base, velocity_window_start: state.velocity.counters["agent-1"]?.window_start, velocity_count: state.velocity.counters["agent-1"]?.count });
+      : category === "velocity"
+        ? { ...base, velocity_window_start: state.velocity.counters["agent-1"]?.window_start, velocity_count: state.velocity.counters["agent-1"]?.count }
+        : { ...base, tool_calls: (state.tool_limits.calls["agent-1"] ?? []).map(x => ({ tool_call_time: x.ts, tool: x.tool })) });
     void index;
   }
   return observations;
@@ -347,6 +373,12 @@ function runVector(vector: TrustedTimeVector): unknown {
     return out.decision === "ALLOW" ? { decision: out.decision, reasons: out.reasons, authorization_issued_at: out.authorization.issued_at, authorization_expiry: out.authorization.expiry } : { decision: out.decision, reasons: out.reasons };
   }
   if (vector.category === "replay" || vector.category === "velocity") return { steps: runSequence(vector, vector.category) };
+  if (vector.category === "tool_window") {
+    const first = { steps: runSequence(vector, "tool_window") };
+    const second = { steps: runSequence(vector, "tool_window") };
+    if (!equal(first, second)) throw new Error(`${vector.id}: repeated tool-window execution was not deterministic`);
+    return first;
+  }
   if (vector.category === "authorization_verification") {
     const unsigned = { auth_id: vector.id, issuer: "issuer", audience: "aud", intent_hash: "1".repeat(64), state_hash: "2".repeat(64), policy_id: "3".repeat(64), decision: "ALLOW" as const, issued_at: input.authorization_issued_at as number, expiry: input.authorization_expiry as number, kid: "k1" };
     const auth = signAuthorizationEd25519(unsigned, TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION);
@@ -393,7 +425,7 @@ function matches(actual: unknown, expected: RecordValue): boolean {
 }
 
 function mismatchDetail(vector: TrustedTimeVector, actual: unknown): string | undefined {
-  if (vector.category !== "replay" && vector.category !== "velocity") return undefined;
+  if (vector.category !== "replay" && vector.category !== "velocity" && vector.category !== "tool_window") return undefined;
   const actualSteps = (actual as { steps: unknown[] }).steps;
   const expectedSteps = vector.expected.steps as unknown[];
   const inputSteps = vector.input.steps as RecordValue[];

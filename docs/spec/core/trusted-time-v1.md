@@ -237,9 +237,9 @@ future-dated or stale — the freshness decision is reached first.
 
 ---
 
-## 7. Replay and Velocity (Trusted-Clock)
+## 7. Replay, Velocity, and Tool-Call Windows (Trusted-Clock)
 
-Replay and velocity MUST key off `evaluation_time` only.
+Replay, velocity, and tool-call windows MUST key off `evaluation_time` only.
 
 - **Replay.** A nonce's retention/eviction MUST be computed against
   `evaluation_time`, over the **effective retention window defined in §2.1**,
@@ -274,6 +274,23 @@ Replay and velocity MUST key off `evaluation_time` only.
   Missing or malformed required containers and non-finite, fractional,
   negative, or unsafe values MUST fail closed with `STATE_INVALID`.
 
+- **Tool-call windows.** Retention and new call timestamps MUST derive only
+  from `evaluation_time`. `intent.timestamp` is non-authoritative and MUST NOT
+  start, advance, reset, expire, or otherwise influence tool-call quota. A
+  persisted call remains active while
+  `evaluation_time - call.ts < tool_limits.window_seconds`; it expires when
+  the difference is greater than or equal to the window. Thus the exact
+  boundary expires the old call. If `evaluation_time < call.ts`, evaluation
+  MUST fail closed with `STATE_INVALID`. Exhausting a valid aggregate or
+  per-tool cap returns `TOOL_CALL_LIMIT_EXCEEDED`. A denial emits no tool-limit
+  state delta and consumes no quota.
+
+  Tool-window configuration and persisted events MUST be validated without
+  coercion. Window seconds MUST be a positive safe integer; limits and event
+  timestamps MUST be non-negative safe integers. Malformed containers,
+  events, limits, unsafe values, or persisted counts inconsistent with their
+  configured caps fail closed with `STATE_INVALID`.
+
 The honest path MUST remain admissible: a distinct, unused nonce inside the
 retention window, and a velocity window that legitimately reset because
 *trusted* time advanced, are both `ALLOW` (subject to the rest of the policy).
@@ -286,7 +303,7 @@ not mandate a complete global module order: other `eta-core-v1` gates
 after these, provided that the relative freshness → replay → velocity order among
 the trusted-time gates is preserved.
 
-### 7.1 Persisted velocity state and deployment migration
+### 7.1 Persisted window state and deployment migration
 
 The state schema is unchanged. Before the trusted-clock migration, existing
 `window_start` values may have been derived from attacker-controlled
@@ -305,6 +322,15 @@ Mixed-version PEP deployments can disagree because older evaluators use
 `intent.timestamp`; they SHOULD NOT share mutable velocity state during a
 rolling upgrade. Upgrade evaluators together or drain/flush counters at the
 version boundary.
+
+The same migration rule applies to `tool_limits.calls`. Legacy call timestamps
+may have been sourced from `intent.timestamp` and cannot be distinguished from
+trusted timestamps in the unchanged state schema. Deployments SHOULD flush
+legacy tool-call counters during rollout. Otherwise they MUST wait at least the
+longest configured tool window plus the maximum allowed positive legacy clock
+skew before granting quota from retained legacy state. Evaluators using old and
+new clock semantics MUST NOT share mutable tool-limit state during a rolling
+upgrade; upgrade them together or drain/flush the counters at the boundary.
 
 Distributed PEPs MUST supply non-decreasing, sufficiently synchronized trusted
 evaluation clocks. Clock rollback relative to a stored `window_start` fails
@@ -359,12 +385,7 @@ inferred from this profile:
 - verifier-side future-`issued_at` policy changes
 - SDK verifier-time changes
 - replay-store clock changes
-- velocity-window changes
-- trusted-time rules for **tool-call windows**. This profile does not make
-  tool-call-window accounting (the existing `TOOL_CALL_LIMIT_EXCEEDED`
-  enforcement path) trusted-time-aware. A follow-up MAY do so, keying the window
-  off `evaluation_time` exactly as velocity does (§7); until then tool-call
-  windows are unchanged from `eta-core-v1`.
+- velocity-window changes beyond the trusted-clock rules in §7
 - key distribution, delegation, and orchestration (already out of scope per
   `eta-core-v1`)
 
@@ -378,8 +399,8 @@ An implementation is trusted-time-conformant if:
   freshness gate (§6);
 - `issued_at` and `expiry` are minted from `evaluation_time` under the §4
   invariants;
-- replay and velocity key off `evaluation_time` only (§7);
-- the evaluation order is freshness → replay → velocity (§7);
+- replay, velocity, and tool-call windows key off `evaluation_time` only (§7);
+- the evaluation order is freshness → replay → tool-call window → velocity (§7);
 - denials mint no authorization and carry a reason code (§3, §8).
 
 Conformance MUST be verifiable via test vectors (introduced separately).

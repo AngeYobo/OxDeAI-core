@@ -13,7 +13,7 @@ const clone = <T>(value: T): T => structuredClone(value);
 test("trusted-time schema accepts the normative vector file", () => {
   const parsed = parseTrustedTimeFile(source);
   assert.equal(parsed.schema_version, "1.0.0");
-  assert.equal(parsed.vectors.length, 41);
+  assert.equal(parsed.vectors.length, 44);
 });
 
 test("trusted-time schema rejects duplicate IDs with the exact ID", () => {
@@ -42,8 +42,8 @@ test("trusted-time schema rejects malformed status", () => {
 
 test("trusted-time schema requires blocked_by on pending vectors", () => {
   const raw = clone(source);
-  delete raw.vectors.find((v: any) => v.status === "pending").blocked_by;
-  assert.throws(() => parseTrustedTimeFile(raw), /tt-tool-window-trusted-time blocked_by/);
+  raw.vectors[0].status = "pending";
+  assert.throws(() => parseTrustedTimeFile(raw), /tt-issuance-before blocked_by/);
 });
 
 for (const [label, value] of [["fractional", 1.5], ["negative", -1], ["unsafe", Number.MAX_SAFE_INTEGER + 1], ["non-finite", Infinity], ["string", "10"]] as const) {
@@ -67,9 +67,12 @@ test("an active expectation regression is a failing result with actionable ID", 
 });
 
 test("pending vectors are reported separately and never counted as passing", () => {
-  const summary = runTrustedTimeConformance(source, () => {});
-  assert.equal(summary.active, 40);
-  assert.equal(summary.passed, 40);
+  const raw = clone(source);
+  raw.vectors[0].status = "pending";
+  raw.vectors[0].blocked_by = "test-only blocker";
+  const summary = runTrustedTimeConformance(raw, () => {});
+  assert.equal(summary.active, 43);
+  assert.equal(summary.passed, 43);
   assert.equal(summary.pending, 1);
 });
 
@@ -88,6 +91,16 @@ test("velocity sequence propagates nextState and preserves it on DENY", () => {
   vector.expected.steps[1].velocity_count = 2;
   const summary = runTrustedTimeConformance(raw, () => {});
   assert.ok(summary.failures.some(f => f.startsWith("tt-velocity-limit-active:")));
+});
+
+test("tool-window sequence propagates exact nextState and reports the failing step", () => {
+  const raw = clone(source);
+  const vector = raw.vectors.find((v: any) => v.id === "tt-tool-window-trusted-time");
+  vector.expected.steps[1].tool_calls = [];
+  const summary = runTrustedTimeConformance(raw, () => {});
+  const failure = summary.failures.find(f => f.startsWith("tt-tool-window-trusted-time:"));
+  assert.ok(failure);
+  assert.match(failure, /step 2 intent_timestamp=1730000300 evaluation_time=1730000000/);
 });
 
 test("exact velocity time boundaries and deterministic repetition pass", () => {

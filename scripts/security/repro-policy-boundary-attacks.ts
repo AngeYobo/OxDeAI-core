@@ -307,12 +307,10 @@ function attackJ_velocityFutureDating(): void {
 }
 
 /**
- * I — tool-amplification window bypass by future-dating tool calls.
+ * I — tool-amplification window resistance to caller timestamp changes.
  *
- * Expected vulnerable behavior:
- *   max_calls = 1
- *   5 tool calls with timestamps beyond window
- *   all ALLOW
+ * Caller timestamps stay inside the freshness-valid band. Trusted evaluation
+ * time remains fixed for three calls, then reaches the exact boundary.
  */
 function attackI_toolWindowFutureDating(): void {
   const e = engine();
@@ -322,20 +320,27 @@ function attackI_toolWindowFutureDating(): void {
     st.tool_limits.max_calls[AGENT] = 1;
   });
 
+  const cases = [
+    { timestamp: BASE_TS, evaluationTime: EVAL_TIME },
+    { timestamp: BASE_TS + 300, evaluationTime: EVAL_TIME },
+    { timestamp: BASE_TS - 300, evaluationTime: EVAL_TIME },
+    { timestamp: BASE_TS + 3600, evaluationTime: EVAL_TIME + 3600 },
+  ];
   const outs: Outcome[] = [];
 
-  for (let i = 0; i < 5; i++) {
+  for (const [i, attack] of cases.entries()) {
     const out = e.evaluatePure(
       intent({
         intent_id: `tool-${i}`,
         asset: "tool",
         target: "tool_1",
         nonce: BigInt(200 + i),
-        timestamp: BASE_TS + i * 7200,
+        timestamp: attack.timestamp,
+        tool: "search",
         tool_call: true,
       }),
       s,
-      EVAL_TIME,
+      attack.evaluationTime,
     );
     outs.push(out);
     if (out.decision === "ALLOW") s = out.nextState;
@@ -347,9 +352,12 @@ function attackI_toolWindowFutureDating(): void {
 
   assertSignal(
     "I",
-    outs.every((o) => o.decision === "ALLOW"),
+    !(outs[0]?.decision === "ALLOW" &&
+      outs[1]?.decision === "DENY" && outs[1].reasons.includes("TOOL_CALL_LIMIT_EXCEEDED") &&
+      outs[2]?.decision === "DENY" && outs[2].reasons.includes("TOOL_CALL_LIMIT_EXCEEDED") &&
+      outs[3]?.decision === "ALLOW"),
     "VULNERABLE: tool-call limit reset by attacker-controlled future timestamps",
-    "tool future-dating rejected or bounded",
+    "caller timestamps cannot reset quota; trusted exact-boundary progression can",
   );
 }
 
