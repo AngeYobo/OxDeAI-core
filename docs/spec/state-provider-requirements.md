@@ -81,6 +81,13 @@ through atomic compare-and-set. Distributed PEP clocks SHOULD be synchronized
 and non-decreasing; a clock behind a persisted velocity `window_start` causes a
 fail-closed `STATE_INVALID` decision.
 
+The same requirements apply to trusted-time tool-call windows. Persisted
+`tool_limits.calls` timestamps and pruning are driven only by
+`evaluation_time`; caller-controlled `intent.timestamp` is non-authoritative.
+Concurrent evaluators can still race to consume the same remaining tool quota,
+so providers MUST serialize or reject conflicting updates. An evaluation clock
+behind a persisted call timestamp fails closed with `STATE_INVALID`.
+
 ### 2.3 Stale replica reads
 
 For Profile C deployments, `getState()` MUST read from the authoritative replica of the state store, not from a potentially stale secondary replica. Reading from a lagging replica can produce a hash that matches an old authorization but not the current authoritative state.

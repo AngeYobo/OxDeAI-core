@@ -145,6 +145,12 @@ unsafe protocol-second values before executing any vector. Active vectors run
 through Core reference surfaces and are release-blocking through both
 `pnpm -C packages/conformance validate` and `pnpm test:vectors:all`.
 
+The active `tool_window` category executes stateful tool-call sequences through
+`PolicyEngine.evaluatePure`. It verifies trusted window creation,
+caller-timestamp noninterference, denial without quota consumption,
+exact-boundary expiry, backward-time and malformed-state failure, exact state
+propagation, and deterministic repeated execution.
+
 TypeScript executes every active trusted-time category. The current Go and
 Python harnesses claim canonicalization, Profile C verification, and SignedKRL
 verification only; they do not expose PolicyEngine freshness, issuance,
