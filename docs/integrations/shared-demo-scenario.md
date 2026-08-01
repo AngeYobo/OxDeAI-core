@@ -97,6 +97,53 @@ This demonstrates that:
 - refusal remained explicit
 - audit and snapshot evidence were sufficient for offline verification
 
+## Concurrent Variant: Compare-And-Set On The Budget Counter
+
+The sequence above is single-threaded: each proposal is evaluated and committed
+before the next is built. Deployments are not, and the budget counter is where
+that difference shows first.
+
+This variant is optional for adapter demos. It exists because the canonical
+scenario already contains everything needed to exercise it: a counter with room
+for exactly two actions.
+
+### Scenario
+
+Two evaluators read the same state and each propose the second low-cost action:
+
+1. both read state at the same `StateVersion`, with one action's worth of
+   allowance remaining
+2. both evaluate, and both receive `ALLOW` with a proposed next state
+3. both attempt to commit
+
+### Expected Outcome
+
+Exactly one commit succeeds.
+
+- the first `setState(nextState, expectedVersion)` MUST return `true`
+- the second MUST return `false`, because the persisted version no longer
+  matches the version it read
+- the losing evaluator's guard MUST raise `OxDeAIConflictError`, and its tool
+  MUST NOT execute
+
+The budget MUST NOT be double-spent. After the exchange, exactly one of the two
+proposals has consumed allowance, and a subsequent equivalent proposal is denied
+as in the canonical sequence.
+
+### Why This Belongs In The Shared Scenario
+
+Both evaluators received `ALLOW`. The decision was correct in each case, against
+the state each of them read. What separates the two outcomes is not policy but
+the atomicity of the commit, which is why the state provider requirements make
+compare-and-set a provider obligation rather than an engine one - see
+[State Provider Requirements](../spec/state-provider-requirements.md) §2.2.
+
+This also demonstrates the distinction between the two state checks: the
+`state_hash` binding answers whether the live state is the one the authorization
+was minted against, while the `StateVersion` token answers whether anyone
+advanced it between read and write. A demo that only exercises the first will
+not show this failure mode at all.
+
 ## Reproducibility Guidance
 
 Adapters MAY differ in:
