@@ -45,11 +45,21 @@ enforcement)"*, and that `intent.tool` is used *"only as a lookup key"* which
 `intent.action_type` and `intent.target` against `state.allowlists` the same
 way.
 
-The generalisation an operator can carry into their own rules: **an
-agent-supplied field is safe as a lookup key into trusted state, and unsafe as
-a decision by itself.** A rule shaped like "allow when the intent says it is
-low-risk" places the decision in the agent's hands. A rule shaped like "look up
-the intent's declared target in an operator-maintained allowlist" does not.
+Using an agent-supplied field as a lookup key does not by itself make that field
+safe. A lookup key is security-relevant whenever it selects an agent-specific
+policy bucket, tenant namespace, tool-specific quota, privilege profile,
+allowlist entry, or any other state partition. Such a key is safe for that
+purpose only when it is authenticated, derived from trusted execution context,
+or checked against an authoritative closed mapping.
+
+Trusted state does not authenticate the key used to select within it. For
+example, a self-declared `agent_id` can select a more privileged agent profile,
+and a self-declared `tool` can select an unconfigured or differently configured
+tool quota bucket. Resolving either value against operator-maintained state
+proves nothing about whether the agent was entitled to use that key. By
+contrast, a target or other lookup key that has first been authenticated or
+checked against an authoritative closed mapping can safely select the
+corresponding trusted-state entry.
 
 ## State And Lifecycle
 
@@ -71,13 +81,23 @@ The concurrency mechanism lives in the guard configuration
 - On `false` the guard raises `OxDeAIConflictError` and blocks execution, with
   no execution side effects.
 
-Two different things are therefore being checked, and it is worth keeping them
-apart when reasoning about a deployment:
+Several different properties are involved, and it is worth keeping them apart
+when reasoning about a deployment:
 
-| Mechanism | Question it answers |
+| Property | Mechanism and limit |
 |---|---|
-| `state_hash` (`computeStateHash`) | Is the live state the same logical state the authorization was minted against? |
-| `StateVersion` (`getState`/`setState`) | Did anyone else advance the state between read and write? |
+| Snapshot integrity or consistency | `state_hash` (`computeStateHash`) shows only that the state snapshot supplied to verification matches the hash bound into the authorization. |
+| Provider authority | Comes from deployment selection and authentication of the `StateProvider`, not from `state_hash`. |
+| Freshness | Comes from the provider's consistency and freshness guarantees; a matching hash does not show that a snapshot was current or latest. |
+| Version consistency | `StateVersion` identifies the version read and lets `setState` detect that it is no longer current. |
+| Atomic state transition | The compare-and-set operation ensures that the write commits only if the expected version still holds. |
+
+In particular, a matching `state_hash` does not independently prove that the
+snapshot came from an authoritative provider, that the provider identity was
+trusted, that the snapshot was current or the latest version, or that no
+concurrent update occurred after evaluation. Likewise, CAS detects conflicting
+state transitions but does not authenticate the source of the state supplied
+to `getState()`.
 
 A budget counter is the clearest case. `state.budget.budget_limit[agent]` and
 `state.budget.spent_in_period[agent]` are keyed per agent. Two evaluators can
@@ -124,8 +144,18 @@ plays no part in replay detection; if an operator wants to correlate a retry
 with its original attempt, that is a convention they maintain in their own
 records, not something the boundary reads.
 
-The consequence for operators: retry logic mints a fresh nonce, and a replay
-refusal is not a transient error to be retried harder.
+Retry handling depends on how far the operation progressed. Before
+authorization, CAS, or execution, submitting a new proposal with a new nonce
+may be appropriate. After a definitive denial, the caller should follow the
+denial semantics rather than treating it as a transient error.
+
+After an ambiguous or unknown execution outcome, minting a fresh nonce may
+cause the action to execute twice. That case requires an application-level
+idempotency strategy: for example, reuse the same idempotency key, query the
+execution status, replay the same protected request only through an idempotent
+executor, or otherwise reconcile the outcome before issuing a new nonce. This
+does not give `intent_id` replay-protection semantics; it remains an
+application-level correlation convention.
 
 This is also the sharpest illustration of the trusted-input principle above.
 `ReplayModule` documents that window eviction is driven exclusively by the
@@ -230,23 +260,32 @@ Not expressible today — see [Recorded gaps](#recorded-gaps).
 ### Argument provenance
 
 Not expressible today — see [Recorded gaps](#recorded-gaps). `intent.metadata_hash`
-binds arguments as an opaque digest, which is enough to detect that arguments
-changed, and not enough to say which of them the operator fixed.
+binds arguments as an opaque digest. It can detect argument changes only when a
+trusted component computes or recomputes the digest using a defined,
+deterministic representation, compares it with the exact arguments that will
+be executed, and ensures that the execution adapter cannot substitute different
+arguments afterward. A proposer-controlled digest over proposer-controlled
+arguments provides no independent argument provenance, and the digest cannot
+say which arguments the operator fixed. Structured argument provenance remains
+the gap tracked in #217; this guide does not redefine `metadata_hash`.
 
 ### Per-user and per-tenant limits
 
 Partially expressible. Every enforcement counter — budget, velocity,
 concurrency, tool limits, recursion — is keyed by `agent_id`. A tenant
 dimension can be encoded into the agent identifier by convention, for example
-`tenant-a/agent-1`, and this works for accounting.
+`tenant-a/agent-1`, and this can partition accounting records, but it remains
+only a naming convention.
 
 What it does not give is a checked property: nothing in the enforcement path
-verifies that an agent belongs to the tenant its identifier claims. `DelegationV1`
-carries `delegatee`, `issuer`, `audience` and a `scope` at the artifact layer,
-so tenancy can be represented and verified there; the counters that gate the
-decision do not read it. An operator relying on identifier conventions for
-tenant isolation should know the boundary is a naming convention rather than a
-verified one.
+verifies that an agent belongs to the tenant its identifier claims.
+`DelegationV1` can bind signed delegation claims through its `delegatee`,
+`issuer`, `audience`, and `scope` fields, but it does not independently prove
+tenant membership. That requires an issuer authorized to assert the tenant
+relationship, an authenticated principal-to-tenant mapping, and state and
+policy namespaces that enforce the same tenant boundary. The counters that gate
+the decision do not read such a mapping. Verified per-tenant enforcement
+remains the gap tracked in #219.
 
 ## Recorded Gaps
 
