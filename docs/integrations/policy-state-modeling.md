@@ -157,6 +157,12 @@ executor, or otherwise reconcile the outcome before issuing a new nonce. This
 does not give `intent_id` replay-protection semantics; it remains an
 application-level correlation convention.
 
+A known CAS conflict occurs before protected execution in the guard path. The
+losing operation should re-read authoritative state and its new version before
+attempting a new authorization. That state-transition retry is distinct from
+blindly retrying an operation whose execution outcome is unknown, and does not
+by itself require minting a new execution nonce.
+
 This is also the sharpest illustration of the trusted-input principle above.
 `ReplayModule` documents that window eviction is driven exclusively by the
 trusted evaluation clock and never by `intent.timestamp`, because entries are
@@ -176,10 +182,28 @@ is two separate controls rather than one.
 assumption the code does not support: **no policy module reads it.** Outside the
 type definition it appears only in `stateGuards.ts`, which requires it to be
 present and to be a string. Nothing resets `spent_in_period` when it changes.
-Rolling a period is therefore an operator action — write the new `period_id` and
-zero the counters in the same state mutation — and `period_id` serves as the
-label that makes the two epochs distinguishable in the canonical state, not as
-a trigger.
+Rolling a period is therefore an operator action, and `period_id` serves as the
+label that makes two epochs distinguishable in canonical state rather than as a
+trigger. Updating `period_id` and resetting `spent_in_period` describes one
+logical mutation; it is not permission to overwrite provider storage directly.
+
+Under the accepted Tier 1 architecture, rollover uses an authenticated
+privileged operation against the same authoritative provider and version domain
+as guard transitions:
+
+```text
+read current authoritative state and version
+→ construct one atomic rollover mutation
+→ update period_id and reset spent_in_period together
+→ commit with the expected version
+→ reject and retry from a fresh read on conflict
+```
+
+Administrative correction and other operator-initiated state changes follow
+the same pattern. A separate authenticated administrative entry point may be
+used, but direct or out-of-band rewrites that bypass provider versioning do not
+satisfy Tier 1. This guide does not prescribe an operator identity technology,
+role model, provider API, or administrative wire format.
 
 ### Concurrency limits
 
@@ -195,16 +219,29 @@ budget.
 One property to model around: **`active_auths[...].expires_at` is stored and
 validated, but nothing evicts on it.** It is carried through the state codec and
 contributes to the state hash, and no module reads it to reclaim a slot. A
-long-running action whose `RELEASE` never arrives therefore holds its
-concurrency slot until an operator writes the state to reclaim it. An operator
-modeling long-running work owns that sweep; `expires_at` is the timestamp such a
-sweep would key on, not a mechanism that acts on its own.
+long-running action whose `RELEASE` never arrives therefore retains its
+concurrency slot under current runtime behavior.
+
+Expired-lease reclamation is tracked separately by
+[#227](https://github.com/oxdeai/oxdeai/issues/227); its final owner and algorithm
+remain unresolved. Any future automatic, operator-driven, or provider-managed
+reclamation uses trusted `evaluationTime` and the same authoritative provider
+and version domain as guard transitions. It must commit with an exact expected
+version through CAS or equivalent conflict rejection. This guidance does not
+implement reclamation, and the lease problem remains distinct from the
+approval/workflow gap tracked by #218.
 
 ### State versioning
 
 Covered by the CAS pattern above. The specification's §2 and §6 own the
 normative requirements — including that a version token is never null, and is
 not decremented or reset except through an audited rollback.
+
+For Tier 1, the guard and privileged operator mutations share that one
+authoritative version domain. `state_hash` binds an authorization to a snapshot;
+it does not establish provider authority, freshness, or successful mutation.
+CAS establishes atomic conflict handling; it does not authenticate the provider
+or establish authorization provenance.
 
 ### Failure handling
 
