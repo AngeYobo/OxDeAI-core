@@ -59,7 +59,7 @@ test(`FUZZ(${ITERS}): budget & per-action cap consistency`, () => {
     const limit = BigInt(randInt(r, 1, 50)) * 1_000_000n;
     const spent = BigInt(randInt(r, 0, 50)) * 1_000_000n;
     const cap = BigInt(randInt(r, 1, 50)) * 1_000_000n;
-    const amount = BigInt(randInt(r, 0, 60)) * 1_000_000n;
+    const amount = BigInt(randInt(r, -10, 60)) * 1_000_000n;
 
     const intent = makeIntent({
       intent_id: `i-${i}`,
@@ -83,15 +83,24 @@ test(`FUZZ(${ITERS}): budget & per-action cap consistency`, () => {
 
     const out = engine.evaluatePure(intent, state, now);
 
+    const amountInvalid = amount < 0n;
     const capViolated = amount > cap;
     const budgetViolated = spent + amount > limit;
 
-    if (capViolated) {
+    if (amountInvalid) {
+      assert.equal(out.decision, "DENY", `negative amount i=${i}`);
+      assert.deepEqual(out.reasons, ["INTENT_AMOUNT_INVALID"]);
+      assert.equal("nextState" in out, false);
+      assert.equal(state.budget.spent_in_period["agent-1"], spent);
+    } else if (capViolated) {
       assert.equal(out.decision, "DENY", `cap violation i=${i}`);
       assert.ok(out.reasons.includes("PER_ACTION_CAP_EXCEEDED"));
     } else if (budgetViolated) {
       assert.equal(out.decision, "DENY", `budget violation i=${i}`);
       assert.ok(out.reasons.includes("BUDGET_EXCEEDED"));
+    } else if (out.decision === "ALLOW") {
+      const nextSpent = out.nextState.budget.spent_in_period["agent-1"]!;
+      assert.ok(nextSpent >= spent, `budget decreased i=${i}: ${spent} -> ${nextSpent}`);
     }
   }
 });
