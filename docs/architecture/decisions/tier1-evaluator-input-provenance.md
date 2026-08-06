@@ -198,16 +198,58 @@ These properties remain distinct:
 
 | Property | Tier 1 source |
 |---|---|
-| Snapshot integrity or consistency | `state_hash` binds the authorization to the evaluated snapshot |
-| Provider authority | Guard-selected and deployment-authenticated provider |
+| Snapshot binding | `state_hash` binds the authorization to the evaluated snapshot |
+| Provider authority | Trusted provider selection and authentication |
 | Freshness | Provider consistency guarantees and version policy |
-| Version consistency | Validated version returned with the read |
-| Atomic transition | Exact-version CAS or equivalent conflict rejection |
-| Authorization binding | Existing signed authorization fields and verification |
+| Version consistency | Expected-version validation |
+| Atomic transition | CAS or equivalent atomic mutation |
+| Caller authority | Authenticated principal and authorization mapping |
+| Operator authority | Authenticated privileged mutation path |
+| Execution safety | Successful verification and CAS before execution |
 
 A matching `state_hash` does not prove that the provider was authoritative or
 the snapshot latest. Successful CAS does not authenticate the provider. This
 ADR does not prescribe the final StateProvider TypeScript interface.
+
+### Relationship to Profile C
+
+Tier 1 wraps and extends the existing versioned guard/Profile C state-provider
+contract with provenance controls: authoritative provider selection, provider
+identity validation, authenticated tenant or namespace binding, guard ownership
+of reads and transitions, and exact-version conflict rejection before protected
+execution. It does not introduce a competing state model.
+
+The normative [State Provider Requirements](../../spec/state-provider-requirements.md)
+remain the source of Profile C provider, versioning, and CAS obligations. This
+ADR records architectural ownership and trust boundaries; it does not replace
+or redefine that provider contract. A later secure-path API must conform to the
+normative requirements. If implementation requires different Profile C
+interfaces or guarantees, those changes require a dedicated specification
+change rather than reinterpretation through this ADR.
+
+### One version domain for guard and operator mutations
+
+Policy-driven guard transitions and operator-initiated maintenance mutations
+use the same authoritative StateProvider and version domain. A privileged
+operator operation may enter through a separate authenticated administrative
+API, but it cannot use a separate consistency model or bypass provider
+versioning through a direct or out-of-band storage rewrite.
+
+Period rollover, administrative correction, concurrency-lease reclamation,
+and similar maintenance operations therefore require an authenticated
+privileged operation, the authoritative provider, an exact expected version,
+and CAS or an equivalent atomic conflict-rejection primitive. If an operator
+mutation races a guard transition, only one commits and the loser observes a
+version conflict. A failed guard CAS prevents protected execution; a subsequent
+authorization attempt begins with a fresh authoritative state and version read.
+
+Reclamation of expired `active_auths` leases is tracked separately by
+[#227](https://github.com/oxdeai/oxdeai/issues/227). Its final owner and
+algorithm remain unresolved. Whether reclamation is automatic,
+operator-initiated, or provider-managed, a future implementation uses trusted
+`evaluationTime` and the same authoritative versioned mutation path. This ADR
+does not implement or resolve reclamation, and lease reclamation remains
+distinct from the approval/workflow semantics tracked by #218.
 
 ## Authoritative Policy
 
@@ -392,6 +434,11 @@ selection must be protected from proposer influence. A rolling deployment must
 not advertise Tier 1 while requests can reach older guards that interpret the
 same inputs as self-declared. Secure profiles require authenticated transport.
 
+Migration must also place existing administrative and maintenance writers in
+the authoritative provider's version domain. Direct database or storage
+rewrites that do not participate in provider versioning do not satisfy Tier 1,
+even when they are initiated by an operator.
+
 ## Reason-Code Implications
 
 The current public reason registry does not precisely classify every new
@@ -413,6 +460,11 @@ does not invent names or modify the registry.
 
 - [#197](https://github.com/oxdeai/oxdeai/issues/197) governs this provenance
   architecture and remains open for implementation.
+- [#227](https://github.com/oxdeai/oxdeai/issues/227) separately tracks
+  expiration and reclamation of concurrency leases stored in `active_auths`.
+  It touches the same state object as #218 but has a distinct scope:
+  #218 concerns approval/workflow semantics, while #227 concerns lease
+  lifecycle, expiry, and capacity reclamation.
 - [#214](https://github.com/oxdeai/oxdeai/issues/214) is dependent: default-deny
   tool policy requires trusted tool identity, then a separate schema and policy
   decision.
@@ -480,4 +532,3 @@ An implementation satisfies this decision only when:
 - the adapter selected before authorization is the adapter that executes;
 - secure and legacy guarantees are not conflated; and
 - existing protocol artifacts and canonicalization remain unchanged.
-
