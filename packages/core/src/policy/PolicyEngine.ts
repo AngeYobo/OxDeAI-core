@@ -233,6 +233,9 @@ export class PolicyEngine {
   }
 
   private validateIntent(intent: Intent): { ok: true } | { ok: false; reason: ReasonCode } {
+    if (intent.amount < 0n) {
+      return { ok: false, reason: "INTENT_AMOUNT_INVALID" };
+    }
     if (intent.type === "RELEASE" && !intent.authorization_id) {
       return { ok: false, reason: "STATE_INVALID" };
     }

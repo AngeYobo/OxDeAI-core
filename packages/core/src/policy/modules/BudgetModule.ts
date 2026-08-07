@@ -7,6 +7,8 @@ import { statelessModuleCodec } from "./_codec.js";
 
 /** @public */
 export function BudgetModule(intent: Intent, state: State): PolicyResult {
+  if (intent.amount < 0n) return { decision: "DENY", reasons: ["INTENT_AMOUNT_INVALID"] };
+
   const limit = state.budget.budget_limit[intent.agent_id];
   const spent = state.budget.spent_in_period[intent.agent_id] ?? 0n;
 
