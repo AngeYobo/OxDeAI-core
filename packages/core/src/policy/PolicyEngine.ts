@@ -10,7 +10,6 @@ import { canonicalJson, intentHash, sha256HexFromJson } from "../crypto/hashes.j
 import { engineSignHmac } from "../crypto/sign.js";
 import { engineVerifyHmac } from "../crypto/verify.js";
 import { SIGNING_DOMAINS, signEd25519, signHmacDomain } from "../crypto/signatures.js";
-import { deepMerge } from "../utils/deepMerge.js";
 import { runDecisionModules } from "./decision/index.js";
 
 import { HashChainedLog } from "../audit/HashChainedLog.js";
@@ -24,7 +23,7 @@ import { BudgetModule } from "./modules/BudgetModule.js";
 import { VelocityModule } from "./modules/VelocityModule.js";
 
 import { ReplayModule } from "./modules/ReplayModule.js";
-import { ConcurrencyModule } from "./modules/ConcurrencyModule.js";
+import { ConcurrencyModule, computeConcurrencyLeases } from "./modules/ConcurrencyModule.js";
 import { RecursionDepthModule } from "./modules/RecursionDepthModule.js";
 import { ToolAmplificationModule } from "./modules/ToolAmplificationModule.js";
 import type { StateStore, AuditSink } from "../adapters/types.js";
@@ -524,6 +523,41 @@ export class PolicyEngine {
       // Authorization is bound to the post-decision state snapshot.
       // working carries all module deltas from the decision phase.
       let working = decisionResult.nextState;
+
+      // Materialize the concurrency lease decision as a replacement assignment.
+      //
+      // Module deltas are deep-merged, and deepMerge is additive: a lease map
+      // returned by ConcurrencyModule with an entry omitted merges back onto the
+      // prior map and the omitted entry survives. Reclaiming an expired lease -
+      // and removing a cleanly released one - therefore cannot be expressed from
+      // inside a module without giving the delta protocol generic deletion
+      // semantics, which would change the state transition contract for every
+      // module.
+      //
+      // Instead ConcurrencyModule keeps the decision and the engine assigns the
+      // resulting map here, replacing rather than merging that one path. This
+      // runs inside the same evaluated transition as the triggering operation
+      // and is committed by the same exact-version CAS below, so `active` and
+      // `active_auths` move atomically.
+      //
+      // Computed from `state`, the same pre-delta input the module evaluated
+      // against, and with the same trusted `evaluationTime` - engine and module
+      // cannot diverge because there is only one definition of the decision.
+      const concurrencyLeases = computeConcurrencyLeases(intent, state, evaluationTime);
+      if (concurrencyLeases !== null) {
+        const leaseAgent = intent.agent_id;
+        working = {
+          ...working,
+          concurrency: {
+            ...working.concurrency,
+            active_auths: {
+              ...working.concurrency.active_auths,
+              [leaseAgent]: concurrencyLeases.auths
+            }
+          }
+        };
+      }
+
       const state_snapshot_hash = this.computeStateHashFor(working);
       const issued_at = evaluationTime;
       const expires_at = issued_at + effectiveTtl;
@@ -603,9 +637,12 @@ export class PolicyEngine {
 
       if (t === "EXECUTE") {
         const agent = intent.agent_id;
+        // `working` already carries the reclaimed map assigned above, so the new
+        // lease is added to the post-reclamation set rather than to the stale one.
         const current = working.concurrency.active_auths?.[agent] ?? {};
 
-        working = deepMerge(working, {
+        working = {
+          ...working,
           concurrency: {
             ...working.concurrency,
             active_auths: {
@@ -616,7 +653,7 @@ export class PolicyEngine {
               }
             }
           }
-        });
+        };
       }
 
       this.emitAudit({

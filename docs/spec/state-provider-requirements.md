@@ -88,6 +88,25 @@ Concurrent evaluators can still race to consume the same remaining tool quota,
 so providers MUST serialize or reject conflicting updates. An evaluation clock
 behind a persisted call timestamp fails closed with `STATE_INVALID`.
 
+The same requirements apply to concurrency leases. A lease in
+`concurrency.active_auths` is expired when `evaluation_time >= expires_at`, and
+expired leases are reclaimed deterministically during policy evaluation rather
+than by a background sweeper. Reclamation removes the expired entries and
+decrements `concurrency.active` by exactly the number of entries removed, so the
+counter and the lease map MUST be written in the same transition as the
+operation that triggered the reclamation — a provider that commits one without
+the other leaves capacity permanently mis-accounted. Concurrent evaluators can
+read the same leases and each reclaim them, so providers MUST serialize or
+reject all but one through atomic compare-and-set; because reclamation is a pure
+function of the state read and the trusted `evaluation_time`, the rejected
+evaluator recomputes the same transition against the winner's state rather than
+applying a second decrement. A malformed `expires_at` leaf — missing,
+non-finite, non-integer, or negative — fails closed with `STATE_INVALID`.
+
+A separately authenticated privileged provider mutation remains available as an
+operational recovery path (§4.3); it is not the normal path, and deployments
+MUST NOT rely on it to release capacity in ordinary operation.
+
 ### 2.3 Stale replica reads
 
 For Profile C deployments, `getState()` MUST read from the authoritative replica of the state store, not from a potentially stale secondary replica. Reading from a lagging replica can produce a hash that matches an old authorization but not the current authoritative state.

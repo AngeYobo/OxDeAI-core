@@ -14,6 +14,14 @@
 //   T-8  expired parent delegation  → DELEGATION_PARENT_EXPIRED (chain level)
 //   T-9  delegation scope escape    → DELEGATION_SCOPE_VIOLATION (amount)
 //   T-10 delegation scope escape    → guard blocks tool not in scope
+//   T-11 clean RELEASE removes its own lease, preserves unrelated leases
+//   T-12 expired lease reclaimed during EXECUTE
+//   T-13 exact expires_at boundary is expired
+//   T-14 saturation recovery after abandoned leases
+//   T-15 late RELEASE after reclaim → CONCURRENCY_RELEASE_INVALID
+//   T-16 malformed expires_at fails closed → STATE_INVALID
+//   T-17 reclamation removes only eligible entries
+//   T-18 two evaluators on one version cannot double-decrement
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -226,14 +234,13 @@ test("T-6 RELEASE with unknown authorization_id → CONCURRENCY_RELEASE_INVALID"
   // Tests the fail-closed path for fabricated or already-expired authorization
   // IDs presented to the RELEASE lifecycle.
   //
-  // Observation (not asserted): deepMerge is additive and cannot express key
-  // deletion. The ConcurrencyModule RELEASE path therefore cannot remove the
-  // authorization_id from active_auths via stateDelta — the stale entry
-  // persists across RELEASE. The concurrency `active` counter IS correctly
-  // decremented (scalar leaf overwrite). A second RELEASE with the same
-  // authorization_id and a *different* nonce would be ALLOWED by
-  // ConcurrencyModule (finding the stale entry), but blocked by the
-  // ReplayModule if the same nonce is reused.
+  // The observation that previously sat here — deepMerge is additive, so the
+  // RELEASE path could not remove the authorization_id from active_auths and
+  // the stale entry persisted — was fixed in #227. PolicyEngine now assigns the
+  // resulting lease map rather than merging it, so a successful RELEASE removes
+  // its own entry and a second RELEASE of the same authorization_id is DENIED by
+  // ConcurrencyModule on its own merits rather than only by nonce reuse in the
+  // ReplayModule. T-11 asserts that removal directly.
   const engine = makeEngine();
   const state  = makeState();
 
@@ -494,4 +501,244 @@ test("T-10 delegation scope escape: tool not in parentScope → DELEGATION_SCOPE
     escapeResult.violations.some((v) => v.code === "DELEGATION_SCOPE_VIOLATION"),
     `expected DELEGATION_SCOPE_VIOLATION, got: ${JSON.stringify(escapeResult.violations)}`
   );
+});
+
+// ── #227 concurrency lease lifecycle ─────────────────────────────────────────
+//
+// T-11 clean RELEASE removes its own lease, preserves unrelated leases
+// T-12 expired lease reclaimed during EXECUTE
+// T-13 exact expires_at boundary is expired (evaluationTime >= expires_at)
+// T-14 saturation recovery after abandoned leases
+// T-15 late RELEASE after reclaim → CONCURRENCY_RELEASE_INVALID
+// T-16 malformed expires_at fails closed → STATE_INVALID
+// T-17 reclamation removes only eligible entries
+// T-18 two evaluators reading one version cannot double-decrement
+
+const AUTH_A = "a".repeat(64);
+const AUTH_B = "b".repeat(64);
+const AUTH_C = "c".repeat(64);
+
+// A state whose agent already holds leases, so reclamation has something to act
+// on. `active` is seeded to the lease count, which is the consistent starting
+// point a live deployment would be in.
+function stateWithLeases(
+  leases: Record<string, { expires_at: number }>,
+  maxConcurrent = 3,
+  active = Object.keys(leases).length
+): State {
+  const s = makeState();
+  s.concurrency = {
+    max_concurrent: { "agent-1": maxConcurrent },
+    active: { "agent-1": active },
+    active_auths: { "agent-1": leases },
+  };
+  return s;
+}
+
+function leaseKeys(s: State): string[] {
+  return Object.keys(s.concurrency.active_auths["agent-1"] ?? {}).sort();
+}
+
+test("T-11 clean RELEASE removes its own active_auths entry and preserves unrelated leases", () => {
+  const engine = makeEngine();
+  const state = stateWithLeases({
+    [AUTH_A]: { expires_at: T0 + 100 },
+    [AUTH_B]: { expires_at: T0 + 100 },
+  });
+
+  const out = engine.evaluatePure(
+    { ...makeIntent({ nonce: 111n }), type: "RELEASE", authorization_id: AUTH_A },
+    state,
+    T0
+  );
+  assert.equal(out.decision, "ALLOW", "RELEASE of a live lease must ALLOW");
+
+  assert.deepEqual(
+    leaseKeys(out.nextState),
+    [AUTH_B],
+    "RELEASE must remove exactly its own lease and leave unrelated leases resident"
+  );
+  assert.equal(
+    out.nextState.concurrency.active["agent-1"],
+    1,
+    "active must be decremented by exactly the one entry removed"
+  );
+});
+
+test("T-12 expired lease is reclaimed during EXECUTE", () => {
+  const engine = makeEngine();
+  const state = stateWithLeases({ [AUTH_A]: { expires_at: T0 - 1 } }, 3, 1);
+
+  const out = engine.evaluatePure(makeIntent({ nonce: 112n }), state, T0);
+  assert.equal(out.decision, "ALLOW");
+
+  const keys = leaseKeys(out.nextState);
+  assert.ok(!keys.includes(AUTH_A), "expired lease must not remain resident");
+  assert.equal(keys.length, 1, "only the newly issued lease remains");
+  assert.equal(
+    out.nextState.concurrency.active["agent-1"],
+    1,
+    "one reclaimed (-1) plus one issued (+1) leaves active at 1"
+  );
+});
+
+test("T-13 a lease at exactly expires_at is expired and reclaimable", () => {
+  const engine = makeEngine();
+
+  // evaluationTime === expires_at → expired (strict zero-tolerance boundary).
+  const atBoundary = engine.evaluatePure(
+    makeIntent({ nonce: 113n }),
+    stateWithLeases({ [AUTH_A]: { expires_at: T0 } }, 3, 1),
+    T0
+  );
+  assert.equal(atBoundary.decision, "ALLOW");
+  assert.ok(
+    !leaseKeys(atBoundary.nextState).includes(AUTH_A),
+    "at expires_at the lease is no longer live and must be reclaimed"
+  );
+
+  // One second earlier the same lease is still live and must be retained.
+  const beforeBoundary = engine.evaluatePure(
+    makeIntent({ nonce: 114n }),
+    stateWithLeases({ [AUTH_A]: { expires_at: T0 } }, 3, 1),
+    T0 - 1
+  );
+  assert.equal(beforeBoundary.decision, "ALLOW");
+  assert.ok(
+    leaseKeys(beforeBoundary.nextState).includes(AUTH_A),
+    "one second before expires_at the lease is still live and must be retained"
+  );
+});
+
+test("T-14 saturation recovers after every lease is abandoned", () => {
+  const engine = makeEngine();
+  // Both slots held by leases whose holder never sent a RELEASE.
+  const state = stateWithLeases(
+    { [AUTH_A]: { expires_at: T0 - 5 }, [AUTH_B]: { expires_at: T0 - 5 } },
+    2,
+    2
+  );
+
+  // Before expiry the agent is genuinely saturated.
+  const saturated = engine.evaluatePure(makeIntent({ nonce: 115n }), state, T0 - 10);
+  assert.equal(saturated.decision, "DENY", "live leases must still consume capacity");
+  assert.deepEqual(saturated.reasons, ["CONCURRENCY_LIMIT_EXCEEDED"]);
+
+  // Once expired, capacity returns without any operator intervention.
+  const recovered = engine.evaluatePure(makeIntent({ nonce: 116n }), state, T0);
+  assert.equal(recovered.decision, "ALLOW", "expired leases must stop consuming capacity");
+  assert.equal(leaseKeys(recovered.nextState).length, 1, "both abandoned leases reclaimed");
+  assert.equal(recovered.nextState.concurrency.active["agent-1"], 1);
+});
+
+test("T-15 RELEASE arriving after its lease was reclaimed → CONCURRENCY_RELEASE_INVALID", () => {
+  const engine = makeEngine();
+  const state = stateWithLeases({ [AUTH_A]: { expires_at: T0 - 1 } }, 3, 1);
+
+  const out = engine.evaluatePure(
+    { ...makeIntent({ nonce: 117n }), type: "RELEASE", authorization_id: AUTH_A },
+    state,
+    T0
+  );
+  assert.equal(out.decision, "DENY", "a late RELEASE must not be silently idempotent");
+  assert.deepEqual(out.reasons, ["CONCURRENCY_RELEASE_INVALID"]);
+});
+
+test("T-16 malformed expires_at fails closed with STATE_INVALID", () => {
+  const engine = makeEngine();
+
+  const malformed: ReadonlyArray<readonly [string, number]> = [
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["non-integer", T0 + 0.5],
+    ["negative", -1],
+  ];
+
+  for (const [label, bad] of malformed) {
+    const state = stateWithLeases({ [AUTH_A]: { expires_at: bad } }, 3, 1);
+
+    const exec = engine.evaluatePure(makeIntent({ nonce: 118n }), state, T0);
+    assert.equal(exec.decision, "DENY", `EXECUTE must fail closed on ${label} expires_at`);
+    assert.deepEqual(exec.reasons, ["STATE_INVALID"], `EXECUTE reason for ${label}`);
+
+    const rel = engine.evaluatePure(
+      { ...makeIntent({ nonce: 119n }), type: "RELEASE", authorization_id: AUTH_A },
+      state,
+      T0
+    );
+    assert.equal(rel.decision, "DENY", `RELEASE must fail closed on ${label} expires_at`);
+    assert.deepEqual(rel.reasons, ["STATE_INVALID"], `RELEASE reason for ${label}`);
+  }
+});
+
+test("T-17 reclamation removes only eligible entries", () => {
+  const engine = makeEngine();
+  const state = stateWithLeases(
+    {
+      [AUTH_A]: { expires_at: T0 - 10 }, // expired  → reclaim
+      [AUTH_B]: { expires_at: T0 },      // boundary → reclaim
+      [AUTH_C]: { expires_at: T0 + 10 }, // live     → keep
+    },
+    3,
+    3
+  );
+
+  const out = engine.evaluatePure(makeIntent({ nonce: 120n }), state, T0);
+  assert.equal(out.decision, "ALLOW");
+
+  const keys = leaseKeys(out.nextState);
+  assert.ok(keys.includes(AUTH_C), "a live lease must survive reclamation");
+  assert.ok(!keys.includes(AUTH_A) && !keys.includes(AUTH_B), "only expired leases are removed");
+  assert.equal(keys.length, 2, "the live lease plus the newly issued one");
+
+  // active is decremented by exactly the number removed (3 - 2), then the new
+  // lease adds one back — which is also the resulting map size.
+  assert.equal(out.nextState.concurrency.active["agent-1"], 2);
+  assert.equal(
+    out.nextState.concurrency.active["agent-1"],
+    keys.length,
+    "scalar active must agree with the resulting lease map"
+  );
+});
+
+test("T-18 two evaluators reading the same version cannot double-decrement", () => {
+  // Core's StateStore is a plain get/set; the exact-version CAS that serializes
+  // committers lives in the Profile C StateProvider. What is asserted here is
+  // the property that makes that CAS sufficient: reclamation is a pure function
+  // of (intent, state, evaluationTime), so two evaluators racing from the same
+  // version compute the *same* transition rather than two stacking ones.
+  // Whichever wins the CAS commits exactly one decrement; the loser is rejected
+  // and re-evaluates against the winner's state.
+  const engine = makeEngine();
+  const base = stateWithLeases(
+    { [AUTH_A]: { expires_at: T0 - 1 }, [AUTH_B]: { expires_at: T0 + 100 } },
+    3,
+    2
+  );
+
+  const releaseB = { ...makeIntent({ nonce: 121n }), type: "RELEASE", authorization_id: AUTH_B } as Intent;
+  const first = engine.evaluatePure(releaseB, base, T0);
+  const second = engine.evaluatePure(releaseB, base, T0);
+  assert.equal(first.decision, "ALLOW");
+  assert.equal(second.decision, "ALLOW");
+
+  // AUTH_A reclaimed (-1) and AUTH_B released (-1): exactly two removals, once.
+  assert.equal(first.nextState.concurrency.active["agent-1"], 0);
+  assert.equal(
+    second.nextState.concurrency.active["agent-1"],
+    first.nextState.concurrency.active["agent-1"],
+    "the same version must yield the same counter, never a stacked decrement"
+  );
+  assert.deepEqual(leaseKeys(first.nextState), []);
+  assert.deepEqual(leaseKeys(second.nextState), leaseKeys(first.nextState));
+
+  // Re-evaluating the loser against the winner's committed state is the DENY
+  // that prevents the second decrement from ever being applied.
+  const loserRetry = engine.evaluatePure(
+    { ...makeIntent({ nonce: 122n }), type: "RELEASE", authorization_id: AUTH_B },
+    first.nextState,
+    T0
+  );
+  assert.equal(loserRetry.decision, "DENY");
+  assert.deepEqual(loserRetry.reasons, ["CONCURRENCY_RELEASE_INVALID"]);
 });
