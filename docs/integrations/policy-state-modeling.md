@@ -216,20 +216,25 @@ replay and concurrency only — so release paths are not gated on the same polic
 surface as execution, and a release cannot be starved by, say, an exhausted
 budget.
 
-One property to model around: **`active_auths[...].expires_at` is stored and
-validated, but nothing evicts on it.** It is carried through the state codec and
-contributes to the state hash, and no module reads it to reclaim a slot. A
-long-running action whose `RELEASE` never arrives therefore retains its
-concurrency slot under current runtime behavior.
+`active_auths[...].expires_at` is evicted on. A lease is expired when
+`evaluationTime >= expires_at`, and expired leases are reclaimed during policy
+evaluation rather than by a background sweeper, so a long-running action whose
+`RELEASE` never arrives stops holding its concurrency slot once the lease
+expires. Reclamation uses trusted `evaluationTime` and the same authoritative
+provider and version domain as guard transitions, and the counter and the lease
+map move together in the transition that triggered it, committed through the
+same exact-version CAS ([#227](https://github.com/oxdeai/oxdeai/issues/227)). The
+lease problem remains distinct from the approval/workflow gap tracked by #218.
 
-Expired-lease reclamation is tracked separately by
-[#227](https://github.com/oxdeai/oxdeai/issues/227); its final owner and algorithm
-remain unresolved. Any future automatic, operator-driven, or provider-managed
-reclamation uses trusted `evaluationTime` and the same authoritative provider
-and version domain as guard transitions. It must commit with an exact expected
-version through CAS or equivalent conflict rejection. This guidance does not
-implement reclamation, and the lease problem remains distinct from the
-approval/workflow gap tracked by #218.
+One property to model around: **`active` is an authoritative input, not a value
+derived from `active_auths`.** State must satisfy `active[agent] >=` the number
+of resident entries in `active_auths[agent]`. A counter *above* the tracked
+lease count is intentionally valid — it can represent capacity you account for
+but never lease-track, and reclamation decrements rather than recomputes so that
+capacity survives. A counter *below* it fails closed with `STATE_INVALID`.
+Because a missing `active[agent]` reads as `0`, populating `active_auths`
+without setting `active` denies every call for that agent: set `active`
+explicitly when adopting lease tracking.
 
 ### State versioning
 

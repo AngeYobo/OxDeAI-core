@@ -103,6 +103,19 @@ evaluator recomputes the same transition against the winner's state rather than
 applying a second decrement. A malformed `expires_at` leaf — missing,
 non-finite, non-integer, or negative — fails closed with `STATE_INVALID`.
 
+The counter is an authoritative input, not a value inferred from the lease map.
+Before any reclamation is applied, state MUST satisfy `concurrency.active[agent]
+>= the number of resident entries in concurrency.active_auths[agent]` for the
+acting agent. A counter above the tracked lease count is intentionally valid — a
+deployment may account capacity in `active` that it never lease-tracked, and
+reclamation decrements rather than recomputes so that capacity keeps being
+counted — while a counter below it offers capacity the resident leases have
+already consumed, and fails closed with `STATE_INVALID`. Because a missing
+`concurrency.active[agent]` entry reads as `0`, a provider that populates
+`active_auths` without setting `active` is under-counted by this rule and its
+agents fail closed; deployments adopting lease tracking MUST set `active`
+explicitly as a migration step rather than relying on it being inferred.
+
 A separately authenticated privileged provider mutation remains available as an
 operational recovery path (§4.3); it is not the normal path, and deployments
 MUST NOT rely on it to release capacity in ordinary operation.
