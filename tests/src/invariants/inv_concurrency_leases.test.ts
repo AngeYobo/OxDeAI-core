@@ -158,3 +158,59 @@ test("INV-ConcurrencyLeases: expired leases stop consuming capacity, live ones d
   );
   assert.equal(recovered.nextState.concurrency.active["agent-1"], 1);
 });
+
+/**
+ * The counter is an authoritative input, not a hint. `active` may exceed the
+ * tracked lease count — a deployment can account capacity it never
+ * lease-tracked — but it may never fall below it: that state hands out capacity
+ * the tracked leases have already consumed.
+ *
+ * The invariant this pins is that no reachable transition can produce a state
+ * where live tracked leases outnumber `max_concurrent`.
+ */
+test("INV-ConcurrencyLeases: active may over-count tracked leases but never under-count", () => {
+  const engine = makeEngine();
+  const AUTH_A = "a".repeat(64);
+  const AUTH_B = "b".repeat(64);
+  const AUTH_C = "c".repeat(64);
+
+  // Under-count fails closed rather than being normalized.
+  const underCounted = baseState(1);
+  underCounted.concurrency.active = { "agent-1": 0 };
+  underCounted.concurrency.active_auths = { "agent-1": { [AUTH_A]: { expires_at: T0 + 100 } } };
+
+  const denied = engine.evaluatePure(execIntent(1n, T0), underCounted, T0);
+  assert.equal(denied.decision, "DENY", "active < tracked leases must fail closed");
+  assert.ok(
+    denied.decision === "DENY" && denied.reasons.includes("STATE_INVALID"),
+    "under-counted state is invalid, not a limit breach"
+  );
+
+  // Over-count is valid and conservative, and the untracked capacity survives
+  // the transition instead of being silently released.
+  const overCounted = baseState(4);
+  overCounted.concurrency.active = { "agent-1": 2 };
+  overCounted.concurrency.active_auths = { "agent-1": { [AUTH_B]: { expires_at: T0 + 100 } } };
+
+  const allowed = engine.evaluatePure(execIntent(2n, T0), overCounted, T0);
+  assert.equal(allowed.decision, "ALLOW", "active > tracked leases must remain valid");
+  if (allowed.decision !== "ALLOW") throw new Error("expected ALLOW");
+  assert.equal(
+    allowed.nextState.concurrency.active["agent-1"],
+    3,
+    "the one untracked slot must still be counted after the transition"
+  );
+
+  // The point of the precondition: an agent at its limit cannot be talked past
+  // it by an under-counted counter.
+  const atLimit = baseState(1);
+  atLimit.concurrency.active = { "agent-1": 1 };
+  atLimit.concurrency.active_auths = { "agent-1": { [AUTH_C]: { expires_at: T0 + 100 } } };
+
+  const blocked = engine.evaluatePure(execIntent(3n, T0), atLimit, T0);
+  assert.equal(blocked.decision, "DENY", "a live lease at the limit must block");
+  assert.ok(
+    blocked.decision === "DENY" && blocked.reasons.includes("CONCURRENCY_LIMIT_EXCEEDED"),
+    "consistent state at the limit is a limit breach, not invalid state"
+  );
+});

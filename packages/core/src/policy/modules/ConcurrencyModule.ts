@@ -34,15 +34,19 @@ export interface ConcurrencyLeaseTransition {
  * This is the same strict zero-tolerance boundary AuthorizationV1 uses: at the
  * exact `expires_at` the lease is no longer live and may be reclaimed.
  *
- * Returns `null` when any of the agent's resident leases carries a malformed
- * `expires_at` (missing, non-finite, non-integer, or negative), so callers fail
- * closed with `STATE_INVALID`. No "maximum plausible TTL" ceiling is applied -
- * clock-regression handling must not depend on an implicit deployment
- * assumption, and no such ceiling is an authoritative policy input today.
+ * Returns `null` - so callers fail closed with `STATE_INVALID` - in two cases:
  *
- * Only the acting agent's leases are read. Another agent's corrupt entry cannot
- * deny this agent, which keeps one malformed leaf from bricking every agent
- * sharing the state.
+ *  1. The agent's scalar `active` counter is lower than the number of leases
+ *     actually tracked for it (see the precondition below).
+ *  2. Any of the agent's resident leases carries a malformed `expires_at`
+ *     (missing, non-finite, non-integer, or negative). No "maximum plausible
+ *     TTL" ceiling is applied - clock-regression handling must not depend on an
+ *     implicit deployment assumption, and no such ceiling is an authoritative
+ *     policy input today.
+ *
+ * Only the acting agent's leases and counter are read. Another agent's corrupt
+ * entry cannot deny this agent, which keeps one malformed leaf from bricking
+ * every agent sharing the state.
  *
  * This is the single definition of the reclamation decision. `PolicyEngine`
  * calls it with the same `(intent, state, evaluationTime)` to materialize
@@ -58,11 +62,32 @@ export function computeConcurrencyLeases(
 ): ConcurrencyLeaseTransition | null {
   const agent = intent.agent_id;
   const resident = state.concurrency?.active_auths?.[agent] ?? {};
+  const residentIds = Object.keys(resident);
+
+  // Authoritative-state consistency precondition, evaluated before any
+  // reclamation is applied:
+  //
+  //   active >= number of tracked resident leases
+  //
+  // Equality is deliberately NOT required. `active > tracked` stays valid and
+  // conservative - a deployment may account capacity in `active` that it never
+  // lease-tracked, and that capacity must keep being counted.
+  //
+  // `active < tracked` is incoherent authoritative state and fails closed
+  // rather than being silently normalized. Under-counting hands out capacity
+  // the tracked leases have already consumed: with max_concurrent 1, active 0
+  // and one live tracked lease, an EXECUTE would see zero usage, ALLOW, and
+  // leave two live leases against a limit of one.
+  //
+  // Establishing this here is also what lets the callers subtract without a
+  // floor: removed <= residentIds.length <= active, so active - removed >= 0.
+  const active = state.concurrency?.active?.[agent] ?? 0;
+  if (active < residentIds.length) return null;
 
   const auths: Record<string, { expires_at: number }> = {};
   let removed = 0;
 
-  for (const authId of Object.keys(resident)) {
+  for (const authId of residentIds) {
     const lease = resident[authId];
     if (!lease || !isProtocolSeconds(lease.expires_at)) return null;
 
@@ -108,12 +133,17 @@ export function ConcurrencyModule(
   const leases = computeConcurrencyLeases(intent, state, context.evaluationTime);
   if (leases === null) return { decision: "DENY", reasons: ["STATE_INVALID"] };
 
-  // Reclaiming N expired leases decrements `active` by exactly N, floored at
-  // zero. The counter is decremented rather than recomputed from the map size:
-  // a deployment that tracks `active` without populating `active_auths` keeps
-  // its existing accounting, so reclamation cannot silently release capacity
-  // that was never lease-tracked.
-  const activeAfterReclaim = Math.max(0, active - leases.removed);
+  // Reclaiming N expired leases decrements `active` by exactly N. The counter
+  // is decremented rather than recomputed from the map size: a deployment that
+  // tracks `active` without populating `active_auths` keeps its existing
+  // accounting, so reclamation cannot silently release capacity that was never
+  // lease-tracked.
+  //
+  // No zero floor is needed. computeConcurrencyLeases has already established
+  // active >= resident leases, and removed <= resident leases, so this cannot
+  // go negative. A floor here would mask exactly the under-count state that
+  // precondition now rejects.
+  const activeAfterReclaim = active - leases.removed;
 
   // --- RELEASE path ---
   if (t === "RELEASE") {

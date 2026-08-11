@@ -22,6 +22,8 @@
 //   T-16 malformed expires_at fails closed → STATE_INVALID
 //   T-17 reclamation removes only eligible entries
 //   T-18 two evaluators on one version cannot double-decrement
+//   T-19 EXECUTE fails closed when active under-counts tracked leases
+//   T-20 RELEASE shares that under-count precondition
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -513,6 +515,8 @@ test("T-10 delegation scope escape: tool not in parentScope → DELEGATION_SCOPE
 // T-16 malformed expires_at fails closed → STATE_INVALID
 // T-17 reclamation removes only eligible entries
 // T-18 two evaluators reading one version cannot double-decrement
+// T-19 EXECUTE fails closed when active under-counts tracked leases
+// T-20 RELEASE shares that under-count precondition
 
 const AUTH_A = "a".repeat(64);
 const AUTH_B = "b".repeat(64);
@@ -741,4 +745,64 @@ test("T-18 two evaluators reading the same version cannot double-decrement", () 
   );
   assert.equal(loserRetry.decision, "DENY");
   assert.deepEqual(loserRetry.reasons, ["CONCURRENCY_RELEASE_INVALID"]);
+});
+
+test("T-19 EXECUTE fails closed when active under-counts tracked leases", () => {
+  const engine = makeEngine();
+
+  // AngeYobo's case on #231: max_concurrent 1, active 0, one live tracked
+  // lease. Without the precondition an EXECUTE reads zero usage, ALLOWs, and
+  // leaves two live leases against a limit of one.
+  const underCounted = stateWithLeases({ [AUTH_A]: { expires_at: T0 + 100 } }, 1, 0);
+
+  const denied = engine.evaluatePure(makeIntent({ nonce: 120n }), underCounted, T0);
+  assert.equal(denied.decision, "DENY", "active < tracked leases must fail closed");
+  assert.deepEqual(denied.reasons, ["STATE_INVALID"], "under-count is invalid state, not a limit breach");
+
+  // Under-count is rejected even with headroom on max_concurrent, because the
+  // defect is in the authoritative state, not in the limit.
+  const roomySpare = stateWithLeases(
+    { [AUTH_A]: { expires_at: T0 + 100 }, [AUTH_B]: { expires_at: T0 + 100 } },
+    9,
+    1
+  );
+  const deniedRoomy = engine.evaluatePure(makeIntent({ nonce: 121n }), roomySpare, T0);
+  assert.equal(deniedRoomy.decision, "DENY", "under-count is invalid regardless of spare capacity");
+  assert.deepEqual(deniedRoomy.reasons, ["STATE_INVALID"]);
+
+  // Equality is NOT required. active > tracked stays valid and conservative:
+  // a deployment may account capacity it never lease-tracked, and that capacity
+  // must keep being counted rather than being normalized away.
+  const overCounted = stateWithLeases({ [AUTH_A]: { expires_at: T0 + 100 } }, 3, 2);
+  const allowed = engine.evaluatePure(makeIntent({ nonce: 122n }), overCounted, T0);
+  assert.equal(allowed.decision, "ALLOW", "active > tracked leases must remain valid");
+  assert.equal(
+    allowed.nextState.concurrency.active["agent-1"],
+    3,
+    "untracked capacity is preserved: nothing reclaimed, one issued"
+  );
+});
+
+test("T-20 RELEASE shares the under-count precondition and fails closed on it", () => {
+  const engine = makeEngine();
+
+  // Two live tracked leases, active seeded at 1. The RELEASE names a lease that
+  // really is resident, so the only defect is the counter.
+  const state = stateWithLeases(
+    { [AUTH_A]: { expires_at: T0 + 100 }, [AUTH_B]: { expires_at: T0 + 100 } },
+    3,
+    1
+  );
+
+  const out = engine.evaluatePure(
+    { ...makeIntent({ nonce: 123n }), type: "RELEASE", authorization_id: AUTH_A },
+    state,
+    T0
+  );
+  assert.equal(out.decision, "DENY", "RELEASE must fail closed on under-counted state");
+  assert.deepEqual(
+    out.reasons,
+    ["STATE_INVALID"],
+    "the state precondition precedes CONCURRENCY_RELEASE_INVALID: the lease is resident, the counter is wrong"
+  );
 });
