@@ -1,8 +1,31 @@
+import { generateKeyPairSync } from "node:crypto";
 import { PolicyEngine } from "../../packages/core/src/policy/PolicyEngine.js";
 import { RECOMMENDED_TRUSTED_TIME_PROFILE } from "../../packages/core/src/policy/trustedTimeProfile.js";
 import type { EvaluatePureOutput } from "../../packages/core/src/policy/PolicyEngine.js";
 import type { State } from "../../packages/core/src/types/state.js";
 import type { Intent } from "../../packages/core/src/types/intent.js";
+// The Tier 1 secure-guard package (@oxdeai/guard) is built against the
+// published `@oxdeai/core` (dist) types, which are a separate nominal type
+// from the `../../packages/core/src/...` PolicyEngine imported above (private
+// field identity differs across declarations even when structurally
+// identical). The engine handed to createSecureGuard()'s config must
+// therefore come from the same "@oxdeai/core" resolution the guard package
+// itself uses — everything else in this file keeps using the legacy-profile
+// src imports unchanged.
+import { PolicyEngine as CorePolicyEngine } from "@oxdeai/core";
+import type { KeySet } from "@oxdeai/core";
+import { buildState } from "../../packages/sdk/src/index.js";
+import {
+  createSecureGuard,
+  createTrustedExecutionContext,
+  OxDeAIProvenanceConflictError,
+} from "../../packages/guard/src/index.js";
+import type {
+  SecureGuardOptions,
+  ProposedAction,
+  OxDeAIGuardConfig,
+  GuardDecisionRecord,
+} from "../../packages/guard/src/index.js";
 
 const AGENT = "agent-1";
 const POLICY_VERSION = "v1-test";
@@ -139,8 +162,17 @@ function toolIntent(nonce: number): Partial<Intent> {
   };
 }
 
+// Direct engine.evaluatePure() calls below carry no Tier 1 provenance
+// guarantee — every intent field (agent_id, depth, tool, ...) is exactly the
+// self-declared value the "attacker" supplied, with no trusted execution
+// context in the loop. This is the profile every pre-#234 caller runs under,
+// and it remains a first-class supported path (OxDeAIGuard has no such
+// guarantee either); the label makes that boundary explicit rather than
+// changing what these cases mean.
+const LEGACY_PROFILE_LABEL = "LEGACY PROFILE";
+
 function print(name: string, out: Outcome): void {
-  console.log(`\n=== ${name} ===`);
+  console.log(`\n=== [${LEGACY_PROFILE_LABEL}] ${name} ===`);
   console.log("decision:", out.decision);
   console.log("reasons:", JSON.stringify(out.reasons ?? []));
   if (out.decision === "ALLOW") {
@@ -151,9 +183,9 @@ function print(name: string, out: Outcome): void {
 
 function assertSignal(name: string, condition: boolean, vulnerable: string, resisted: string): void {
   if (condition) {
-    console.log(`SECURITY SIGNAL: ${vulnerable}`);
+    console.log(`[${LEGACY_PROFILE_LABEL}] SECURITY SIGNAL: ${vulnerable}`);
   } else {
-    console.log(`RESISTED / FIXED: ${resisted}`);
+    console.log(`[${LEGACY_PROFILE_LABEL}] RESISTED / FIXED: ${resisted}`);
   }
 }
 
@@ -616,7 +648,313 @@ function attackM_toolNameSelfDeclared(): void {
   );
 }
 
-function main(): void {
+// ── Tier 1 secure-profile fixtures (#234) ───────────────────────────────────
+//
+// These cases run through createSecureGuard(), not engine.evaluatePure()
+// directly. A TrustedExecutionContext supplies authoritative premises
+// (agentId, depth, optionally tool); the secure guard reconciles those
+// against the proposer's declared claims BEFORE evaluation, authorization
+// issuance, state mutation or execution. A conflict raises
+// OxDeAIProvenanceConflictError and the shared enforcement body (state read,
+// PolicyEngine.evaluatePure, authorization verification, replay, CAS,
+// execution) is never reached.
+//
+// This does NOT prove the guard authenticates the caller or derives the
+// principal-to-agent mapping — createTrustedExecutionContext() is called
+// directly here, the same way a PEP would call it after its own
+// authentication step. What this proves is narrower and still load-bearing:
+// once an authoritative premise IS supplied through trusted context, the
+// proposer's self-declared claim cannot override it.
+const TIER1_PROFILE_LABEL = "TIER 1 SECURE PROFILE";
+
+const SECURE_KEYPAIR = generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { format: "pem", type: "pkcs8" },
+  publicKeyEncoding: { format: "pem", type: "spki" },
+});
+
+const SECURE_KEYSET: KeySet = {
+  issuer: "repro-secure-issuer",
+  version: "v1",
+  keys: [{ kid: "k1", alg: "Ed25519", public_key: SECURE_KEYPAIR.publicKey.toString() }],
+};
+
+const SECURE_AUDIENCE = "repro-secure-audience";
+const SECURE_TOOL_TARGET = "tool_1";
+
+const SINGLE_TENANT: SecureGuardOptions = { tenancy: "single-tenant" };
+
+function secureEngine(): CorePolicyEngine {
+  return new CorePolicyEngine({
+    policy_version: POLICY_VERSION,
+    engine_secret: SECRET,
+    authorization_signing_alg: "Ed25519",
+    authorization_signing_kid: "k1",
+    authorization_issuer: SECURE_KEYSET.issuer,
+    authorization_audience: SECURE_AUDIENCE,
+    authorization_ttl_seconds: 600,
+    authorization_private_key_pem: SECURE_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
+  });
+}
+
+// Deployment-level state store backing the secure guard's shared enforcement
+// body. Only reached on the ALLOW path (M-secure without a trusted tool
+// premise) — the conflict cases below never get this far.
+function makeSecureGuardConfig(
+  agentId: string,
+  onDecision?: (record: GuardDecisionRecord) => void,
+): OxDeAIGuardConfig {
+  let currentState: State = buildState({
+    agent_id: agentId,
+    policy_version: POLICY_VERSION,
+    allow_action_types: ["PROVISION"],
+    allow_assets: [],
+    allow_targets: [SECURE_TOOL_TARGET],
+    budget_limit: 1_000_000_000n,
+    max_amount_per_action: 1_000_000_000n,
+    velocity_max_actions: 1000,
+    max_concurrent: 1000,
+    max_depth: 1000,
+    tool_max_calls: 1000,
+  });
+  let currentVersion = 0;
+
+  return {
+    engine: secureEngine(),
+    getState: () => ({ state: currentState, version: currentVersion }),
+    setState: (s, v) => {
+      if (v !== currentVersion) return false;
+      currentState = s;
+      currentVersion++;
+      return true;
+    },
+    trustedKeySets: [SECURE_KEYSET],
+    expectedAudience: SECURE_AUDIENCE,
+    ...(onDecision ? { onDecision } : {}),
+  };
+}
+
+// Proposer-controlled action. `context` is where a proposer's declared
+// claims live (agent_id / depth / tool) — the same field the reconciliation
+// table reads from.
+function secureAction(context: Record<string, unknown>): ProposedAction {
+  return {
+    name: "provision_gpu",
+    args: {},
+    estimatedCost: 0,
+    resourceType: "gpu",
+    context: { target: SECURE_TOOL_TARGET, ...context },
+  };
+}
+
+/**
+ * Shared runner for the three provenance-conflict cases (G/L/M-with-tool):
+ * construct the trusted context, run the secure guard, and confirm the
+ * conflict is deterministic, names exactly the expected field, and never
+ * reaches the protected execute() callback.
+ */
+async function runProvenanceConflictCase(
+  name: string,
+  trustedContext: ReturnType<typeof createTrustedExecutionContext>,
+  stateAgentId: string,
+  action: ProposedAction,
+  expectedField: string,
+  resistedMessage: string,
+): Promise<void> {
+  console.log(`\n=== [${TIER1_PROFILE_LABEL}] ${name} ===`);
+
+  const secureGuard = createSecureGuard(makeSecureGuardConfig(stateAgentId), SINGLE_TENANT);
+
+  let executed = false;
+  let caught: unknown;
+  try {
+    await secureGuard(trustedContext, action, async () => {
+      executed = true;
+      return "should-not-execute";
+    });
+  } catch (err) {
+    caught = err;
+  }
+
+  const conflictError = caught instanceof OxDeAIProvenanceConflictError ? caught : undefined;
+  const fields = conflictError?.fields ?? [];
+
+  console.log("error:", conflictError ? conflictError.constructor.name : String(caught));
+  console.log("conflicting fields:", JSON.stringify(fields));
+  console.log("provenance:", conflictError ? JSON.stringify(conflictError.provenance) : "n/a");
+  console.log("execute callback invoked:", executed);
+
+  const resisted =
+    conflictError !== undefined &&
+    fields.length === 1 &&
+    fields[0] === expectedField &&
+    !executed;
+
+  if (resisted) {
+    console.log(`[${TIER1_PROFILE_LABEL}] RESISTED / FIXED: ${resistedMessage}`);
+  } else {
+    console.log(
+      `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: expected a deterministic OxDeAIProvenanceConflictError ` +
+        `on '${expectedField}' with the protected execute() callback never invoked, but did not observe it.`,
+    );
+  }
+}
+
+/**
+ * G-secure — recursion depth provenance conflict.
+ *
+ * Trusted execution context supplies depth = 99 (derived from the real
+ * protected execution chain). The proposer separately claims depth = 0 in
+ * action.context. Sibling of legacy attack G: same self-declared-depth
+ * shape, but now with a trusted premise in the loop to conflict against.
+ */
+async function attackGSecure_depthProvenanceConflict(): Promise<void> {
+  const trustedContext = createTrustedExecutionContext({
+    principalId: "principal-g-secure",
+    agentId: AGENT,
+    adapterId: "adapter-secure",
+    depth: 99,
+  });
+
+  await runProvenanceConflictCase(
+    "G-secure: trusted depth=99, proposer claims depth=0",
+    trustedContext,
+    AGENT,
+    secureAction({ agent_id: AGENT, depth: 0 }),
+    "depth",
+    "trusted depth cannot be lowered by proposer claim",
+  );
+}
+
+/**
+ * L-secure — agent identity provenance conflict.
+ *
+ * Trusted execution context supplies agentId = 'agent-low'. The proposer
+ * separately claims agent_id = 'agent-high' in action.context, mirroring
+ * legacy attack L's privileged-identity substitution. This proves only that
+ * a proposer claim cannot override an already-supplied trusted agentId — not
+ * that the guard authenticates the caller or derives agent_id itself.
+ */
+async function attackLSecure_agentIdentityProvenanceConflict(): Promise<void> {
+  const trustedContext = createTrustedExecutionContext({
+    principalId: "principal-l-secure",
+    agentId: LOW_AGENT,
+    adapterId: "adapter-secure",
+    depth: 0,
+  });
+
+  await runProvenanceConflictCase(
+    `L-secure: trusted agentId='${LOW_AGENT}', proposer claims agent_id='${HIGH_AGENT}'`,
+    trustedContext,
+    LOW_AGENT,
+    secureAction({ agent_id: HIGH_AGENT, depth: 0 }),
+    "agent_id",
+    "trusted agent identity cannot be replaced by proposer claim",
+  );
+}
+
+/**
+ * M-secure (trusted tool present) — tool identity provenance conflict.
+ *
+ * Trusted execution context supplies tool = 'search', derived from the
+ * trusted route. The proposer separately claims tool = 'search_v2',
+ * mirroring legacy attack M's tool-rename bypass. Closed ONLY because this
+ * route happens to supply an authoritative tool identity — see the
+ * no-trusted-tool case below for the route that does not.
+ */
+async function attackMSecure_toolProvenanceConflict(): Promise<void> {
+  const trustedContext = createTrustedExecutionContext({
+    principalId: "principal-m-secure",
+    agentId: AGENT,
+    adapterId: "adapter-secure",
+    depth: 0,
+    tool: CAPPED_TOOL,
+  });
+
+  await runProvenanceConflictCase(
+    `M-secure (trusted tool): trusted tool='${CAPPED_TOOL}', proposer claims tool='${CAPPED_TOOL}_v2'`,
+    trustedContext,
+    AGENT,
+    secureAction({ agent_id: AGENT, depth: 0, tool: `${CAPPED_TOOL}_v2` }),
+    "tool",
+    "trusted tool identity rejects proposer rename",
+  );
+}
+
+/**
+ * M-secure (no trusted tool) — residual, not globally fixed.
+ *
+ * Trusted execution context intentionally carries no `tool` (this route has
+ * no authoritative tool identity to supply — `tool` is optional on
+ * TrustedExecutionContext for exactly this reason). The proposer's tool
+ * claim has nothing to conflict against, so reconciliation cannot reject it:
+ * it is retained and recorded as `"unverified"`, evaluation proceeds, and the
+ * protected execute() callback DOES run. This is the case the task
+ * description requires we not mis-report as closed — M is closed only for
+ * routes that supply an authoritative tool identity (see the case above).
+ */
+async function attackMSecure_toolUnverifiedWithoutRoutePremise(): Promise<void> {
+  const trustedContext = createTrustedExecutionContext({
+    principalId: "principal-m-secure-unverified",
+    agentId: AGENT,
+    adapterId: "adapter-secure",
+    depth: 0,
+    // Deliberately no `tool` — this route has no authoritative tool identity.
+  });
+
+  console.log(`\n=== [${TIER1_PROFILE_LABEL}] M-secure (no trusted tool): proposer claims tool='${CAPPED_TOOL}_v2' ===`);
+
+  const records: GuardDecisionRecord[] = [];
+  const secureGuard = createSecureGuard(
+    makeSecureGuardConfig(AGENT, (record) => {
+      records.push(record);
+    }),
+    SINGLE_TENANT,
+  );
+
+  let executed = false;
+  let caught: unknown;
+  try {
+    await secureGuard(
+      trustedContext,
+      secureAction({ agent_id: AGENT, depth: 0, tool: `${CAPPED_TOOL}_v2` }),
+      async () => {
+        executed = true;
+        return "executed";
+      },
+    );
+  } catch (err) {
+    caught = err;
+  }
+
+  const provenance = records[0]?.provenance;
+  const toolOutcome = provenance?.["tool"];
+
+  console.log("decision:", records[0]?.decision);
+  console.log("provenance:", JSON.stringify(provenance ?? {}));
+  console.log("execute callback invoked:", executed);
+  console.log("thrown error:", caught ? String(caught) : "none");
+
+  const isResidualUnverified = toolOutcome === "unverified" && executed && caught === undefined;
+
+  if (isResidualUnverified) {
+    console.log(
+      `[${TIER1_PROFILE_LABEL}] RESIDUAL / UNVERIFIED: proposer tool claim has no authoritative tool premise on this route`,
+    );
+  } else if (toolOutcome === "matched") {
+    console.log(
+      `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: proposer tool claim was recorded as 'matched' with no trusted tool ` +
+        `premise to match against — this misreports an unverified claim as verified.`,
+    );
+  } else {
+    console.log(
+      `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: expected provenance.tool === 'unverified' with execution proceeding, ` +
+        `observed tool='${String(toolOutcome)}', executed=${executed}, error=${caught ? String(caught) : "none"}.`,
+    );
+  }
+}
+
+async function main(): Promise<void> {
   console.log("\nOxDeAI policy-boundary attack repro harness");
   console.log("Repo-local only. Do not run against production systems.\n");
 
@@ -629,6 +967,15 @@ function main(): void {
   attackG_depthSelfDeclared();
   attackL_agentIdentitySubstitution();
   attackM_toolNameSelfDeclared();
+
+  // Tier 1 secure-profile cases (#234). These run through createSecureGuard()
+  // rather than engine.evaluatePure() directly — see the section above for
+  // why each is not a claim that the corresponding legacy attack is globally
+  // closed.
+  await attackGSecure_depthProvenanceConflict();
+  await attackLSecure_agentIdentityProvenanceConflict();
+  await attackMSecure_toolProvenanceConflict();
+  await attackMSecure_toolUnverifiedWithoutRoutePremise();
 
   console.log("\nDone.");
 }
