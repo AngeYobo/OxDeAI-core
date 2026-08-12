@@ -63,6 +63,33 @@ export class OxDeAIConflictError extends OxDeAIAuthorizationError {
 }
 
 /**
+ * Thrown when a proposer claim contradicts a trusted execution-context premise
+ * on the Tier 1 secure guard path.
+ *
+ * Extends OxDeAIAuthorizationError so existing catch blocks remain valid. This
+ * is a guard-layer error by design: the Tier 1 provenance boundary is enforced
+ * at the PEP, and representing it here keeps core `ReasonCode`, the public
+ * conformance registries, and the API fingerprint unchanged.
+ *
+ * Raised before evaluation, authorization issuance, state mutation, or
+ * execution. `fields` lists every conflicting field in declaration order, and
+ * `provenance` carries the full per-field outcome for the audit record.
+ */
+export class OxDeAIProvenanceConflictError extends OxDeAIAuthorizationError {
+  readonly fields: readonly string[];
+  readonly provenance: Readonly<Record<string, string>>;
+
+  constructor(fields: readonly string[], provenance: Readonly<Record<string, string>>) {
+    super(
+      `Proposer claim conflicts with trusted execution context on [${fields.join(", ")}]. Execution blocked.`
+    );
+    this.name = "OxDeAIProvenanceConflictError";
+    this.fields = Object.freeze([...fields]);
+    this.provenance = Object.freeze({ ...provenance });
+  }
+}
+
+/**
  * Thrown when DelegationV1 verification fails at the guard boundary.
  * Extends OxDeAIAuthorizationError so existing catch blocks remain valid.
  * The `violations` field carries structured delegation-specific failure codes.

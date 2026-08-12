@@ -154,9 +154,16 @@ interface TrustedExecutionContext {
   adapterId: string;
   tool?: string;
   depth: number;
-  evaluationTime: number;
 }
 ```
+
+The context deliberately does not carry `evaluationTime`. Trusted evaluation
+time is captured by the secure guard at the evaluation boundary, immediately
+before evaluation, following the existing trusted-time model, rather than being
+carried in a reusable authenticated context. Authentication establishes who and
+where; `evaluationTime` establishes when a specific decision is being made, so a
+context constructed once must not become a reusable time capsule for later
+decisions.
 
 The context is created server-side and must not be accepted directly from
 request JSON. The exact interface and construction rules belong to a follow-up

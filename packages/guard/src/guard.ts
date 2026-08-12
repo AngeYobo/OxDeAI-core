@@ -12,6 +12,7 @@ import {
   OxDeAIDelegationError,
   OxDeAIGuardConfigurationError,
   OxDeAINormalizationError,
+  OxDeAIProvenanceConflictError,
 } from "./errors.js";
 
 // ── validation ────────────────────────────────────────────────────────────────
@@ -147,6 +148,11 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       intent = normalize(action);
     } catch (err) {
       if (err instanceof OxDeAINormalizationError) throw err;
+      // The secure path performs trusted-vs-proposer reconciliation inside the
+      // normalizer, so a provenance conflict surfaces here. It is an
+      // authorization boundary failure, not a normalization failure, and must
+      // reach the caller with its own type and conflicting-field list intact.
+      if (err instanceof OxDeAIProvenanceConflictError) throw err;
       // Custom mapActionToIntent threw something unexpected — fail closed.
       throw new OxDeAINormalizationError(
         `mapActionToIntent threw an unexpected error: ${err instanceof Error ? err.message : String(err)}`

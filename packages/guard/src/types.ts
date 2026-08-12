@@ -61,6 +61,12 @@ export type GuardDecisionRecord = {
   /** Present when the decision was made via the delegation verification path. */
   delegation?: DelegationV1;
   reasons?: string[];
+  /**
+   * Per-field trusted-vs-proposer outcome. Present only on the Tier 1 secure
+   * guard path, so that an audit reader can tell a guard-filled premise apart
+   * from a proposer assertion that happened to be correct.
+   */
+  provenance?: Readonly<Record<string, string>>;
 };
 
 /**
