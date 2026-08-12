@@ -56,6 +56,22 @@ export type ClaimProvenance = "absent" | "matched" | "conflict" | "unverified";
 export type ProvenanceRecord = Readonly<Record<string, ClaimProvenance>>;
 
 /** @public */
+export type ReconciliationOptions = {
+  /**
+   * Field names whose value the guard supplied to the normalizer because the
+   * proposer omitted them, and which therefore must not audit as a proposer
+   * `matched` claim.
+   *
+   * Needed because `defaultNormalizeAction` requires `context.agent_id` and
+   * throws before reconciliation can run, so "absent claim → fill from the
+   * derived premise" is not reachable end-to-end for identity unless the guard
+   * supplies the premise up front. The claim is still compared, so a normalizer
+   * that returns something else still fails closed.
+   */
+  readonly synthesized?: ReadonlySet<string>;
+};
+
+/** @public */
 export type ReconciliationResult = {
   /** Intent with trusted premises applied. Proposer claims never override. */
   readonly intent: Intent;
@@ -185,15 +201,18 @@ const FIELDS: readonly ProvenanceField[] = [
 export function reconcileWithTrustedContext(
   intent: Intent,
   ctx: TrustedExecutionContext,
-  actionContext: Record<string, unknown> | undefined
+  actionContext: Record<string, unknown> | undefined,
+  options?: ReconciliationOptions
 ): ReconciliationResult {
   const merged: Record<string, unknown> = { ...(intent as unknown as Record<string, unknown>) };
   const provenance: Record<string, ClaimProvenance> = {};
   const conflicts: string[] = [];
+  const synthesized = options?.synthesized;
 
   for (const field of FIELDS) {
     const premise = field.derived(ctx);
     const claims = field.claims(intent, actionContext);
+    const wasSynthesized = synthesized?.has(field.name) === true;
 
     if (premise === undefined) {
       provenance[field.name] = claims.length > 0 ? "unverified" : "absent";
@@ -207,6 +226,11 @@ export function reconcileWithTrustedContext(
     }
 
     // Exact equality against every source that carried a claim.
+    //
+    // A synthesized field is still compared: the guard supplied the premise to
+    // the normalizer, so the normalizer is expected to echo it back exactly. A
+    // deviation means the normalizer substituted an identity of its own, which
+    // must fail closed rather than being silently overwritten.
     const conflicting = claims.some((claim) => claim !== premise);
     if (conflicting) {
       provenance[field.name] = "conflict";
@@ -214,7 +238,11 @@ export function reconcileWithTrustedContext(
       continue;
     }
 
-    provenance[field.name] = "matched";
+    // The record describes the PROPOSER's claim, not the normalizer's echo of a
+    // guard-supplied premise. A synthesized field the proposer never claimed
+    // audits as `absent`, so a trusted fill is not reported as a match the
+    // proposer earned.
+    provenance[field.name] = wasSynthesized ? "absent" : "matched";
     field.apply?.(merged, premise);
   }
 

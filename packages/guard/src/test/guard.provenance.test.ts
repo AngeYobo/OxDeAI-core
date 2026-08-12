@@ -22,6 +22,13 @@
  *   P-16 a conflict blocks execution and state mutation
  *   P-17 the ALLOW path executes and reports provenance to the audit hook
  *   P-18 a custom mapActionToIntent cannot overwrite a trusted premise
+ *   P-19 an absent proposer agent_id is supplied from trusted context, audits absent
+ *   P-20 a matching proposer agent_id still audits as matched
+ *   P-21 a custom normalizer cannot substitute identity into a synthesized field
+ *   P-22 single-tenant deployment accepts a context without tenantId
+ *   P-23 multi-tenant fails closed when trusted tenantId is absent
+ *   P-24 multi-tenant matches a proposer tenant and rejects a conflicting one
+ *   P-25 a provenance conflict is NOT reported through onDecision
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -30,7 +37,7 @@ import type { Intent, State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
 import { TEST_KEYSET, TEST_KEYPAIR } from "./helpers/fixtures.js";
 
-import { createSecureGuard } from "../secureGuard.js";
+import { createSecureGuard, type SecureGuardOptions } from "../secureGuard.js";
 import {
   createTrustedExecutionContext,
   isTrustedExecutionContext,
@@ -100,6 +107,14 @@ function makeContext(overrides: Partial<TrustedExecutionContext> = {}): TrustedE
     depth: 0,
     ...overrides,
   });
+}
+
+const SINGLE_TENANT: SecureGuardOptions = { tenancy: "single-tenant" };
+const MULTI_TENANT: SecureGuardOptions = { tenancy: "multi-tenant" };
+
+/** Most scenarios are tenancy-agnostic; tenancy tests pass their own posture. */
+function makeSecure(config: OxDeAIGuardConfig, options: SecureGuardOptions = SINGLE_TENANT) {
+  return createSecureGuard(config, options);
 }
 
 function makeAction(context: Record<string, unknown> = {}): ProposedAction {
@@ -325,7 +340,7 @@ test("P-11 reconcile: multiple conflicts are collected in declaration order", ()
 
 test("P-12 attack L: privileged agent_id substitution is rejected by the secure path", async () => {
   let executed = false;
-  const secure = createSecureGuard(makeGuardConfig());
+  const secure = makeSecure(makeGuardConfig());
   const ctx = makeContext(); // authenticated principal maps to AGENT_ID
 
   await assert.rejects(
@@ -342,7 +357,7 @@ test("P-12 attack L: privileged agent_id substitution is rejected by the secure 
 
 test("P-13 attack M: tool rename is rejected where the route supplies tool identity", async () => {
   let executed = false;
-  const secure = createSecureGuard(makeGuardConfig());
+  const secure = makeSecure(makeGuardConfig());
   const ctx = makeContext({ tool: "provision_gpu" });
 
   await assert.rejects(
@@ -359,7 +374,7 @@ test("P-13 attack M: tool rename is rejected where the route supplies tool ident
 
 test("P-14 attack M: no closure is claimed where the route supplies no tool identity", async () => {
   const records: Array<Record<string, unknown>> = [];
-  const secure = createSecureGuard(
+  const secure = makeSecure(
     makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } })
   );
   const ctx = makeContext(); // no trusted tool
@@ -377,7 +392,7 @@ test("P-14 attack M: no closure is claimed where the route supplies no tool iden
 test("P-15 secure guard: an unbranded context is rejected before any side effect", async () => {
   let executed = false;
   let stateWritten = false;
-  const secure = createSecureGuard(
+  const secure = makeSecure(
     makeGuardConfig({
       setState: () => {
         stateWritten = true;
@@ -409,7 +424,7 @@ test("P-15 secure guard: an unbranded context is rejected before any side effect
 test("P-16 secure guard: a conflict blocks execution and state mutation", async () => {
   let executed = false;
   let stateWritten = false;
-  const secure = createSecureGuard(
+  const secure = makeSecure(
     makeGuardConfig({
       setState: () => {
         stateWritten = true;
@@ -433,7 +448,7 @@ test("P-16 secure guard: a conflict blocks execution and state mutation", async 
 
 test("P-17 secure guard: ALLOW executes and reports provenance to the audit hook", async () => {
   const records: Array<Record<string, unknown>> = [];
-  const secure = createSecureGuard(
+  const secure = makeSecure(
     makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } })
   );
 
@@ -459,7 +474,7 @@ test("P-18 secure guard: a custom mapActionToIntent cannot overwrite a trusted p
   // A deployment-supplied normalizer that returns a privileged agent_id.
   // Reconciliation runs on its OUTPUT, so this is a conflict rather than a
   // successful substitution.
-  const secure = createSecureGuard(
+  const secure = makeSecure(
     makeGuardConfig({
       mapActionToIntent: (action) => {
         const intent = defaultNormalizeAction({
@@ -482,4 +497,145 @@ test("P-18 secure guard: a custom mapActionToIntent cannot overwrite a trusted p
   );
 
   assert.equal(executed, false);
+});
+
+// ── P-19 .. P-24: review follow-ups on #234 ───────────────────────────────────
+
+test("P-19 secure guard: an absent proposer agent_id is supplied from trusted context", async () => {
+  const records: Array<Record<string, unknown>> = [];
+  const secure = makeSecure(
+    makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } })
+  );
+
+  // The proposal carries no agent_id at all. Before this fix the default
+  // normalizer threw on the missing context field, so "absent claim → derived
+  // premise" was unreachable end-to-end for identity.
+  const action: ProposedAction = {
+    name: "provision_gpu",
+    args: { asset: "a100" },
+    estimatedCost: 0.5,
+    resourceType: "gpu",
+    context: { target: "gpu-pool" },
+  };
+
+  const result = await secure(makeContext(), action, async () => "executed");
+
+  assert.equal(result, "executed");
+  const provenance = records[0]?.["provenance"] as Record<string, string> | undefined;
+  assert.equal(
+    provenance?.["agent_id"],
+    "absent",
+    "a guard-supplied identity must audit as absent, not as a claim the proposer made"
+  );
+});
+
+test("P-20 secure guard: a matching proposer agent_id still audits as matched", async () => {
+  const records: Array<Record<string, unknown>> = [];
+  const secure = makeSecure(
+    makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } })
+  );
+
+  await secure(makeContext(), makeAction({ agent_id: AGENT_ID }), async () => "ok");
+
+  const provenance = records[0]?.["provenance"] as Record<string, string> | undefined;
+  assert.equal(provenance?.["agent_id"], "matched");
+});
+
+test("P-21 secure guard: a custom normalizer cannot substitute identity into a synthesized field", async () => {
+  let executed = false;
+  // The proposer omits agent_id, so the guard supplies the trusted one for
+  // normalization — and the custom normalizer then returns a different identity.
+  // That must fail closed rather than being silently overwritten.
+  const secure = makeSecure(
+    makeGuardConfig({
+      mapActionToIntent: (action) => {
+        const intent = defaultNormalizeAction(action);
+        intent.agent_id = PRIVILEGED_AGENT_ID;
+        return intent;
+      },
+    })
+  );
+
+  const action: ProposedAction = {
+    name: "provision_gpu",
+    args: { asset: "a100" },
+    estimatedCost: 0.5,
+    resourceType: "gpu",
+    context: { target: "gpu-pool" },
+  };
+
+  await assert.rejects(
+    () => secure(makeContext(), action, async () => { executed = true; return "done"; }),
+    OxDeAIProvenanceConflictError
+  );
+  assert.equal(executed, false);
+});
+
+test("P-22 tenancy: single-tenant deployment accepts a context without tenantId", async () => {
+  const secure = makeSecure(makeGuardConfig(), SINGLE_TENANT);
+  const result = await secure(makeContext(), makeAction({ agent_id: AGENT_ID }), async () => "ok");
+  assert.equal(result, "ok");
+});
+
+test("P-23 tenancy: multi-tenant deployment fails closed when trusted tenantId is absent", async () => {
+  let executed = false;
+  let stateWritten = false;
+  const secure = makeSecure(
+    makeGuardConfig({ setState: () => { stateWritten = true; return true; } }),
+    MULTI_TENANT
+  );
+
+  await assert.rejects(
+    () =>
+      secure(makeContext(), makeAction({ agent_id: AGENT_ID }), async () => {
+        executed = true;
+        return "done";
+      }),
+    OxDeAIAuthorizationError
+  );
+
+  assert.equal(executed, false, "rejection precedes execution");
+  assert.equal(stateWritten, false, "rejection precedes state mutation");
+});
+
+test("P-24 tenancy: multi-tenant accepts a matching proposer tenant and rejects a conflicting one", async () => {
+  const records: Array<Record<string, unknown>> = [];
+  const secure = makeSecure(
+    makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } }),
+    MULTI_TENANT
+  );
+  const ctx = makeContext({ tenantId: "tenant-a" });
+
+  const result = await secure(
+    ctx,
+    makeAction({ agent_id: AGENT_ID, tenant_id: "tenant-a" }),
+    async () => "ok"
+  );
+  assert.equal(result, "ok");
+  const provenance = records[0]?.["provenance"] as Record<string, string> | undefined;
+  assert.equal(provenance?.["tenant_id"], "matched");
+
+  const secure2 = makeSecure(makeGuardConfig(), MULTI_TENANT);
+  await assert.rejects(
+    () =>
+      secure2(ctx, makeAction({ agent_id: AGENT_ID, tenant_id: "tenant-b" }), async () => "done"),
+    OxDeAIProvenanceConflictError
+  );
+});
+
+test("P-25 audit contract: a provenance conflict is NOT reported through onDecision", async () => {
+  const records: Array<Record<string, unknown>> = [];
+  const secure = makeSecure(
+    makeGuardConfig({ onDecision: (r) => { records.push(r as unknown as Record<string, unknown>); } })
+  );
+
+  await assert.rejects(
+    () => secure(makeContext(), makeAction({ agent_id: PRIVILEGED_AGENT_ID }), async () => "done"),
+    OxDeAIProvenanceConflictError
+  );
+
+  // Pinning the documented contract rather than a wish: rejection happens before
+  // the shared body reaches a policy decision, so there is no decision record.
+  // A deployment auditing only via onDecision does NOT see this attempt.
+  assert.equal(records.length, 0);
 });
