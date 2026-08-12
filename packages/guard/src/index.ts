@@ -9,6 +9,15 @@
  */
 
 export { OxDeAIGuard } from "./guard.js";
+export { createSecureGuard } from "./secureGuard.js";
+export type { SecureGuardOptions } from "./secureGuard.js";
+export {
+  createTrustedExecutionContext,
+  isTrustedExecutionContext,
+} from "./trustedContext.js";
+export type { TrustedExecutionContext } from "./trustedContext.js";
+export { reconcileWithTrustedContext } from "./provenance.js";
+export type { ClaimProvenance, ProvenanceRecord, ReconciliationResult, ReconciliationOptions } from "./provenance.js";
 export {
   INTERNAL_EXECUTOR_TOKEN_HEADER,
   createPepGatewayExecutor,
@@ -30,6 +39,7 @@ export {
   OxDeAIDelegationError,
   OxDeAIGuardConfigurationError,
   OxDeAINormalizationError,
+  OxDeAIProvenanceConflictError,
 } from "./errors.js";
 export type {
   ProposedAction,
