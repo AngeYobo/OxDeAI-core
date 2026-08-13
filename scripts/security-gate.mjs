@@ -7,6 +7,7 @@
  */
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const [auditPath, policyPath] = args.filter((a) => !a.startsWith("--"));
@@ -206,4 +207,11 @@ if (artifactOut) {
   console.log(`Artifact written to ${artifactOut}`);
 }
 
-process.exit(ok ? 0 : 1);
+console.log("\n== Policy-Boundary Repro Harness ==");
+const harness = spawnSync("pnpm", ["run", "security:policy-boundary"], { stdio: "inherit" });
+const harnessOk = harness.status === 0;
+if (!harnessOk) {
+  console.log(`\nPolicy-boundary repro harness failed (exit code ${harness.status ?? "unknown"}).`);
+}
+
+process.exit(ok && harnessOk ? 0 : 1);

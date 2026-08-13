@@ -20,8 +20,16 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Install security-gate dependencies
+        run: >-
+          pnpm install --frozen-lockfile
+          --filter .
+          --filter @oxdeai/core...
+          --filter @oxdeai/sdk...
+          --filter @oxdeai/guard...
+
+      - name: Build protocol packages
+        run: pnpm build:protocol
 
       - name: Audit
         run: pnpm audit --json > audit.json || true

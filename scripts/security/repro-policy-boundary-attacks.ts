@@ -171,6 +171,13 @@ function toolIntent(nonce: number): Partial<Intent> {
 // changing what these cases mean.
 const LEGACY_PROFILE_LABEL = "LEGACY PROFILE";
 
+// Structured pass/fail state for CI. Only invariants that are expected to
+// hold today (Tier 1 secure-profile protections, plus the legacy attacks
+// that are already fixed) are pushed here on violation. Intentional
+// legacy-profile residuals (G/L/M) are logged for diagnostics only and never
+// push a failure — see the individual call sites below.
+const failures: string[] = [];
+
 function print(name: string, out: Outcome): void {
   console.log(`\n=== [${LEGACY_PROFILE_LABEL}] ${name} ===`);
   console.log("decision:", out.decision);
@@ -181,9 +188,23 @@ function print(name: string, out: Outcome): void {
   }
 }
 
-function assertSignal(name: string, condition: boolean, vulnerable: string, resisted: string): void {
+// `blocking: true` marks a case where `condition` (vulnerable/signal
+// detected) must NOT hold today; a regression pushes a CI failure. Omitted
+// (or false) for cases that are intentionally still reproducible (legacy
+// G/L/M) — those remain diagnostic-only, matching the requirement that
+// expected legacy-profile residuals must not fail CI.
+function assertSignal(
+  name: string,
+  condition: boolean,
+  vulnerable: string,
+  resisted: string,
+  opts?: { blocking?: boolean },
+): void {
   if (condition) {
     console.log(`[${LEGACY_PROFILE_LABEL}] SECURITY SIGNAL: ${vulnerable}`);
+    if (opts?.blocking) {
+      failures.push(`${name}: ${vulnerable}`);
+    }
   } else {
     console.log(`[${LEGACY_PROFILE_LABEL}] RESISTED / FIXED: ${resisted}`);
   }
@@ -214,6 +235,7 @@ function attackF_killSwitchTypeConfusion(): void {
     out.decision === "ALLOW",
     "VULNERABLE: truthy non-boolean per-agent kill-switch produced ALLOW",
     "per-agent kill-switch type confusion rejected or denied",
+    { blocking: true },
   );
 }
 
@@ -250,6 +272,7 @@ function attackC_futureDatedAuthorization(): void {
     out.decision === "ALLOW" && typeof expiry === "number" && expiry > BASE_TS + 99 * 365 * 24 * 60 * 60,
     "VULNERABLE: engine emitted far-future authorization from intent.timestamp",
     "future-dated authorization rejected or bounded",
+    { blocking: true },
   );
 }
 
@@ -285,6 +308,7 @@ function attackK_replayFutureDating(): void {
       futureReplay.decision === "ALLOW",
     "VULNERABLE: replay protection bypassed by attacker-controlled future timestamp",
     "future-dated replay rejected",
+    { blocking: true },
   );
 }
 
@@ -335,6 +359,7 @@ function attackJ_velocityFutureDating(): void {
     outs.every((o) => o.decision === "ALLOW"),
     "VULNERABLE: velocity limit reset by attacker-controlled future timestamps",
     "freshness-valid caller timestamps cannot reset trusted velocity quota",
+    { blocking: true },
   );
 }
 
@@ -390,6 +415,7 @@ function attackI_toolWindowFutureDating(): void {
       outs[3]?.decision === "ALLOW"),
     "VULNERABLE: tool-call limit reset by attacker-controlled future timestamps",
     "caller timestamps cannot reset quota; trusted exact-boundary progression can",
+    { blocking: true },
   );
 }
 
@@ -514,6 +540,7 @@ function attackH_toolCallOptIn(): void {
     omittedBypassed || !controlEnforced || !mixedSharesOneBudget,
     "VULNERABLE: omitting or falsifying self-declared tool_call bypasses tool limit",
     "tool limit enforced identically regardless of tool_call value or presence",
+    { blocking: true },
   );
 }
 
@@ -797,6 +824,7 @@ async function runProvenanceConflictCase(
       `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: expected a deterministic OxDeAIProvenanceConflictError ` +
         `on '${expectedField}' with the protected execute() callback never invoked, but did not observe it.`,
     );
+    failures.push(`${name}: expected a deterministic provenance conflict on '${expectedField}'`);
   }
 }
 
@@ -946,10 +974,17 @@ async function attackMSecure_toolUnverifiedWithoutRoutePremise(): Promise<void> 
       `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: proposer tool claim was recorded as 'matched' with no trusted tool ` +
         `premise to match against — this misreports an unverified claim as verified.`,
     );
+    failures.push(
+      "M-secure (no trusted tool): proposer tool claim misreported as 'matched' with no trusted tool premise",
+    );
   } else {
     console.log(
       `[${TIER1_PROFILE_LABEL}] SECURITY SIGNAL: expected provenance.tool === 'unverified' with execution proceeding, ` +
         `observed tool='${String(toolOutcome)}', executed=${executed}, error=${caught ? String(caught) : "none"}.`,
+    );
+    failures.push(
+      `M-secure (no trusted tool): expected residual/unverified state, observed tool='${String(toolOutcome)}', ` +
+        `executed=${executed}, error=${caught ? String(caught) : "none"}`,
     );
   }
 }
@@ -978,6 +1013,14 @@ async function main(): Promise<void> {
   await attackMSecure_toolUnverifiedWithoutRoutePremise();
 
   console.log("\nDone.");
+
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} required policy-boundary invariant(s) failed:`);
+    for (const f of failures) console.error(` - ${f}`);
+    process.exitCode = 1;
+  } else {
+    console.log("\nAll required policy-boundary invariants held.");
+  }
 }
 
 main();
