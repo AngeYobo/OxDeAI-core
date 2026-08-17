@@ -117,6 +117,31 @@ OxDeAI controls execution.
 
 Without an execution boundary, agents are not production-safe.
 
+## Applicability
+
+OxDeAI is not a replacement for inline PDP/PEP authorization.
+
+Inline or sidecar policy evaluation (OPA, Cedar, Cerbos) is the simpler
+baseline and should generally be preferred.
+
+A detachable authorization artifact is justified in two cases:
+
+* **Independent verification** — the party that must verify the authorization
+  is not the party that ran the decision point or controls the enforcement log
+  (counterparty, auditor, regulator). Decision logs are evidence the operator
+  produced about the operator's own enforcement.
+* **Unreachable premises** — the executor cannot reach the authoritative
+  inputs required to re-evaluate locally, across a separate trust/network zone
+  or third-party boundary.
+
+Topology alone does not justify it. Separate processes or multiple enforcement
+points are solved by placing a decision point next to the executor.
+
+When neither condition applies, do not make the decision detachable.
+
+This boundary came out of a public exchange with a Cerbos maintainer:
+[r/AskNetsec thread](https://www.reddit.com/r/AskNetsec/comments/1vkh8za/) · [applicability discussion](#TBD)
+
 ---
 
 ## How It Works
@@ -328,6 +353,7 @@ ALLOW / ALLOW / DENY / verifyEnvelope() => ok
 * not a prompt guardrail
 * not a monitoring system
 * not heuristic runtime logic
+* not a replacement for inline PDP/PEP authorization
 
 ---
 
