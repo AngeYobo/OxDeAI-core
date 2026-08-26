@@ -5,6 +5,9 @@ import type { OxDeAIGuardConfig, ProposedAction, GuardDecisionRecord, GuardCallO
 import { defaultNormalizeAction } from "./normalizeAction.js";
 import { createInMemoryReplayStore } from "./replayStore.js";
 import type { ReplayStore } from "./replayStore.js";
+import { createLifecycle, emitBoundaryEvent, reject } from "./boundaryEvent.js";
+import type { GuardLifecycle } from "./boundaryEvent.js";
+import type { ProvenanceRecord } from "./provenance.js";
 import {
   OxDeAIDenyError,
   OxDeAIAuthorizationError,
@@ -103,6 +106,17 @@ async function fireDecision(
  *   - Scope violation             → OxDeAIDelegationError (no execution).
  *   - Normalization failure       → OxDeAINormalizationError (no execution).
  *   - Evaluation / state errors   → re-thrown (fail-closed).
+ *
+ * Audit streams (disjoint — no rejection appears on both):
+ *
+ * ```text
+ * policy DENY                → onDecision only        (a decision was reached)
+ * pre-execution rejection    → onBoundaryEvent only   (no decision to report)
+ * ALLOW, callback then threw → neither                (not a guard rejection)
+ * ```
+ *
+ * Both hooks are best effort: whatever they throw is swallowed, and the caller
+ * always receives the original guard error, unwrapped and unreplaced.
  */
 export function OxDeAIGuard(config: OxDeAIGuardConfig) {
   validateConfig(config);
@@ -125,10 +139,16 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
   // Replace with a durable backend for multi-process / restart-durable deployments.
   const replayStore: ReplayStore = config.replayStore ?? createInMemoryReplayStore();
 
-  return async function guard(
+  /**
+   * The enforcement body. Extracted so that every rejection leaves through one
+   * catch in `guard` below, rather than each throw site having to remember to
+   * report itself.
+   */
+  async function runRequest(
     action: ProposedAction,
     execute: () => Promise<unknown>,
-    opts?: GuardCallOptions
+    opts: GuardCallOptions | undefined,
+    lifecycle: GuardLifecycle
   ): Promise<unknown> {
     // ── 1. Load state + version ────────────────────────────────────────────
     const versioned = await config.getState();
@@ -137,35 +157,60 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
 
     // Fail closed if the store did not return a version.
     if (version === undefined || version === null) {
-      throw new OxDeAIAuthorizationError(
-        "State store returned no version. Cannot enforce CAS invariant. Execution blocked."
+      throw reject(
+        "STATE_LOAD",
+        "STATE_VERSION_MISSING",
+        new OxDeAIAuthorizationError(
+          "State store returned no version. Cannot enforce CAS invariant. Execution blocked."
+        )
       );
     }
 
     // ── 2. Normalize action → intent ───────────────────────────────────────
+    lifecycle.stage = "NORMALIZATION";
     let intent: Intent;
     try {
       intent = normalize(action);
     } catch (err) {
-      if (err instanceof OxDeAINormalizationError) throw err;
+      if (err instanceof OxDeAINormalizationError) {
+        throw reject("NORMALIZATION", "NORMALIZATION_FAILURE", err);
+      }
       // The secure path performs trusted-vs-proposer reconciliation inside the
       // normalizer, so a provenance conflict surfaces here. It is an
       // authorization boundary failure, not a normalization failure, and must
       // reach the caller with its own type and conflicting-field list intact.
-      if (err instanceof OxDeAIProvenanceConflictError) throw err;
+      if (err instanceof OxDeAIProvenanceConflictError) {
+        throw reject("PROVENANCE", "PROVENANCE_CONFLICT", err, {
+          conflictingFields: err.fields,
+          // The error predates the boundary event and types its record as a
+          // plain string map; every value in it is a ClaimProvenance by
+          // construction (provenance.ts builds it from that union).
+          provenance: err.provenance as ProvenanceRecord,
+        });
+      }
       // Custom mapActionToIntent threw something unexpected — fail closed.
-      throw new OxDeAINormalizationError(
-        `mapActionToIntent threw an unexpected error: ${err instanceof Error ? err.message : String(err)}`
+      throw reject(
+        "NORMALIZATION",
+        "NORMALIZATION_FAILURE",
+        new OxDeAINormalizationError(
+          `mapActionToIntent threw an unexpected error: ${err instanceof Error ? err.message : String(err)}`
+        )
       );
     }
+    lifecycle.intentId = intent.intent_id;
 
     // ── 3. Delegation path ─────────────────────────────────────────────────
     if (opts?.delegation) {
+      lifecycle.stage = "DELEGATION";
       const { delegation, parentAuth } = opts.delegation;
 
       if (!delegation || !parentAuth) {
-        throw new OxDeAIAuthorizationError(
-          "Delegation input is incomplete: both delegation and parentAuth are required. Execution blocked."
+        throw reject(
+          "DELEGATION",
+          "DELEGATION_INPUT_INVALID",
+          new OxDeAIAuthorizationError(
+            "Delegation input is incomplete: both delegation and parentAuth are required. Execution blocked."
+          )
         );
       }
 
@@ -179,13 +224,24 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
           ? await replayStore.consumeDelegationId(delegation.delegation_id, { expiry: delegation.expiry })
           : true;
       } catch (err) {
-        throw new OxDeAIAuthorizationError(
-          `Replay store unavailable for delegation_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        throw reject(
+          "REPLAY",
+          "REPLAY_STORE_UNAVAILABLE",
+          new OxDeAIAuthorizationError(
+            `Replay store unavailable for delegation_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+          )
         );
       }
       if (!delegConsumed) {
-        throw new OxDeAIAuthorizationError("Delegation replay detected. Execution blocked.");
+        throw reject(
+          "REPLAY",
+          "DELEGATION_REPLAY",
+          new OxDeAIAuthorizationError("Delegation replay detected. Execution blocked.")
+        );
       }
+      // Only a store that implements the optional check-and-consume actually
+      // consumed anything; the fallback above assumes success without a store.
+      lifecycle.delegationConsumed = replayStore.consumeDelegationId !== undefined;
 
       // Verify delegation chain:
       //   - parent hash binding
@@ -200,8 +256,12 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       // Validate parentScope before chain verification. Fail closed on missing or malformed scope.
       const { parentScope } = opts.delegation;
       if (!isValidDelegationScope(parentScope)) {
-        throw new OxDeAIAuthorizationError(
-          "Parent authorization scope is missing or malformed. Execution blocked."
+        throw reject(
+          "DELEGATION",
+          "DELEGATION_INPUT_INVALID",
+          new OxDeAIAuthorizationError(
+            "Parent authorization scope is missing or malformed. Execution blocked."
+          )
         );
       }
 
@@ -238,7 +298,11 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       }
 
       if (violationMessages.length > 0) {
-        throw new OxDeAIDelegationError(violationMessages);
+        throw reject(
+          "DELEGATION",
+          "DELEGATION_VERIFICATION_FAILED",
+          new OxDeAIDelegationError(violationMessages)
+        );
       }
 
       // Enforce strict verification on the parent Authorization as well.
@@ -249,15 +313,24 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
           parentAuth.auth_id, { expiry: parentAuth.expiry }
         );
       } catch (err) {
-        throw new OxDeAIAuthorizationError(
-          `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        throw reject(
+          "REPLAY",
+          "REPLAY_STORE_UNAVAILABLE",
+          new OxDeAIAuthorizationError(
+            `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+          )
         );
       }
       if (!parentAuthConsumed) {
-        throw new OxDeAIAuthorizationError(
-          "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
+        throw reject(
+          "REPLAY",
+          "AUTHORIZATION_REPLAY",
+          new OxDeAIAuthorizationError(
+            "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
+          )
         );
       }
+      lifecycle.authorizationConsumed = true;
 
       const parentAuthResult = strictVerifyAuthorization(parentAuth as AuthorizationV1, {
         now,
@@ -274,7 +347,11 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
           parentAuthResult.violations?.map((v) => v.code).join(", ") ||
           parentAuthResult.status ||
           "unknown reason";
-        throw new OxDeAIAuthorizationError(`Parent authorization verification failed: ${reasons}. Execution blocked.`);
+        throw reject(
+          "AUTHORIZATION_VERIFICATION",
+          "AUTHORIZATION_VERIFICATION_FAILED",
+          new OxDeAIAuthorizationError(`Parent authorization verification failed: ${reasons}. Execution blocked.`)
+        );
       }
 
       // parentAuth is AuthorizationV1; cast to Authorization for hook/audit
@@ -283,11 +360,18 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       const parentAuthCompat = parentAuth as unknown as Authorization;
 
       // ── Delegation: beforeExecute hook ────────────────────────────────
+      lifecycle.stage = "EXECUTION_GATE";
       if (config.beforeExecute) {
         await config.beforeExecute(action, parentAuthCompat);
       }
 
       // ── Delegation: execute ───────────────────────────────────────────
+      // Marked BEFORE control enters the callback, not after it returns: a
+      // failure raised inside the callback is not a guard-boundary rejection,
+      // and the guard has already permitted the action by this line. Moving
+      // this assignment below the await would silently re-classify every
+      // callback failure as a guard refusal.
+      lifecycle.executionStarted = true;
       const result = await execute();
 
       // ── Delegation: audit hook (no setState — parent state is authoritative) ──
@@ -308,16 +392,22 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     // just the existing one applied to the now-mandatory evaluatePure
     // parameter. It is not independently trusted or monotonic; reliable
     // PEP-side clock capture remains deferred.
+    lifecycle.stage = "POLICY_EVALUATION";
     const evaluationTime = Math.floor(Date.now() / 1000);
     let evalResult: ReturnType<typeof config.engine.evaluatePure>;
     try {
       evalResult = config.engine.evaluatePure(intent, state, evaluationTime);
     } catch (err) {
       // Engine errors are never swallowed — callers must handle them.
-      throw new OxDeAIAuthorizationError(
-        `PolicyEngine.evaluatePure threw: ${err instanceof Error ? err.message : String(err)}`
+      throw reject(
+        "POLICY_EVALUATION",
+        "ENGINE_FAILURE",
+        new OxDeAIAuthorizationError(
+          `PolicyEngine.evaluatePure threw: ${err instanceof Error ? err.message : String(err)}`
+        )
       );
     }
+    lifecycle.policyEvaluated = true;
 
     // ── 5. DENY path ───────────────────────────────────────────────────────
     if (evalResult.decision === "DENY") {
@@ -332,19 +422,31 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
 
     // ── 6. ALLOW: require authorization artifact and nextState ─────────────
     if (!evalResult.authorization) {
-      throw new OxDeAIAuthorizationError(
-        "PolicyEngine returned ALLOW without an authorization artifact. Execution blocked."
+      throw reject(
+        "POLICY_EVALUATION",
+        "AUTHORIZATION_MISSING",
+        new OxDeAIAuthorizationError(
+          "PolicyEngine returned ALLOW without an authorization artifact. Execution blocked."
+        )
       );
     }
     if (!evalResult.nextState) {
-      throw new OxDeAIAuthorizationError(
-        "PolicyEngine returned ALLOW without a nextState. Execution blocked."
+      // An ALLOW with no next state is an engine contract violation, not a
+      // missing artifact: the artifact is present and the result is unusable.
+      throw reject(
+        "POLICY_EVALUATION",
+        "ENGINE_FAILURE",
+        new OxDeAIAuthorizationError(
+          "PolicyEngine returned ALLOW without a nextState. Execution blocked."
+        )
       );
     }
+    lifecycle.authorizationIssued = true;
 
     const { authorization, nextState } = evalResult;
 
     // ── 6b. Verify the authorization artifact (strict verifier, fail-closed) ─
+    lifecycle.stage = "AUTHORIZATION_VERIFICATION";
     const now = Math.floor(Date.now() / 1000);
 
     // Atomically check-and-consume the auth_id before execution. Fail closed on store errors.
@@ -354,13 +456,22 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
         authorization.auth_id, { expiry: (authorization as AuthorizationV1).expiry ?? 0 }
       );
     } catch (err) {
-      throw new OxDeAIAuthorizationError(
-        `Replay store unavailable: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+      throw reject(
+        "REPLAY",
+        "REPLAY_STORE_UNAVAILABLE",
+        new OxDeAIAuthorizationError(
+          `Replay store unavailable: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        )
       );
     }
     if (!authConsumed) {
-      throw new OxDeAIAuthorizationError("Authorization replay detected: auth_id already consumed. Execution blocked.");
+      throw reject(
+        "REPLAY",
+        "AUTHORIZATION_REPLAY",
+        new OxDeAIAuthorizationError("Authorization replay detected: auth_id already consumed. Execution blocked.")
+      );
     }
+    lifecycle.authorizationConsumed = true;
 
     const authResult = strictVerifyAuthorization(authorization as AuthorizationV1, {
       now,
@@ -375,7 +486,11 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     if (authResult.status !== "ok") {
       const reasons =
         authResult.violations?.map((v) => v.code).join(", ") || authResult.status || "unknown reason";
-      throw new OxDeAIAuthorizationError(`Authorization verification failed: ${reasons}. Execution blocked.`);
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "AUTHORIZATION_VERIFICATION_FAILED",
+        new OxDeAIAuthorizationError(`Authorization verification failed: ${reasons}. Execution blocked.`)
+      );
     }
 
     // ── 6d. Enforce intent_hash binding ──────────────────────────────────────
@@ -387,13 +502,23 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     try {
       computedIntentHash = intentHash(intent);
     } catch (err) {
-      throw new OxDeAIAuthorizationError(
-        `Intent canonicalization failed: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+      // A canonicalization failure and a computed mismatch are the same audit
+      // fact: the intent binding could not be established, so nothing may run.
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "INTENT_HASH_MISMATCH",
+        new OxDeAIAuthorizationError(
+          `Intent canonicalization failed: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        )
       );
     }
     if (computedIntentHash !== (authorization as AuthorizationV1).intent_hash) {
-      throw new OxDeAIAuthorizationError(
-        "Intent hash mismatch: computed hash does not match authorization.intent_hash. Execution blocked."
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "INTENT_HASH_MISMATCH",
+        new OxDeAIAuthorizationError(
+          "Intent hash mismatch: computed hash does not match authorization.intent_hash. Execution blocked."
+        )
       );
     }
 
@@ -409,8 +534,14 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     // Using the wrong strategy produces a deterministic mismatch — fail-closed.
     const expectedStateHash = (authorization as AuthorizationV1).state_hash;
     if (!expectedStateHash) {
-      throw new OxDeAIAuthorizationError(
-        "Authorization is missing state_hash. Execution blocked."
+      // As with the intent binding: absent, uncomputable and unequal are one
+      // audit fact — the state binding does not hold.
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "STATE_HASH_MISMATCH",
+        new OxDeAIAuthorizationError(
+          "Authorization is missing state_hash. Execution blocked."
+        )
       );
     }
     const computeHash = config.computeStateHash ?? ((s) => config.engine.computeStateHash(s));
@@ -418,13 +549,21 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     try {
       actualStateHash = computeHash(state);
     } catch (err) {
-      throw new OxDeAIAuthorizationError(
-        `State canonicalization failed: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "STATE_HASH_MISMATCH",
+        new OxDeAIAuthorizationError(
+          `State canonicalization failed: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        )
       );
     }
     if (actualStateHash !== expectedStateHash) {
-      throw new OxDeAIAuthorizationError(
-        "Authorization state_hash does not match the current execution-time state snapshot. Execution blocked."
+      throw reject(
+        "AUTHORIZATION_VERIFICATION",
+        "STATE_HASH_MISMATCH",
+        new OxDeAIAuthorizationError(
+          "Authorization state_hash does not match the current execution-time state snapshot. Execution blocked."
+        )
       );
     }
 
@@ -432,19 +571,32 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     // Commit the new state atomically. This must happen before execute() so
     // that a version mismatch (concurrent modification) blocks execution
     // without committing any side effects.
+    lifecycle.stage = "STATE_COMMIT";
     const casOk = await config.setState(nextState, version);
     if (!casOk) {
-      throw new OxDeAIConflictError(
-        "State version mismatch: concurrent modification detected. Execution blocked."
+      throw reject(
+        "STATE_COMMIT",
+        "CAS_CONFLICT",
+        new OxDeAIConflictError(
+          "State version mismatch: concurrent modification detected. Execution blocked."
+        )
       );
     }
+    lifecycle.stateCommitted = true;
 
     // ── 8. beforeExecute hook ──────────────────────────────────────────────
+    lifecycle.stage = "EXECUTION_GATE";
     if (config.beforeExecute) {
       await config.beforeExecute(action, authorization);
     }
 
     // ── 9. Execute the side effect ─────────────────────────────────────────
+    // Marked BEFORE control enters the callback, not after it returns: a
+    // failure raised inside the callback is not a guard-boundary rejection,
+    // and the guard has already permitted the action by this line. Moving this
+    // assignment below the await would silently re-classify every callback
+    // failure as a guard refusal.
+    lifecycle.executionStarted = true;
     const result = await execute();
 
     // ── 10. Fire audit hook ────────────────────────────────────────────────
@@ -456,5 +608,22 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
 
     // ── 11. Return result ──────────────────────────────────────────────────
     return result;
+  }
+
+  return async function guard(
+    action: ProposedAction,
+    execute: () => Promise<unknown>,
+    opts?: GuardCallOptions
+  ): Promise<unknown> {
+    const lifecycle = createLifecycle("STATE_LOAD");
+    try {
+      return await runRequest(action, execute, opts, lifecycle);
+    } catch (err) {
+      // Unconditional: every emission rule lives in emitBoundaryEvent, so this
+      // catch cannot drift into deciding what counts as a rejection. The
+      // ORIGINAL error is re-thrown regardless of what the audit sink does.
+      await emitBoundaryEvent(config.onBoundaryEvent, err, lifecycle);
+      throw err;
+    }
   };
 }
