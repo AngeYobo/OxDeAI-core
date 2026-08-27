@@ -110,9 +110,10 @@ async function fireDecision(
  * Audit streams (disjoint — no rejection appears on both):
  *
  * ```text
- * policy DENY                → onDecision only        (a decision was reached)
- * pre-execution rejection    → onBoundaryEvent only   (no decision to report)
- * ALLOW, callback then threw → neither                (not a guard rejection)
+ * policy DENY                -> onDecision only        (decision record emitted)
+ * guard rejection before execute() starts
+ *                            -> onBoundaryEvent only   (no decision record emitted)
+ * ALLOW, callback then threw -> neither                (current contract, #238)
  * ```
  *
  * Both hooks are best effort: whatever they throw is swallowed, and the caller
