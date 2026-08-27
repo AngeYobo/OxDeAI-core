@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
 import type { ReplayStore } from "./replayStore.js";
+import type { GuardBoundaryEventHook } from "./boundaryEvent.js";
 
 /**
  * A runtime-agnostic description of an action an agent wants to perform.
@@ -125,6 +126,39 @@ export type OxDeAIGuardConfig = {
    * Errors thrown here are swallowed so they cannot block execution.
    */
   onDecision?: (result: GuardDecisionRecord) => void | Promise<void>;
+
+  /**
+   * Optional audit hook for rejections raised at the guard boundary — an
+   * unbranded trusted context, a provenance conflict, a delegation replay, a
+   * hash-binding failure, a CAS conflict.
+   *
+   * Disjoint from {@link OxDeAIGuardConfig.onDecision}, by construction:
+   *
+   * ```text
+   * valid DENY                              → onDecision only      (decision record emitted)
+   * guard rejection before execute() starts → onBoundaryEvent only (no decision record)
+   * ALLOW, execute() starts, callback threw → neither              (current contract, #238)
+   * ```
+   *
+   * No rejection is reported on both streams. A valid denial is the engine's
+   * decision and is reported to `onDecision`; every other guard-boundary
+   * rejection emits no decision record, which is precisely why a deployment
+   * auditing only `onDecision` could not see attempted identity or tool
+   * substitutions.
+   *
+   * A boundary rejection is not necessarily pre-decision: it may occur before
+   * the engine ran (`policyEvaluated === false`) or after a valid ALLOW
+   * (`policyEvaluated === true`), because authorization verification, replay
+   * consumption, hash binding and the CAS commit all run after the ALLOW and
+   * before `execute()`, while the ALLOW record is only emitted once the
+   * protected callback has returned.
+   *
+   * Best effort, exactly like `onDecision`: anything this hook throws or
+   * rejects with is swallowed, and the caller always receives the original
+   * guard error, unwrapped and unreplaced. It is awaited before the rejection
+   * propagates, so a slow hook delays the caller — do durable work out of band.
+   */
+  onBoundaryEvent?: GuardBoundaryEventHook;
 
   /**
    * The audience this guard instance expects in every AuthorizationV1 artifact.

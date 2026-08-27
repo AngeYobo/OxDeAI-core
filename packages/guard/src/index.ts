@@ -18,6 +18,12 @@ export {
 export type { TrustedExecutionContext } from "./trustedContext.js";
 export { reconcileWithTrustedContext } from "./provenance.js";
 export type { ClaimProvenance, ProvenanceRecord, ReconciliationResult, ReconciliationOptions } from "./provenance.js";
+export type {
+  GuardBoundaryStage,
+  GuardBoundaryFailure,
+  GuardBoundaryAuditEvent,
+  GuardBoundaryEventHook,
+} from "./boundaryEvent.js";
 export {
   INTERNAL_EXECUTOR_TOKEN_HEADER,
   createPepGatewayExecutor,
