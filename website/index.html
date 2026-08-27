@@ -106,11 +106,15 @@
           OxDeAI controls execution, not behavior.
         </p>
         <p class="hero-rule">
-          <strong>No authorization → no execution.</strong>
+          <strong
+            >No valid authorization → no execution through the enforced guard
+            boundary.</strong
+          >
         </p>
         <p class="hero-sub">
           Agents propose actions. OxDeAI decides if they are allowed to execute.
-          Without this boundary, agent systems are not production-safe.
+          Without this boundary, there is no enforced control over what agents
+          can do.
         </p>
         <div class="hero-pill-row">
           <span class="pill">Deterministic decisions</span>
@@ -177,7 +181,7 @@
             <div class="why-card-body">
               Every action requires a valid, signed, policy-bound authorization
               artifact before execution is permitted. No authorization → no
-              execution. Deterministic. Verifiable. Portable across runtimes.
+              execution. Deterministic. Verifiable. Auditable.
             </div>
           </div>
         </div>
@@ -277,8 +281,8 @@
         <h2 class="section-title">Decision and execution are separated.</h2>
         <p class="section-sub">
           The Policy Decision Point (PDP) decides. The Policy Enforcement Point
-          (PEP) enforces. The Verifier checks trust. Execution is impossible
-          without authorization.
+          (PEP) enforces. The Verifier checks trust. Execution cannot proceed
+          through the guard without a valid authorization.
         </p>
 
         <div class="flow-grid">
@@ -350,10 +354,12 @@
             <div class="proof-icon">✓</div>
             <div class="proof-title">Deterministic decisions</div>
             <div class="proof-body">
-              Same <code class="mono">(intent, state, policy)</code> inputs
-              produce identical outputs across runtimes, restarts, and replicas.
-              Policy-critical logic has no ambient randomness or shared mutable
-              state.
+              Policy evaluation is deterministic for the same normalized
+              <code class="mono">intent</code>, trusted
+              <code class="mono">state</code>, <code class="mono">policy</code>,
+              and trusted evaluation time. The reference engine has no ambient
+              randomness or shared mutable state, so restarts and replicas of it
+              produce identical decisions.
             </div>
           </div>
           <div class="proof-block">
@@ -362,8 +368,8 @@
             <div class="proof-body">
               Authorization IDs are single-use via a pluggable
               <code class="mono">ReplayStore</code>. Nonce window tracking per
-              agent. Durable backends (Redis, Postgres) drop in without changing
-              the guard API. TOCTOU tests are part of the conformance suite.
+              agent. Redis-backed replay protection is available for durable
+              deployments. TOCTOU tests are part of the conformance suite.
             </div>
           </div>
           <div class="proof-block">
@@ -378,11 +384,12 @@
           </div>
           <div class="proof-block">
             <div class="proof-icon">✓</div>
-            <div class="proof-title">Local, portable verification</div>
+            <div class="proof-title">Local, offline verification</div>
             <div class="proof-body">
               Authorization artifacts are self-contained. Verification requires
               no network calls, no central authority, no runtime dependency on
-              the issuer. Any conformant implementation can verify any artifact.
+              the issuer. Authorization artifacts can be verified fully offline
+              by the TypeScript reference implementation.
             </div>
           </div>
           <div class="proof-block">
@@ -398,11 +405,15 @@
           </div>
           <div class="proof-block">
             <div class="proof-icon">✓</div>
-            <div class="proof-title">Cross-language conformance</div>
+            <div class="proof-title">Cross-language verification</div>
             <div class="proof-body">
-              Frozen conformance vectors validated by Go and Python harnesses.
-              CI enforces that all adapters (LangGraph, CrewAI, AutoGen, OpenAI,
-              OpenClaw) produce identical results from identical inputs.
+              Canonicalization vectors are cross-validated in TypeScript, Go,
+              and Python from one shared corpus; state-hash and signed-KRL
+              vectors are cross-validated in Go and Python. The broader protocol
+              conformance suite is validated in TypeScript. All supported
+              adapters (LangGraph, CrewAI, AutoGen, OpenAI Agents, OpenClaw)
+              delegate authorization to
+              <code class="mono">@oxdeai/guard</code> and are exercised in CI.
             </div>
           </div>
         </div>
@@ -437,7 +448,7 @@
 
           <!-- Guard setup -->
           <div id="tab-guard" class="code-panel active">
-            <pre><code><span class="kw">import</span> { <span class="ty">PolicyEngine</span> } <span class="kw">from</span> <span class="str">"@oxdeai/core"</span>;
+            <pre><code><span class="kw">import</span> { <span class="ty">PolicyEngine</span>, <span class="fn">RECOMMENDED_TRUSTED_TIME_PROFILE</span> } <span class="kw">from</span> <span class="str">"@oxdeai/core"</span>;
 <span class="kw">import</span> { <span class="fn">OxDeAIGuard</span>, <span class="ty">OxDeAIDenyError</span> } <span class="kw">from</span> <span class="str">"@oxdeai/guard"</span>;
 
 <span class="cm">// 1. Initialize the Policy Decision Point (PDP)</span>
@@ -447,15 +458,19 @@
   authorization_ttl_seconds:  <span class="num">60</span>,
   authorization_signing_alg:  <span class="str">"Ed25519"</span>,
   authorization_signing_kid:  <span class="str">"k1"</span>,
+  authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM,
+  authorization_audience:     <span class="str">"agent-001"</span>,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE,   <span class="cm">// required trusted-time bounds</span>
 });
 
 <span class="cm">// 2. Create the Policy Enforcement Point (PEP)</span>
 <span class="kw">const</span> guard = <span class="fn">OxDeAIGuard</span>({
   engine,
-  <span class="prop">getState</span>:      () =&gt; <span class="fn">getAgentState</span>(),
-  <span class="prop">setState</span>:      (s) =&gt; <span class="fn">setAgentState</span>(s),
-  <span class="prop">trustedKeySets</span>: [myKeySet],   <span class="cm">// trust is explicit, never implicit</span>
-  <span class="prop">onDecision</span>:    (record) =&gt; <span class="fn">auditLog</span>(record),
+  <span class="prop">getState</span>:        () =&gt; <span class="fn">getAgentState</span>(),        <span class="cm">// returns { state, version }</span>
+  <span class="prop">setState</span>:        (s, v) =&gt; <span class="fn">setAgentState</span>(s, v),  <span class="cm">// CAS: returns boolean</span>
+  <span class="prop">trustedKeySets</span>:   [myKeySet],    <span class="cm">// trust is explicit, never implicit</span>
+  <span class="prop">expectedAudience</span>: <span class="str">"agent-001"</span>,  <span class="cm">// must match authorization_audience above</span>
+  <span class="prop">onDecision</span>:      (record) =&gt; <span class="fn">auditLog</span>(record),
 });
 
 <span class="cm">// 3. Every action goes through the guard</span>
@@ -512,25 +527,32 @@
 <span class="kw">import</span> { <span class="fn">OxDeAIGuard</span> } <span class="kw">from</span> <span class="str">"@oxdeai/guard"</span>;
 
 <span class="cm">// Parent agent narrows authority to a child agent</span>
-<span class="kw">const</span> delegation = <span class="fn">createDelegation</span>(parentAuth, {
-  <span class="prop">delegatee</span>: <span class="str">"child-agent-002"</span>,
-  <span class="prop">scope</span>: {
-    <span class="prop">tools</span>:      [<span class="str">"provision_gpu"</span>],
-    <span class="prop">max_amount</span>: <span class="num">300n</span>,     <span class="cm">// strictly narrowed from parent</span>
+<span class="kw">const</span> delegation = <span class="fn">createDelegation</span>(
+  parentAuth,
+  {
+    <span class="prop">delegatee</span>: <span class="str">"child-agent-002"</span>,
+    <span class="prop">scope</span>: {
+      <span class="prop">tools</span>:      [<span class="str">"provision_gpu"</span>],
+      <span class="prop">max_amount</span>: <span class="num">300n</span>,     <span class="cm">// strictly narrowed from parent</span>
+    },
+    <span class="prop">expiry</span>: parentAuth.expiry,   <span class="cm">// cannot exceed parent</span>
+    <span class="prop">kid</span>:    <span class="str">"key-001"</span>,
   },
-  <span class="prop">expiry</span>:     parentAuth.expiry,   <span class="cm">// cannot exceed parent</span>
-  <span class="prop">kid</span>:        <span class="str">"key-001"</span>,
-  <span class="prop">privateKey</span>: signingKey,
-});
+  signingKey   <span class="cm">// private key passed separately, never inside params</span>
+);
 
 <span class="cm">// Child guard verifies chain + scope before execution</span>
 <span class="kw">await</span> <span class="fn">guard</span>(
   action,
   <span class="kw">async</span> () =&gt; <span class="fn">provisionGpu</span>(),
   {
-    <span class="prop">delegation</span>: { delegation, parentAuth },
+    <span class="prop">delegation</span>: {
+      delegation,
+      parentAuth,
+      <span class="prop">parentScope</span>: { tools: [<span class="str">"provision_gpu"</span>], max_amount: <span class="num">1000n</span> },   <span class="cm">// parent's own ceiling</span>
+    },
     <span class="cm">// Replay prevention via pluggable ReplayStore</span>
-    <span class="cm">// (default: in-memory; swap for Redis/Postgres)</span>
+    <span class="cm">// (default: in-memory; swap for Redis)</span>
   }
 );
 <span class="cm">// delegation_id consumed atomically — replay → OxDeAIAuthorizationError</span></code></pre>
@@ -561,9 +583,8 @@
           Works with the frameworks you already use.
         </h2>
         <p class="section-sub">
-          All adapters delegate to <code class="mono">@oxdeai/guard</code>.
-          Identical inputs produce identical authorization decisions across all
-          of them.
+          All supported adapters delegate authorization to
+          <code class="mono">@oxdeai/guard</code> and are exercised in CI.
         </p>
 
         <div class="adapter-grid">
@@ -612,8 +633,8 @@
         <p
           style="margin-top: 20px; font-size: 0.8rem; color: var(--text-subtle)"
         >
-          Cross-adapter conformance validated in CI: same intent + state +
-          policy → same decision across all adapters.
+          Each adapter ships its own test suite and is validated against
+          <code class="mono">@oxdeai/core</code> in CI before publish.
         </p>
       </div>
     </section>
@@ -622,7 +643,7 @@
     <section id="cta">
       <div class="container" style="text-align: center">
         <div class="section-label">get started</div>
-        <h2 class="section-title">Production-safe agents start here.</h2>
+        <h2 class="section-title">Built for production enforcement.</h2>
         <p class="section-sub" style="max-width: 540px; margin: 0 auto 32px">
           OxDeAI is open source, Apache-2.0 licensed, and ready to drop into any
           TypeScript agent stack today.
