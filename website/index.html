@@ -424,11 +424,16 @@
     <section id="code">
       <div class="container">
         <div class="section-label">integration</div>
-        <h2 class="section-title">The guard wraps every action.</h2>
+        <h2 class="section-title">Put the guard on every execution path.</h2>
         <p class="section-sub">
-          One function intercepts all proposed actions. Execution only proceeds
-          if the policy allows it.
+          Trusted execution context is established at the boundary. Actions
+          execute only after authorization succeeds.
         </p>
+        <div class="arch-note" style="margin-bottom: 24px">
+          Current integration surface on <code class="mono">main</code>. OxDeAI
+          2.0 packages are being prepared for publication — see the note below
+          the examples for current npm availability.
+        </div>
 
         <div class="code-block">
           <div class="code-block-header">
@@ -449,50 +454,67 @@
           <!-- Guard setup -->
           <div id="tab-guard" class="code-panel active">
             <pre><code><span class="kw">import</span> { <span class="ty">PolicyEngine</span>, <span class="fn">RECOMMENDED_TRUSTED_TIME_PROFILE</span> } <span class="kw">from</span> <span class="str">"@oxdeai/core"</span>;
-<span class="kw">import</span> { <span class="fn">OxDeAIGuard</span>, <span class="ty">OxDeAIDenyError</span> } <span class="kw">from</span> <span class="str">"@oxdeai/guard"</span>;
+<span class="kw">import</span> { <span class="fn">createSecureGuard</span>, <span class="fn">createTrustedExecutionContext</span>, <span class="ty">OxDeAIProvenanceConflictError</span>, <span class="ty">OxDeAIDenyError</span> } <span class="kw">from</span> <span class="str">"@oxdeai/guard"</span>;
 
 <span class="cm">// 1. Initialize the Policy Decision Point (PDP)</span>
 <span class="kw">const</span> engine = <span class="kw">new</span> <span class="ty">PolicyEngine</span>({
   policy_version:             <span class="str">"v1.0.0"</span>,
-  engine_secret:              process.env.OXDEAI_ENGINE_SECRET,
+  engine_secret:              process.env.OXDEAI_ENGINE_SECRET!,      <span class="cm">// set at deploy time</span>
   authorization_ttl_seconds:  <span class="num">60</span>,
   authorization_signing_alg:  <span class="str">"Ed25519"</span>,
   authorization_signing_kid:  <span class="str">"k1"</span>,
-  authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM,
+  authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM!, <span class="cm">// set at deploy time</span>
   authorization_audience:     <span class="str">"agent-001"</span>,
   ...RECOMMENDED_TRUSTED_TIME_PROFILE,   <span class="cm">// required trusted-time bounds</span>
 });
 
-<span class="cm">// 2. Create the Policy Enforcement Point (PEP)</span>
-<span class="kw">const</span> guard = <span class="fn">OxDeAIGuard</span>({
-  engine,
-  <span class="prop">getState</span>:        () =&gt; <span class="fn">getAgentState</span>(),        <span class="cm">// returns { state, version }</span>
-  <span class="prop">setState</span>:        (s, v) =&gt; <span class="fn">setAgentState</span>(s, v),  <span class="cm">// CAS: returns boolean</span>
-  <span class="prop">trustedKeySets</span>:   [myKeySet],    <span class="cm">// trust is explicit, never implicit</span>
-  <span class="prop">expectedAudience</span>: <span class="str">"agent-001"</span>,  <span class="cm">// must match authorization_audience above</span>
-  <span class="prop">onDecision</span>:      (record) =&gt; <span class="fn">auditLog</span>(record),
+<span class="cm">// 2. Create the secure guard — tenancy posture is explicit, never assumed</span>
+<span class="kw">const</span> guard = <span class="fn">createSecureGuard</span>(
+  {
+    engine,
+    <span class="prop">getState</span>:        () =&gt; <span class="fn">getAgentState</span>(),        <span class="cm">// returns { state, version }</span>
+    <span class="prop">setState</span>:        (s, v) =&gt; <span class="fn">setAgentState</span>(s, v),  <span class="cm">// CAS: returns boolean</span>
+    <span class="prop">trustedKeySets</span>:   [myKeySet],
+    <span class="prop">expectedAudience</span>: <span class="str">"agent-001"</span>,  <span class="cm">// must match authorization_audience above</span>
+    <span class="prop">onDecision</span>:      (record) =&gt; <span class="fn">auditLog</span>(record),
+    <span class="prop">onBoundaryEvent</span>: (event) =&gt; <span class="fn">auditBoundary</span>(event),  <span class="cm">// identity/tool conflicts, CAS conflicts</span>
+  },
+  { tenancy: <span class="str">"single-tenant"</span> }
+);
+
+<span class="cm">// 3. The PEP builds trusted context AFTER authenticating the caller —</span>
+<span class="cm">//    never by trusting a field on the incoming request body.</span>
+<span class="kw">const</span> trustedContext = <span class="fn">createTrustedExecutionContext</span>({
+  principalId: authenticatedPrincipalId,
+  agentId:     <span class="fn">resolveAgentId</span>(authenticatedPrincipalId),
+  adapterId:   <span class="str">"http-pep"</span>,
+  depth:       <span class="num">0</span>,   <span class="cm">// derived from the real call chain, never proposer-supplied</span>
 });
 
-<span class="cm">// 3. Every action goes through the guard</span>
+<span class="cm">// 4. The proposed action carries no identity claim — identity came from step 3</span>
 <span class="kw">try</span> {
   <span class="kw">await</span> <span class="fn">guard</span>(
+    trustedContext,
     {
-      <span class="prop">name</span>:    <span class="str">"charge_wallet"</span>,
-      <span class="prop">args</span>:    { amount: <span class="num">100</span>, currency: <span class="str">"usd"</span> },
-      <span class="prop">context</span>: { agent_id: <span class="str">"agent-001"</span> },
+      <span class="prop">name</span>: <span class="str">"charge_wallet"</span>,
+      <span class="prop">args</span>: { amount: <span class="num">100</span>, currency: <span class="str">"usd"</span> },
     },
     <span class="kw">async</span> () =&gt; <span class="fn">chargeWallet</span>(<span class="num">100</span>)   <span class="cm">// only runs if ALLOW</span>
   );
 } <span class="kw">catch</span> (err) {
-  <span class="kw">if</span> (err <span class="kw">instanceof</span> <span class="ty">OxDeAIDenyError</span>) {
-    <span class="cm">// DENY — execution did not occur</span>
+  <span class="kw">if</span> (err <span class="kw">instanceof</span> <span class="ty">OxDeAIProvenanceConflictError</span>) {
+    console.error(<span class="str">"Trusted-context conflict"</span>);
+  } <span class="kw">else</span> <span class="kw">if</span> (err <span class="kw">instanceof</span> <span class="ty">OxDeAIDenyError</span>) {
+    console.error(<span class="str">"Action denied"</span>);
+  } <span class="kw">else</span> {
+    <span class="kw">throw</span> err;
   }
 }</code></pre>
           </div>
 
           <!-- Strict verification -->
           <div id="tab-verify" class="code-panel">
-            <pre><code><span class="kw">import</span> { <span class="fn">verifyAuthorization</span>, <span class="fn">createVerifier</span> } <span class="kw">from</span> <span class="str">"@oxdeai/core"</span>;
+            <pre><code><span class="kw">import</span> { <span class="fn">verifyAuthorization</span>, <span class="fn">createVerifier</span>, <span class="fn">verifyEnvelope</span> } <span class="kw">from</span> <span class="str">"@oxdeai/core"</span>;
 
 <span class="cm">// Inline: strict mode requires trustedKeySets</span>
 <span class="kw">const</span> result = <span class="fn">verifyAuthorization</span>(artifact, {
@@ -562,14 +584,16 @@
 
         <div class="install-strip">
           <span class="install-code">
-            <span class="prefix">npm install </span>@oxdeai/guard @oxdeai/core
+            OxDeAI 2.0 — including the secure guard surface shown above — is in
+            preparation for npm publication. Current source and integration
+            examples are available on GitHub.
           </span>
           <a
             class="btn btn-secondary"
-            href="https://github.com/oxdeai/oxdeai/blob/main/README.md"
+            href="https://github.com/oxdeai/oxdeai/tree/main/packages"
             target="_blank"
             rel="noopener"
-            >Read the docs →</a
+            >View source on GitHub →</a
           >
         </div>
       </div>
@@ -645,8 +669,8 @@
         <div class="section-label">get started</div>
         <h2 class="section-title">Built for production enforcement.</h2>
         <p class="section-sub" style="max-width: 540px; margin: 0 auto 32px">
-          OxDeAI is open source, Apache-2.0 licensed, and ready to drop into any
-          TypeScript agent stack today.
+          OxDeAI is open source and Apache-2.0 licensed. Start integrating
+          OxDeAI from source today.
         </p>
         <div class="cta-group" style="justify-content: center">
           <a
