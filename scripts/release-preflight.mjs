@@ -34,6 +34,36 @@ const RELEASE_PACKAGES = {
     tagPrefix: "cli",
     changelog: "packages/cli/CHANGELOG.md",
   },
+  langgraph: {
+    name: "@oxdeai/langgraph",
+    path: "packages/langgraph",
+    tagPrefix: "langgraph",
+    changelog: "packages/langgraph/CHANGELOG.md",
+  },
+  crewai: {
+    name: "@oxdeai/crewai",
+    path: "packages/crewai",
+    tagPrefix: "crewai",
+    changelog: "packages/crewai/CHANGELOG.md",
+  },
+  autogen: {
+    name: "@oxdeai/autogen",
+    path: "packages/autogen",
+    tagPrefix: "autogen",
+    changelog: "packages/autogen/CHANGELOG.md",
+  },
+  "openai-agents": {
+    name: "@oxdeai/openai-agents",
+    path: "packages/openai-agents",
+    tagPrefix: "openai-agents",
+    changelog: "packages/openai-agents/CHANGELOG.md",
+  },
+  openclaw: {
+    name: "@oxdeai/openclaw",
+    path: "packages/openclaw",
+    tagPrefix: "openclaw",
+    changelog: "packages/openclaw/CHANGELOG.md",
+  },
 };
 
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
@@ -41,7 +71,7 @@ const VERSION_RE = /^\d+\.\d+\.\d+$/;
 function usage(exitCode = 0) {
   const out = exitCode === 0 ? console.log : console.error;
   out(`Usage:
-  node scripts/release-preflight.mjs --package <core|sdk|conformance|guard|cli> [options]
+  node scripts/release-preflight.mjs --package <core|sdk|conformance|guard|cli|langgraph|crewai|autogen|openai-agents|openclaw> [options]
 
 Options:
   --package <name>              Package short name to validate.

@@ -30,6 +30,11 @@ sdk-vX.Y.Z
 conformance-vX.Y.Z
 guard-vX.Y.Z
 cli-vX.Y.Z
+langgraph-vX.Y.Z
+crewai-vX.Y.Z
+autogen-vX.Y.Z
+openai-agents-vX.Y.Z
+openclaw-vX.Y.Z
 ```
 
 For coordinated releases, repeat the mapping for every package. Multiple tags may point to the same commit, but package versions remain independent.

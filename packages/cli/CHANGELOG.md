@@ -7,6 +7,39 @@ This project follows Semantic Versioning.
 
 ---
 
+## [0.3.0] - Unreleased
+
+**Baseline for this entry:** the published `@oxdeai/cli@0.2.4` npm artifact
+(2026-03-12). The Git tag `cli-v0.2.4` (`3614d94`) carries the same date, so the
+baseline is provable for this package.
+
+Pre-1.0, so a minor bump carries the breaking change.
+
+### Breaking
+
+- **Depends on the `@oxdeai/core` 2.0 line.** Behaviour that follows from core's
+  trusted-time work is inherited by the CLI's build/verify/replay paths.
+- **A valid `engine_secret` is enforced on the validation path.** Insecure defaults
+  were removed; a run that previously succeeded with an absent or too-short secret
+  now fails with an actionable error rather than proceeding.
+- **Strict-mode verification requires an explicit trust anchor.** The four strict
+  `verify` entry points require `--trusted-keyset`, or an explicit
+  `--mode best-effort`. A missing keyset produces an actionable error instead of a
+  silent inconclusive result.
+
+### Fixed
+
+- Deterministic `init` behaviour restored.
+- `oxdeai` with no command exits 0 and prints usage to stdout.
+
+### Packaging
+
+- `license`, `repository` (with `directory`), `homepage` and `bugs` are now declared;
+  the published `0.2.4` artifact carried none of them, which blocks npm provenance.
+- The existing `prepack` build step is unchanged.
+
+---
+
 ## [0.2.4] - 2026-03-19
 
 ### Fixed

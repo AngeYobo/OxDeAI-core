@@ -7,6 +7,64 @@ This project follows Semantic Versioning.
 
 ---
 
+## [2.0.0] - Unreleased
+
+**Baseline for this entry:** the published `@oxdeai/conformance@1.3.1` npm artifact
+(2026-03-08).
+
+> ⚠️ `1.5.0` appears in this changelog and as the Git tag `conformance-v1.5.0` but
+> **was never published to npm**. `1.3.1` is the last released artifact and is the
+> baseline used here. The `1.5.0` entry below is retained as historical record of
+> the source change, not of a release.
+
+The vector corpus is this package's public contract, and it has roughly doubled
+since the last published artifact.
+
+### Breaking
+
+- **The suite now targets the `@oxdeai/core` 2.0 line.** The dependency is an exact
+  pin, so a build of this package validates the 2.0 protocol surface and cannot be
+  used to validate a `core@1.x` implementation. Implementers tracking the 1.x line
+  must stay on `@oxdeai/conformance@1.3.1`.
+- Vector regeneration under the trusted-time engine changed expected values wherever
+  a vector's evaluation depended on time. Existing vector expectations captured
+  against the 1.3.1 engine will not match.
+
+### Added
+
+Nine vector families that did not exist in the published `1.3.1` artifact:
+
+- `trusted-time.json` — trusted-time freshness semantics
+- `clock-semantics-verification.json`
+- `delegation-verification.json`, `delegation-chain-verification.json`,
+  `delegation-parent-hash.json`, `delegation-signature-verification.json`
+- `signed-krl-verification.json` — `SignedKRLV1`
+- `key-lifecycle-verification.json`
+- `profile-c-state-verification.json`
+
+Also added: the `validate:trusted-time` entry point and the trusted-time conformance
+runner.
+
+### Changed
+
+- The validator no longer reads `OXDEAI_ENGINE_SECRET` from the environment; both
+  `extract-vectors` and `validate` use `CONFORMANCE_ENGINE_SECRET` unconditionally,
+  so the suite is deterministic regardless of shell environment.
+- Delegation chain and signature verification run on an independent recomputation
+  path rather than through an engine call.
+
+### Packaging
+
+- An explicit `files` field is declared. The artifact now ships `vectors/`, the
+  compiled validator, README, CHANGELOG and LICENSE only. It no longer ships
+  TypeScript sources, `tsconfig.json`, the Go/Python harness directory, or compiled
+  test files — the harnesses remain in the repository and are run from source.
+- `prepack` now rebuilds before packing.
+- `repository` (with `directory`), `homepage` and `bugs` are declared for npm
+  provenance.
+
+---
+
 ## [1.5.0] - 2026-03-30
 
 ### Changed

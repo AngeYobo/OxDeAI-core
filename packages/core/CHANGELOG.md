@@ -7,6 +7,116 @@ This project follows Semantic Versioning.
 
 ---
 
+## [2.0.0] - Unreleased
+
+**Baseline for this entry:** the published `@oxdeai/core@1.7.0` npm artifact
+(2026-04-01). Its packed public surface matches the source at tag `core-v1.7.0`
+(`409ff44`), so that commit is used as the provable comparison point. Entries below
+describe the consumer-visible delta between that artifact and the current candidate.
+
+> ⚠️ `1.7.0` was published and then further modified on `main` without a version
+> bump, so the version number `1.7.0` no longer uniquely identifies an artifact.
+> `2.0.0` re-establishes that guarantee. Nothing between the published `1.7.0` and
+> this release should be treated as a released version.
+
+### Breaking
+
+- **`evaluationTime` is now a required argument on every evaluation entry point.**
+  There is no implicit wall-clock fallback and no derivation from `intent.timestamp`.
+  ```diff
+  - engine.evaluate(intent, state)
+  + engine.evaluate(intent, state, evaluationTime)
+
+  - engine.evaluatePure(intent, state, opts?)
+  + engine.evaluatePure(intent, state, evaluationTime, opts?)
+
+  - engine.simulateSequence(intents, opts?)
+  + engine.simulateSequence(intents, evaluationTime, opts?)
+  ```
+  Note that `opts` moved from the third to the fourth positional parameter on
+  `evaluatePure`, and from the second to the third on `simulateSequence`. A call
+  site that passes `opts` in the old position now passes it as `evaluationTime`
+  and fails validation rather than silently misbehaving.
+- **`EngineOptions.maxClockSkewSeconds` and `EngineOptions.maxIntentAgeSeconds` are
+  now required.** A `PolicyEngine` constructed without an explicit trusted-time
+  policy no longer starts. `RECOMMENDED_TRUSTED_TIME_PROFILE` supplies conformant
+  values, but a deployment must opt into it explicitly — it is a recommended
+  profile, not a default.
+- **`evaluationTime` is validated, not coerced.** `NaN`, `Infinity`, non-integers
+  and out-of-range values are rejected via `assertProtocolSeconds` instead of being
+  normalized.
+- **`PolicyEngine.verifyAuthorization` now returns the named type
+  `EngineAuthorizationVerificationResult`.** The result gained `signatureVerified`,
+  `verificationMode` and `verificationCoverage` alongside `valid` / `reason`. Code
+  that structurally matched the previous anonymous return type still compiles;
+  code that re-declared it will not.
+- **The public `AuthorizationV1` artifact boundary is separated from the engine's
+  internal representation.** Internal HMAC-binding fields are no longer part of the
+  published artifact surface; use `toPublicAuthorizationV1` to obtain the wire form.
+- **`auth_id` is the canonical authorization identifier.** Reads are reconciled with
+  the legacy `authorization_id` field rather than the two being treated as
+  interchangeable.
+
+### Security hardening
+
+- Replay-window eviction, velocity windows and tool-call windows are all driven from
+  the trusted `evaluationTime` rather than from proposer-supplied `intent.timestamp`.
+  A caller can no longer reset its own quota by choosing a favourable timestamp that
+  still passes freshness.
+- Authorization `issued_at` / `expiry` are minted from the trusted evaluation time.
+- Implausible future authorization issuance is rejected; the bound is exported as
+  `DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS`.
+- Tool-call enforcement is derived from trusted policy state. `intent.tool_call` is
+  explicitly treated as a self-declared, agent-controlled field and does not
+  influence the decision; `intent.tool` is used only as a lookup key that must
+  resolve against trusted state.
+- Negative `intent.amount` values are rejected instead of flowing into budget and
+  velocity arithmetic.
+- Expired concurrency leases are reclaimed and released leases removed, so a crashed
+  or abandoned execution no longer consumes concurrency budget indefinitely.
+- Runtime state numeric-leaf validation was hardened; malformed or type-confused
+  state leaves produce a deterministic `STATE_INVALID` denial rather than being
+  coerced.
+- `canonicalization-v1` and normative `AuthorizationV1` verification are enforced at
+  the verification boundary.
+
+### Added
+
+- `RECOMMENDED_TRUSTED_TIME_PROFILE` — conformant `maxClockSkewSeconds` /
+  `maxIntentAgeSeconds` values matching `docs/spec/core/trusted-time-v1.md` §5.
+- Deterministic trusted-time freshness verifier and its dedicated reason codes.
+- `SignedKRLV1` protocol artifact, with `verifySignedKrl` and
+  `signedKrlSigningPayload`, plus the `signed-krl` type exports.
+- `toPublicAuthorizationV1` and `DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS`.
+- Signature-verification status and coverage are surfaced on authorization results
+  (`signatureVerified`, `verificationMode`, `verificationCoverage`), so a caller can
+  distinguish "verified and valid" from "valid under a weaker coverage mode".
+- `EngineAuthorizationVerificationResult` is exported.
+
+### Changed
+
+- `PolicyEngine.verifyAuthorization` is documented as **limited scope**: it
+  authenticates only the engine-HMAC field subset. Relying parties enforcing an
+  authorization issued by another party must use the standalone strict verifier with
+  explicit `trustedKeySets`.
+- HMAC-SHA256 authorization verification is deprecated in favour of Ed25519.
+- The Sift `AuthorizationV1` wire encoding is accepted at the verification boundary.
+- Audit-chain genesis was aligned and conformance vectors refrozen accordingly.
+
+### Fixed
+
+- Core public-API surface is shape-aware at the guard boundary, so an incompatible
+  engine shape is rejected at construction rather than at first evaluation.
+
+### Packaging
+
+- The published tarball no longer ships `dist/test` or `dist/dev`. The `1.7.0`
+  artifact shipped 102 compiled test files and a development subprocess helper.
+- `prepack` now rebuilds before packing, so a stale `dist/` cannot be published.
+- `repository.directory` is declared for npm provenance.
+
+---
+
 ## [1.7.0] - 2026-03-29
 
 ### Added

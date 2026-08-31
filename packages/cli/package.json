@@ -1,15 +1,27 @@
 {
   "name": "@oxdeai/cli",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Protocol-focused CLI tooling for OxDeAI artifact build/verify/replay workflows",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "oxdeai": "dist/main.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxdeai/oxdeai.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/oxdeai/oxdeai",
+  "bugs": {
+    "url": "https://github.com/oxdeai/oxdeai/issues"
+  },
   "files": [
     "dist",
+    "!dist/**/*.test.*",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "dependencies": {
     "@oxdeai/core": "workspace:*"

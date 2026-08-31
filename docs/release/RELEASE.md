@@ -20,7 +20,7 @@ A coordinated release commit does not create a shared package version line.
 
 ## 2. Released Packages
 
-Currently released package tag prefixes:
+Supported package-scoped release tag prefixes:
 
 | npm package | package path | tag prefix |
 |---|---|---|
@@ -29,6 +29,11 @@ Currently released package tag prefixes:
 | `@oxdeai/conformance` | `packages/conformance` | `conformance-vX.Y.Z` |
 | `@oxdeai/guard` | `packages/guard` | `guard-vX.Y.Z` |
 | `@oxdeai/cli` | `packages/cli` | `cli-vX.Y.Z` |
+| `@oxdeai/langgraph` | `packages/langgraph` | `langgraph-vX.Y.Z` |
+| `@oxdeai/crewai` | `packages/crewai` | `crewai-vX.Y.Z` |
+| `@oxdeai/autogen` | `packages/autogen` | `autogen-vX.Y.Z` |
+| `@oxdeai/openai-agents` | `packages/openai-agents` | `openai-agents-vX.Y.Z` |
+| `@oxdeai/openclaw` | `packages/openclaw` | `openclaw-vX.Y.Z` |
 
 Other packages in `packages/` must not be released publicly unless their package-scoped tag prefix, changelog requirement, validation gates, and npm publish target are added to this policy first.
 
@@ -50,6 +55,11 @@ sdk-vX.Y.Z
 conformance-vX.Y.Z
 guard-vX.Y.Z
 cli-vX.Y.Z
+langgraph-vX.Y.Z
+crewai-vX.Y.Z
+autogen-vX.Y.Z
+openai-agents-vX.Y.Z
+openclaw-vX.Y.Z
 ```
 
 Rules:
@@ -64,7 +74,13 @@ Global `vX.Y.Z` tags are legacy. Do not create new global `vX.Y.Z` tags for pack
 
 Global tags may only be introduced for a separately documented compatibility bundle or top-level announcement. Such a bundle tag must not replace package-scoped release tags and must include an explicit manifest mapping package names, package versions, package tags, npm versions, and the Git commit.
 
-Historical or suspicious prefixes such as `adapters-vX.Y.Z` must not be reused unless this policy is updated first.
+The historical shared prefix `adapters-vX.Y.Z` is retired. A single tag covering all five adapter
+packages cannot satisfy the rule that a tag version exactly matches one package's `package.json`
+version, so it must not be created again. The existing `adapters-v1.0.0` and `adapters-v1.0.1`
+tags are retained as historical record and must not be moved or deleted. From the 2.0 line onward,
+each adapter uses its own package-scoped prefix as listed above.
+
+Any other historical or suspicious prefix must not be reused unless this policy is updated first.
 
 Historical documentation and changelog entries may mention coordinated global `vX.Y.Z` releases or shared protocol-stack version lines. Those entries explain past releases only. They are not current release policy.
 

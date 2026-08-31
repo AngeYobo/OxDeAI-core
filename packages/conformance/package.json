@@ -1,6 +1,6 @@
 {
   "name": "@oxdeai/conformance",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "description": "Conformance test suite for OxDeAI Core implementations, ensuring compliance with the deterministic policy engine protocol through standardized test cases and validation tools.",
   "license": "Apache-2.0",
   "keywords": [
@@ -16,13 +16,23 @@
     "envelope"
   ],
   "type": "module",
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "extract": "pnpm -C ../core build && pnpm build && node dist/scripts/extract-vectors.js",
-    "validate": "pnpm -C ../core build && pnpm build && node dist/src/validate.js",
-    "validate:trusted-time": "pnpm -C ../core build && pnpm build && node dist/src/validate-trusted-time.js",
-    "test": "pnpm -C ../core build && pnpm build && node --test dist/src/trustedTimeConformance.test.js"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxdeai/oxdeai.git",
+    "directory": "packages/conformance"
   },
+  "homepage": "https://github.com/oxdeai/oxdeai",
+  "bugs": {
+    "url": "https://github.com/oxdeai/oxdeai/issues"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "vectors",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@oxdeai/core": "workspace:*"
   },
@@ -30,5 +40,13 @@
     "ts-node": "^10.9.0",
     "tsx": "^4.23.1",
     "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "extract": "pnpm -C ../core build && pnpm build && node dist/scripts/extract-vectors.js",
+    "validate": "pnpm -C ../core build && pnpm build && node dist/src/validate.js",
+    "validate:trusted-time": "pnpm -C ../core build && pnpm build && node dist/src/validate-trusted-time.js",
+    "test": "pnpm -C ../core build && pnpm build && node --test dist/src/trustedTimeConformance.test.js"
   }
 }

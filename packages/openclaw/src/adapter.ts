@@ -54,8 +54,11 @@ export function createOpenClawGuard(config: OpenClawGuardConfig): OpenClawGuardF
     mapActionToIntent: config.mapActionToIntent,
     beforeExecute: config.beforeExecute,
     onDecision: config.onDecision,
+    onBoundaryEvent: config.onBoundaryEvent,
     expectedAudience: config.agentId,
     trustedKeySets: config.trustedKeySets,
+    replayStore: config.replayStore,
+    computeStateHash: config.computeStateHash,
   });
 
   return async function openClawGuard<T>(

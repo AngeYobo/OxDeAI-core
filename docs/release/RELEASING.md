@@ -18,6 +18,11 @@ sdk-vX.Y.Z
 conformance-vX.Y.Z
 guard-vX.Y.Z
 cli-vX.Y.Z
+langgraph-vX.Y.Z
+crewai-vX.Y.Z
+autogen-vX.Y.Z
+openai-agents-vX.Y.Z
+openclaw-vX.Y.Z
 ```
 
 Global `vX.Y.Z` tags are legacy for package releases. Do not create them for normal package releases.
