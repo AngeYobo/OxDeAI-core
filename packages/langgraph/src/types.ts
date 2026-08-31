@@ -72,11 +72,34 @@ export type LangGraphGuardConfig = {
    */
   onDecision?: OxDeAIGuardConfig["onDecision"];
 
-  /** When true, missing optional normalizer fields cause hard failures. */
-  strict?: boolean;
+  /**
+   * Audit hook for guard-boundary rejections raised before `execute()` starts —
+   * provenance conflicts, replay rejections, hash-binding failures, CAS conflicts.
+   *
+   * Disjoint from {@link onDecision}: a boundary rejection produces no decision
+   * record, so a deployment wiring only `onDecision` cannot observe one.
+   */
+  onBoundaryEvent?: OxDeAIGuardConfig["onBoundaryEvent"];
 
   /** Trusted keysets required for strict authorization verification. */
   trustedKeySets?: OxDeAIGuardConfig["trustedKeySets"];
+
+  /**
+   * Replay store used for durable `auth_id` / `delegation_id` tracking.
+   *
+   * When omitted the guard creates a per-instance in-memory store, which is
+   * single-process only. Multi-process or restart-durable deployments must
+   * supply a shared backend such as `createRedisReplayStore` from `@oxdeai/guard`.
+   */
+  replayStore?: OxDeAIGuardConfig["replayStore"];
+
+  /**
+   * Custom live-state hash strategy used for `state_hash` binding verification.
+   *
+   * Required when authorizations are issued by an external provider whose state
+   * canonicalization differs from the core PolicyEngine's.
+   */
+  computeStateHash?: OxDeAIGuardConfig["computeStateHash"];
 };
 
 /**

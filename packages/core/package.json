@@ -1,8 +1,26 @@
 {
   "name": "@oxdeai/core",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "description": "Deterministic execution-time authorization engine for AI agents. Evaluates proposed actions against intent, state, and policy before execution and emits cryptographically verifiable authorization artifacts.",
   "license": "Apache-2.0",
+  "keywords": [
+    "ai-agents",
+    "agent-security",
+    "agent-authorization",
+    "execution-time-authorization",
+    "pre-execution-authorization",
+    "policy-engine",
+    "policy-enforcement-point",
+    "execution-authorization",
+    "authorization-artifact",
+    "authorization-protocol",
+    "verification-protocol",
+    "deterministic-verification",
+    "fail-closed",
+    "autonomous-systems",
+    "agent-safety",
+    "deterministic"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -41,33 +59,22 @@
   "bugs": {
     "url": "https://github.com/oxdeai/oxdeai/issues"
   },
-  "keywords": [
-    "ai-agents",
-    "agent-security",
-    "agent-authorization",
-    "execution-time-authorization",
-    "pre-execution-authorization",
-    "policy-engine",
-    "policy-enforcement-point",
-    "execution-authorization",
-    "authorization-artifact",
-    "authorization-protocol",
-    "verification-protocol",
-    "deterministic-verification",
-    "fail-closed",
-    "autonomous-systems",
-    "agent-safety",
-    "deterministic"
-  ],
   "files": [
     "dist",
+    "!dist/test",
+    "!dist/dev",
     "schemas",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.57.6",
+    "fast-check": "^4.6.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:node": "node --test \"dist/test/*.test.js\"",
     "test": "pnpm build && pnpm test:node",
@@ -77,9 +84,5 @@
     "schema:validate": "node scripts/schema-validate.mjs",
     "api:fingerprint": "../../scripts/api-fingerprint.sh",
     "api:fingerprint:check": "../../scripts/check-api-fingerprint.sh"
-  },
-  "devDependencies": {
-    "@microsoft/api-extractor": "^7.57.6",
-    "fast-check": "^4.6.0"
   }
 }

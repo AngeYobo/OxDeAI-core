@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 
 const GIT_DIR = process.env.GIT_DIR || ".git";
 
-const KEEP_PATTERN = /^(core|cli|conformance|guard|sdk)-v\d+\.\d+\.\d+$/;
+const KEEP_PATTERN = /^(core|cli|conformance|guard|sdk|langgraph|crewai|autogen|openai-agents|openclaw)-v\d+\.\d+\.\d+$/;
 const LEGACY_GLOBAL_PATTERN = /^v\d+\.\d+\.\d+$/;
 const PACKAGE_LIKE_PATTERN = /^([a-z0-9_-]+)-v\d+\.\d+\.\d+(?:[-\w.]*)?$/i;
 

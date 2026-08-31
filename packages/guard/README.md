@@ -38,8 +38,8 @@ import { OxDeAIGuard } from "@oxdeai/guard";
 // Build the guard once per agent session.
 const guard = OxDeAIGuard({
   engine,      // PolicyEngine from @oxdeai/core
-  getState,    // () => State | Promise<State>
-  setState,    // (state: State) => void | Promise<void>
+  getState,    // () => { state, version } | Promise<{ state, version }>
+  setState,    // (state, expectedVersion) => boolean | Promise<boolean>  (CAS)
 });
 
 // Call it before every tool execution.

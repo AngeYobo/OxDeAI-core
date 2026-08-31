@@ -34,8 +34,8 @@ import { createOpenAIAgentsGuard } from "@oxdeai/openai-agents";
 
 const guard = createOpenAIAgentsGuard({
   engine,      // PolicyEngine from @oxdeai/core
-  getState,    // () => State | Promise<State>
-  setState,    // (state: State) => void | Promise<void>
+  getState,    // () => { state, version } | Promise<{ state, version }>
+  setState,    // (state, expectedVersion) => boolean | Promise<boolean>  (CAS)
   agentId: "gpu-agent-1",
 });
 
@@ -127,6 +127,39 @@ semantics as every other OxDeAI protocol demo:
 - **Envelope verification** remains offline and deterministic
 
 All of this is guaranteed by `@oxdeai/guard` - this package adds nothing on top.
+
+---
+
+## Trust profile
+
+**Declared.**
+
+This adapter integrates the lower-level `OxDeAIGuard` boundary. `agent_id` is
+fixed by deployment configuration (`config.agentId`) and is not proposer-controlled;
+the same value is bound as `expectedAudience`, so an authorization issued for a
+different audience fails closed.
+
+Tool identity and recursion depth are **not** established from a
+`TrustedExecutionContext` on this path. The default adapter normalization does not
+populate `intent.tool` or `intent.depth`, so `ToolAmplificationModule` and
+`RecursionDepthModule` do not constrain execution here. The adapter deliberately
+does not derive `intent.tool` from the proposer-supplied tool-call name: doing so
+would activate the module against a value the caller controls, which is weaker than
+leaving it unset.
+
+Deployments that require authenticated Tier 1 evaluator-input provenance should
+establish trusted execution context at an authenticating PEP — where a principal is
+actually authenticated and the route is resolved — and integrate `createSecureGuard`
+from `@oxdeai/guard` there. A framework adapter has no authenticated principal of its
+own, so it cannot construct that context honestly.
+
+Replay protection defaults to a per-guard in-memory store. Multi-process or
+restart-durable deployments must pass an explicit `replayStore`; see
+`createRedisReplayStore` in `@oxdeai/guard`.
+
+Wire `onBoundaryEvent` alongside `onDecision` to observe guard-boundary rejections
+(replay, CAS conflict, hash-binding failure). The two streams are disjoint: a
+boundary rejection produces no decision record.
 
 ---
 

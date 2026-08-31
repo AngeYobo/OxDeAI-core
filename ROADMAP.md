@@ -54,26 +54,28 @@ Remaining standardization gates include:
 ## Version Snapshot
 
 > Verify exact package versions against `package.json` before release publication.
+> These are the prepared versions for the next 2.0 release line. None of them is published yet;
+> the npm registry still serves the pre-2.0 line.
 
 ### Protocol / Core
 
-- `@oxdeai/core`: 1.7.0
-- `@oxdeai/conformance`: 1.5.0
-- `@oxdeai/sdk`: 1.3.3
+- `@oxdeai/core`: 2.0.0
+- `@oxdeai/conformance`: 2.0.0
+- `@oxdeai/sdk`: 2.0.0
 
 ### Enforcement / Adapters
 
-- `@oxdeai/guard`: 1.0.3
+- `@oxdeai/guard`: 2.0.0
 - `@oxdeai/sift`: 0.0.1
-- `@oxdeai/langgraph`: 1.0.1
-- `@oxdeai/openai-agents`: 1.0.1
-- `@oxdeai/crewai`: 1.0.1
-- `@oxdeai/autogen`: 1.0.1
-- `@oxdeai/openclaw`: 1.0.1
+- `@oxdeai/langgraph`: 2.0.0
+- `@oxdeai/openai-agents`: 2.0.0
+- `@oxdeai/crewai`: 2.0.0
+- `@oxdeai/autogen`: 2.0.0
+- `@oxdeai/openclaw`: 2.0.0
 
 ### Tooling
 
-- `@oxdeai/cli`: 0.2.4
+- `@oxdeai/cli`: 0.3.0
 
 ### Compatibility
 
