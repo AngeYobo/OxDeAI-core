@@ -20,6 +20,21 @@ import {
 
 // ── validation ────────────────────────────────────────────────────────────────
 
+/**
+ * The engine's public DENY contract is `{ decision: "DENY"; reasons: ReasonCode[] }`
+ * (`ReasonCode` is a string union at runtime). `config.engine` is validated only
+ * structurally (`validateConfig` above requires an `evaluatePure` function), so
+ * it need not be a real `PolicyEngine` instance — a test double, a custom
+ * implementation, or a future engine version can return a `DENY` whose
+ * `reasons` do not match this contract. Reading such a value without checking
+ * it first (`evalResult.reasons.map(String)`) throws an unclassified,
+ * unstructured `TypeError` instead of failing closed as an engine-contract
+ * violation. See #247.
+ */
+function isValidDenyReasons(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((r) => typeof r === "string");
+}
+
 function isValidDelegationScope(scope: unknown): scope is DelegationScope {
   if (scope === null || scope === undefined || typeof scope !== "object" || Array.isArray(scope)) {
     return false;
@@ -96,6 +111,8 @@ async function fireDecision(
  *   7. Return the execute() result.
  *
  * Security invariants:
+ *   - DENY with malformed reasons → OxDeAIAuthorizationError (no execution, no
+ *     decision record, no synthetic DENY — see #247).
  *   - ALLOW without authorization → OxDeAIAuthorizationError (no execution).
  *   - ALLOW without nextState     → OxDeAIAuthorizationError (no execution).
  *   - verifyAuthorization failure → OxDeAIAuthorizationError (no execution).
@@ -412,13 +429,28 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
 
     // ── 5. DENY path ───────────────────────────────────────────────────────
     if (evalResult.decision === "DENY") {
-      const reasons = evalResult.reasons.map(String);
+      // Validate the engine's DENY contract before reading `reasons`. A
+      // malformed result (missing, null, non-array, or containing non-string
+      // elements) is an engine-contract violation, not a policy decision: it
+      // must fail closed without a decision record and without ever
+      // constructing OxDeAIDenyError from unvalidated data. See #247.
+      const rawReasons: unknown = evalResult.reasons;
+      if (!isValidDenyReasons(rawReasons)) {
+        throw reject(
+          "POLICY_EVALUATION",
+          "ENGINE_FAILURE",
+          new OxDeAIAuthorizationError(
+            "PolicyEngine returned DENY with malformed reasons: expected an array of strings. " +
+              "Execution blocked."
+          )
+        );
+      }
       await fireDecision(config.onDecision, {
         action,
         decision: "DENY",
-        reasons,
+        reasons: rawReasons,
       });
-      throw new OxDeAIDenyError(reasons);
+      throw new OxDeAIDenyError(rawReasons);
     }
 
     // ── 6. ALLOW: require authorization artifact and nextState ─────────────

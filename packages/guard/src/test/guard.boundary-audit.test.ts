@@ -34,6 +34,7 @@
  *   B-23 a throwing audit sink does not change what the caller receives
  *   B-24 the record carries no policyDecision; policyEvaluated carries the fact
  *   B-25 the guard behaves identically with no boundary hook configured
+ *   B-28 a malformed DENY (invalid reasons) emits POLICY_EVALUATION / ENGINE_FAILURE, not a decision (#247)
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -905,4 +906,34 @@ test("B-27 defaultNormalizeAction is unchanged by the audit wiring", () => {
   const intent: Intent = defaultNormalizeAction(baseAction);
   assert.equal(intent.agent_id, AGENT_ID);
   assert.equal(intent.amount, 500_000n);
+});
+
+// ── B-28: malformed DENY is an engine-contract violation, not a decision (#247) ──
+
+test("B-28 a malformed DENY (invalid reasons) emits POLICY_EVALUATION / ENGINE_FAILURE, not a decision", async () => {
+  const audit = collect();
+  let onDecisionCalled = false;
+  let executed = false;
+  const guard = OxDeAIGuard(
+    makeGuardConfig({
+      engine: mockEngine(() => ({ decision: "DENY", reasons: undefined })),
+      onDecision: () => { onDecisionCalled = true; },
+      onBoundaryEvent: audit.hook,
+    })
+  );
+
+  const err = await caught(() => guard(baseAction, async () => { executed = true; return "done"; }));
+  assert.ok(err instanceof OxDeAIAuthorizationError);
+  assert.ok(!(err instanceof OxDeAIDenyError), "a malformed DENY must not surface as a valid OxDeAIDenyError");
+  assert.ok(!onDecisionCalled, "a malformed DENY must never be reported on onDecision as a synthetic decision");
+  assert.ok(!executed, "the protected callback must not execute on a malformed DENY");
+
+  const event = only(audit.events);
+  assert.equal(event.stage, "POLICY_EVALUATION");
+  assert.equal(event.boundaryFailure, "ENGINE_FAILURE");
+  assert.equal(
+    event.policyEvaluated,
+    true,
+    "the engine call returned (unlike B-11, where it threw); only its DENY payload was malformed"
+  );
 });

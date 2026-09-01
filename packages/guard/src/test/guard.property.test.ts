@@ -694,3 +694,123 @@ test("G7 onDecision hook errors never surface to the caller for any ProposedActi
     await guard(action, async () => "ok");
   }
 });
+
+// ── generators: malformed / valid DENY reasons (#247) ─────────────────────────
+
+/** Generates an arbitrary value that is never a valid `string[]` reasons array. */
+function genMalformedReasons(rng: () => number): unknown {
+  const kind = pick(rng, ["undefined", "null", "scalar", "object", "mixed-array"] as const);
+  switch (kind) {
+    case "undefined": return undefined;
+    case "null": return null;
+    case "scalar": return genScalar(rng);
+    case "object": return genArgs(rng, 3);
+    default: {
+      // Guaranteed at least one non-string element, mixed in among zero or
+      // more strings at a random position, so the array can never happen to
+      // be all-strings by chance.
+      const strCount = randInt(rng, 0, 3);
+      const arr: unknown[] = Array.from({ length: strCount }, () => genAlphaStr(rng, 1, 8));
+      const badElement = pick(rng, [42, true, null, {}, undefined] as const);
+      arr.splice(randInt(rng, 0, arr.length), 0, badElement);
+      return arr;
+    }
+  }
+}
+
+function genValidReasons(rng: () => number): string[] {
+  const count = randInt(rng, 1, 4);
+  return Array.from({ length: count }, () => genAlphaStr(rng, 3, 20).toUpperCase());
+}
+
+function makeMalformedDenyEngine(reasons: unknown): PolicyEngine {
+  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }) } as unknown as PolicyEngine;
+}
+
+function makeReasonsDenyEngine(reasons: string[]): PolicyEngine {
+  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }) } as unknown as PolicyEngine;
+}
+
+// ── G8: malformed DENY reasons always fail closed as an engine-contract violation (#247) ──
+
+test("G8 malformed DENY reasons always fail closed as OxDeAIAuthorizationError, never execute, never onDecision", async () => {
+  for (const seed of seeds()) {
+    const rng = mulberry32(seed);
+    const action = genAction(rng);
+    const agentId = action.context?.agent_id as string;
+    const state = makePermissiveState(agentId);
+    let currentState = state;
+    let currentVersion = 0;
+    let executeCalled = false;
+    let onDecisionCalled = false;
+
+    const malformed = genMalformedReasons(rng);
+
+    const guard = OxDeAIGuard({
+      engine: makeMalformedDenyEngine(malformed),
+      getState: () => ({ state: currentState, version: currentVersion }),
+      setState: (s, v) => { if (v !== currentVersion) return false; currentState = s; currentVersion++; return true; },
+      onDecision: () => { onDecisionCalled = true; },
+      ...BASE_TRUST,
+    });
+
+    await assert.rejects(
+      () => guard(action, async () => { executeCalled = true; }),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof OxDeAIAuthorizationError,
+          `seed=${seed} reasons=${JSON.stringify(malformed)} expected OxDeAIAuthorizationError, got ${Object.prototype.toString.call(err)}`
+        );
+        assert.ok(
+          !(err instanceof OxDeAIDenyError),
+          `seed=${seed} reasons=${JSON.stringify(malformed)} malformed DENY must never surface as OxDeAIDenyError`
+        );
+        return true;
+      },
+      `seed=${seed}`
+    );
+
+    assert.ok(!executeCalled, `seed=${seed} execute must not be called for malformed DENY reasons`);
+    assert.ok(!onDecisionCalled, `seed=${seed} onDecision must not fire for malformed DENY reasons`);
+  }
+});
+
+// ── G9: valid string[] DENY reasons still follow the normal DENY path (control) ──
+
+test("G9 valid string[] DENY reasons always follow the normal DENY path (control)", async () => {
+  for (const seed of seeds()) {
+    const rng = mulberry32(seed);
+    const action = genAction(rng);
+    const agentId = action.context?.agent_id as string;
+    const state = makePermissiveState(agentId);
+    let currentState = state;
+    let currentVersion = 0;
+    let executeCalled = false;
+    let capturedDecision: string | undefined;
+    let capturedReasons: readonly string[] | undefined;
+
+    const validReasons = genValidReasons(rng);
+
+    const guard = OxDeAIGuard({
+      engine: makeReasonsDenyEngine(validReasons),
+      getState: () => ({ state: currentState, version: currentVersion }),
+      setState: (s, v) => { if (v !== currentVersion) return false; currentState = s; currentVersion++; return true; },
+      onDecision: ({ decision, reasons }) => { capturedDecision = decision; capturedReasons = reasons; },
+      ...BASE_TRUST,
+    });
+
+    await assert.rejects(
+      () => guard(action, async () => { executeCalled = true; }),
+      (err: unknown) => {
+        assert.ok(err instanceof OxDeAIDenyError, `seed=${seed} expected OxDeAIDenyError`);
+        assert.deepEqual(err.reasons, validReasons, `seed=${seed} reasons must pass through unchanged`);
+        return true;
+      },
+      `seed=${seed}`
+    );
+
+    assert.ok(!executeCalled, `seed=${seed} execute must not be called on DENY`);
+    assert.equal(capturedDecision, "DENY", `seed=${seed} onDecision must fire with DENY`);
+    assert.deepEqual(capturedReasons, validReasons, `seed=${seed} onDecision must receive the same reasons`);
+  }
+});
