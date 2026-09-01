@@ -299,6 +299,60 @@ test("guard: DENY fires onDecision hook with DENY decision", async () => {
   assert.equal(capturedDecision, "DENY");
 });
 
+// ── Part 3b: malformed DENY output fails closed (#247) ───────────────────────
+//
+// A DENY result whose `reasons` do not match the engine's public contract
+// (`ReasonCode[]`) previously reached `evalResult.reasons.map(String)`
+// unchecked, so a mock/custom/future engine that violates the contract raised
+// a raw, unclassified `TypeError` instead of failing closed as an explicit
+// engine-contract violation. These pin the fix: malformed DENY output must
+// block execution, must never reach `onDecision` as a synthetic valid DENY,
+// and must surface as `OxDeAIAuthorizationError`, not a `TypeError`.
+
+function makeMalformedDenyEngine(reasons: unknown): PolicyEngine {
+  return {
+    evaluatePure: () => ({ decision: "DENY" as const, reasons }),
+  } as unknown as PolicyEngine;
+}
+
+for (const [label, reasons] of [
+  ["missing reasons (undefined)", undefined],
+  ["reasons: null", null],
+  ["reasons: not an array (a string)", "BUDGET_EXCEEDED"],
+  ["reasons: not an array (an object)", { code: "BUDGET_EXCEEDED" }],
+  ["reasons: array with a non-string element", ["BUDGET_EXCEEDED", 42]],
+] as const) {
+  test(`guard: malformed DENY (${label}) throws OxDeAIAuthorizationError, not TypeError`, async () => {
+    let executed = false;
+    let onDecisionCalled = false;
+
+    const config = makeGuardConfig({
+      engine: makeMalformedDenyEngine(reasons),
+      onDecision: () => { onDecisionCalled = true; },
+    });
+    const guard = OxDeAIGuard(config);
+
+    await assert.rejects(
+      () => guard(baseAction, async () => { executed = true; }),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof OxDeAIAuthorizationError,
+          `expected OxDeAIAuthorizationError, got ${err instanceof Error ? err.constructor.name : String(err)}`
+        );
+        assert.ok(!(err instanceof OxDeAIDenyError), "malformed DENY must not be a synthetic OxDeAIDenyError");
+        assert.match(err.message, /malformed reasons/);
+        return true;
+      }
+    );
+
+    assert.ok(!executed, "execute must not be called on malformed DENY");
+    assert.ok(!onDecisionCalled, "onDecision must not be called for malformed DENY (no synthetic decision record)");
+  });
+}
+
+// (onBoundaryEvent classification for this failure is pinned in
+// guard.boundary-audit.test.ts B-28, alongside the other stage/failure pins.)
+
 // ── Part 4: ALLOW executes ────────────────────────────────────────────────────
 
 test("guard: ALLOW executes and returns the result", async () => {

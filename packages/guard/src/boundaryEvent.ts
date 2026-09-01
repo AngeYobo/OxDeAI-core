@@ -34,10 +34,11 @@
  * A valid `OxDeAIDenyError` is the engine's decision, is reported to
  * `onDecision`, and returns early here; every other guard-boundary rejection
  * emits no decision record, whether or not the engine had already returned an
- * ALLOW. A malformed DENY — one whose `reasons` are invalid, so the engine
- * throws before `OxDeAIDenyError` is constructed — is not a decision and is
- * not covered by this statement; it surfaces as an engine-contract violation
- * and is out of scope here.
+ * ALLOW. A malformed DENY — one whose `reasons` fail the guard's structural
+ * check before `OxDeAIDenyError` is constructed (#247) — is not a decision:
+ * it never reaches `onDecision`, is classified `POLICY_EVALUATION` /
+ * `ENGINE_FAILURE` at the throw site, and is reported here like any other
+ * pre-execution guard-boundary rejection.
  *
  * ## Failure contract
  *
