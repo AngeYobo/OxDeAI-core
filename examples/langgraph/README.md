@@ -42,7 +42,7 @@ LangGraph workflow node
   -> proposed provision_gpu(asset, region)
   -> createLangGraphGuard (pep.ts)
       -> maps LangGraphToolCall -> ProposedAction
-      -> OxDeAIGuard -> evaluatePure(intent, state)
+      -> OxDeAIGuard -> evaluatePure(intent, state, evaluationTime)
           -> DENY  => OxDeAIDenyError, no execution
           -> ALLOW => Authorization required + verified
   -> execute() called only after authorization check

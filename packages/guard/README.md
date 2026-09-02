@@ -1,7 +1,20 @@
 # @oxdeai/guard
 Policy Enforcement Point for the OxDeAI execution-time authorization protocol.
-Enforces the non-bypassable execution boundary: verifies AuthorizationV1 locally, fail-closed.
-No valid authorization → no execution callback is invoked.
+Verifies AuthorizationV1 locally, fail-closed.
+No valid authorization, no execution through the reviewed enforcement boundary.
+
+Current `@oxdeai/guard` package line: **2.0.0**. See [`CHANGELOG.md`](./CHANGELOG.md)
+for the full breaking-change list. `expectedAudience` and `trustedKeySets` are
+now required, `getState`/`setState` are versioned/CAS, and `createSecureGuard`
+is new in this release.
+
+This package exposes two entry points:
+
+- **`OxDeAIGuard`**: the lower-level guard API (documented first, below).
+- **`createSecureGuard`**: the Tier 1 secure path, built on top of `OxDeAIGuard`,
+  which additionally reconciles proposer-declared identity against a
+  server-established `TrustedExecutionContext`. See
+  [Tier 1 secure path](#tier-1-secure-path).
 
 ---
 
@@ -14,10 +27,10 @@ gaps.
 
 `@oxdeai/guard` provides that shared layer:
 
-- **One place** for all PEP logic — adapters stay thin.
-- **Fail-closed** — ambiguous state, missing artifacts, or evaluation errors
+- **One place** for all PEP logic: adapters stay thin.
+- **Fail-closed**: ambiguous state, missing artifacts, or evaluation errors
   block execution.
-- **No runtime-specific code** — pure TypeScript, no LangGraph/CrewAI/OpenAI
+- **No runtime-specific code**: pure TypeScript, no LangGraph/CrewAI/OpenAI
   imports.
 
 ---
@@ -40,6 +53,8 @@ const guard = OxDeAIGuard({
   engine,      // PolicyEngine from @oxdeai/core
   getState,    // () => { state, version } | Promise<{ state, version }>
   setState,    // (state, expectedVersion) => boolean | Promise<boolean>  (CAS)
+  expectedAudience: "agent-xyz", // required: must match engine's authorization_audience
+  trustedKeySets: [myKeySet],    // required: KeySets used to verify Ed25519 signatures
 });
 
 // Call it before every tool execution.
@@ -62,6 +77,13 @@ The `execute` callback is **only invoked when the policy engine returns ALLOW
 and the authorization artifact passes cryptographic verification**. On DENY,
 `OxDeAIDenyError` is thrown and execution never reaches the callback.
 
+**Ordering:** the CAS `setState(nextState, expectedVersion)` commit happens
+before `execute()` is invoked, not after. This blocks execution on a
+concurrent-modification conflict before any side effect runs. It does not
+mean the guard confirms `execute()` succeeded before committing state: a
+failure inside `execute()` after the commit does not roll the state commit
+back. See [Known limits](#known-limits).
+
 ---
 
 ## Custom action-to-intent mapping
@@ -79,6 +101,8 @@ const guard = OxDeAIGuard({
   engine,
   getState,
   setState,
+  expectedAudience: "agent-xyz",
+  trustedKeySets: [myKeySet],
   mapActionToIntent(action) {
     return buildIntent({
       agent_id: action.context?.agent_id as string,
@@ -103,18 +127,106 @@ OxDeAIGuard({
   engine,
   getState,
   setState,
+  expectedAudience: "agent-xyz",
+  trustedKeySets: [myKeySet],
 
   // Called after authorization but before execution.
   async beforeExecute(action, authorization) {
     logger.info("executing", { action: action.name, auth_id: authorization.auth_id });
   },
 
-  // Called after every decision (ALLOW and DENY). Errors here are swallowed.
+  // Called after a completed policy decision: a valid ALLOW (once the
+  // protected callback has returned) or a valid DENY. Errors here are
+  // swallowed.
   async onDecision({ action, decision, authorization, reasons }) {
     auditLog.write({ action: action.name, decision, reasons });
   },
+
+  // Called for a rejection raised at the guard boundary BEFORE execute()
+  // starts and that never produced a policy decision: an unbranded trusted
+  // context, a provenance conflict, a delegation replay, a state-hash
+  // mismatch, a CAS conflict. Disjoint from onDecision: a rejection is
+  // reported on exactly one of the two hooks, never both. Errors here are
+  // swallowed.
+  async onBoundaryEvent({ stage, boundaryFailure, policyEvaluated }) {
+    auditLog.write({ stage, boundaryFailure, policyEvaluated });
+  },
 });
 ```
+
+Neither hook reports the outcome of the protected `execute()` callback itself.
+Once `execute()` has started, the guard has already permitted the action; a
+failure inside the callback is the caller's own outcome, not a guard decision,
+and is not represented on either stream (see
+[Known limits](#known-limits)).
+
+---
+
+## Tier 1 secure path
+
+`OxDeAIGuard` (above) trusts whatever `agent_id`, `tool`, and `depth` the
+caller's `ProposedAction`/`Intent` declares. `createSecureGuard` closes that
+gap for deployments that can authenticate the caller and resolve the route
+before evaluation: it reconciles the proposer's declared identity against a
+server-established `TrustedExecutionContext`, and fails closed on conflict,
+before the policy engine ever runs.
+
+```typescript
+import { createSecureGuard, createTrustedExecutionContext } from "@oxdeai/guard";
+
+const guard = createSecureGuard(
+  {
+    engine,
+    getState,
+    setState,
+    expectedAudience: "agent-xyz",
+    trustedKeySets: [myKeySet],
+  },
+  { tenancy: "single-tenant" } // or "multi-tenant": required, never defaulted
+);
+
+// Constructed by the PEP AFTER authenticating the caller and resolving the
+// protected route. Never deserialize this from proposer-controlled request
+// JSON. It is a separate positional argument precisely so there is no place
+// in the request payload to put a forged one.
+const trustedContext = createTrustedExecutionContext({
+  principalId: authenticatedPrincipal.id,
+  agentId: authenticatedPrincipal.agentId,
+  adapterId: "http-adapter",
+  depth: currentCallDepth, // required, never defaulted: no implicit "root call" fallback
+});
+
+const result = await guard(
+  trustedContext,
+  {
+    name: "provision_gpu",
+    args: { asset: "a100", region: "us-east-1" },
+    estimatedCost: 500,
+    resourceType: "gpu",
+    context: { target: "gpu-pool-us-east-1" },
+  },
+  async () => provisionGpu("a100", "us-east-1")
+);
+```
+
+`TrustedExecutionContext` carries trusted/derived execution premises
+(`principalId`, `agentId`, `adapterId`, `depth`, and optionally `tenantId`,
+`tool`, `routeClassification`): values the PEP itself established, not values
+the proposer supplied. For each reconciled field:
+
+- proposer claim **absent** → the trusted premise is used;
+- proposer claim **matches** the trusted premise → used, recorded as matched;
+- proposer claim **conflicts** with the trusted premise → reconciliation fails
+  closed, throwing `OxDeAIProvenanceConflictError` before the engine runs;
+  `execute` is never called.
+
+`OxDeAIGuard` remains available, unchanged, as the lower-level API. Use it
+directly when the deployment cannot yet establish a `TrustedExecutionContext`
+(no authenticated caller identity, no resolved route). `createSecureGuard` is
+built on top of it: the shared enforcement body (state read, evaluation,
+authorization verification, replay consumption, hash binding, CAS,
+execution ordering) is identical; the two entry points differ only in how the
+evaluated intent's provenance is established.
 
 ---
 
@@ -122,21 +234,25 @@ OxDeAIGuard({
 
 | Condition | Outcome |
 |---|---|
-| Engine returns DENY | `OxDeAIDenyError` thrown — execute not called |
+| Engine returns DENY | `OxDeAIDenyError` thrown, execute not called |
 | ALLOW without authorization artifact | `OxDeAIAuthorizationError` thrown |
 | ALLOW without nextState | `OxDeAIAuthorizationError` thrown |
 | `verifyAuthorization` fails | `OxDeAIAuthorizationError` thrown |
 | Normalization fails | `OxDeAINormalizationError` thrown |
 | `evaluatePure` throws | `OxDeAIAuthorizationError` thrown (fail-closed) |
-| Delegation chain verification fails | `OxDeAIDelegationError` thrown — execute not called |
+| Delegation chain verification fails | `OxDeAIDelegationError` thrown, execute not called |
 | Delegation scope widens or expiry exceeds parent | `OxDeAIDelegationError` thrown |
 | In-scope delegation action | `execute` called; `setState` not called on delegation path |
+| (Tier 1 only) proposer claim conflicts with `TrustedExecutionContext` | `OxDeAIProvenanceConflictError` thrown, execute not called |
 
 **There is no code path that executes without a valid, verified authorization.**
+This is a claim about the guard boundary itself. See
+[Known limits](#known-limits) for what it does not cover (state-source
+authority, external-resource TOCTOU, post-execution-start failures).
 
 ---
 
-## Replay store — production requirements
+## Replay store: production requirements
 
 The guard prevents replay via a pluggable `ReplayStore`. Every `auth_id` and
 `delegation_id` is atomically check-and-consumed before execution.
@@ -164,6 +280,7 @@ const guard = OxDeAIGuard({
   engine,
   getState,
   setState,
+  expectedAudience: "agent-xyz",
   trustedKeySets: [myKeySet],
   replayStore: createRedisReplayStore({ client: redis }),
 });
@@ -180,7 +297,7 @@ wins across any number of instances; all others see `null` and receive
 | `AuthorizationV1` | `replay:auth:<auth_id>` |
 | `DelegationV1` | `replay:delegation:<delegation_id>` |
 
-**TTL:** derived from artifact `expiry` — `max(1, expiry - now)`. Keys
+**TTL:** derived from artifact `expiry`: `max(1, expiry - now)`. Keys
 auto-evict after the artifact expires. No manual cleanup required.
 
 **Fail-closed:** if Redis is unavailable (network failure, timeout, restart),
@@ -231,7 +348,7 @@ const myStore: ReplayStore = {
 
 | Class | When thrown |
 |---|---|
-| `OxDeAIDenyError` | Policy DENY — inspect `.reasons` for violation codes |
+| `OxDeAIDenyError` | Policy DENY, inspect `.reasons` for violation codes |
 | `OxDeAIAuthorizationError` | Missing/invalid authorization artifact |
 | `OxDeAIGuardConfigurationError` | Misconfigured guard (programming error) |
 | `OxDeAINormalizationError` | ProposedAction cannot be converted to an Intent |
@@ -256,7 +373,7 @@ The guard verifies the full delegation chain before policy evaluation:
 - Signatures are valid at every link
 
 On any violation, `OxDeAIDelegationError` is thrown and `execute` is never
-called. `setState` is also not called on the delegation path — the scope is
+called. `setState` is also not called on the delegation path: the scope is
 committed by the parent authorization.
 
 Property-based coverage: G-D1 (allow path), G-D2 (all invalid classes fail
@@ -264,19 +381,19 @@ closed), G-D3 (wrong parent hash mismatch).
 
 ---
 
-## Default normalizer — field mapping
+## Default normalizer: field mapping
 
 | `ProposedAction` field | Maps to `Intent` field | Default when absent |
 |---|---|---|
 | `context.agent_id` (**required**) | `agent_id` | throws |
 | `name` | `action_type` (heuristic) | `"PROVISION"` |
-| `resourceType` | `action_type` (overrides name) | — |
+| `resourceType` | `action_type` (overrides name) | - |
 | `estimatedCost` | `amount` (× 1 000 000, bigint) | `0n` |
 | `timestampSeconds` | `timestamp` | `Date.now() / 1000` |
 | `context.target` | `target` | `action.name` |
 | `context.intent_id` | `intent_id` | random hex |
 | `context.nonce` | `nonce` | random bigint |
-| `args` (sorted JSON) | `metadata_hash` (sha256 hex) | — |
+| `args` (sorted JSON) | `metadata_hash` (sha256 hex) | - |
 
 ---
 
@@ -287,6 +404,41 @@ closed), G-D3 (wrong parent hash mismatch).
 - Do **not** add LangGraph / CrewAI / OpenAI / runtime-specific imports here.
 - Runtime adapter packages must remain **thin bindings** that call `OxDeAIGuard`.
 - Do **not** duplicate authorization checks inside adapters.
+
+---
+
+## Known limits
+
+The invariants above describe the guard boundary itself: what happens between
+a proposed action arriving and `execute()` being invoked. They do not extend
+past that boundary. Full detail, including exactly what 2.0 does and does not
+target:
+
+- [`docs/audits/2.0-residual-scope.md`](../../docs/audits/2.0-residual-scope.md)
+- [`docs/audits/external-review-scope-v2.md`](../../docs/audits/external-review-scope-v2.md)
+
+- **Evaluator/state authority.** `createSecureGuard` reconciles trusted
+  *evaluator-input* identity (`agent_id`, `tool`, `depth`), not state or policy
+  authority. `getState()` remains a deployment-supplied function; the guard's
+  only check against it is hash consistency (`state_hash` binding) plus CAS
+  version-conflict detection. Neither proves the state source is honest,
+  current, or non-compromised.
+- **External-resource TOCTOU.** The guard's CAS/state-version check protects
+  OxDeAI's own policy-state transition. It does not serialize mutation of an
+  external resource that the protected `execute()` callback goes on to touch.
+  an authorization can be issued against one resource version and the resource
+  can change before `execute()` runs, with OxDeAI's own state CAS succeeding
+  regardless.
+- **Post-execution-start audit semantics.** `onDecision` and `onBoundaryEvent`
+  together account for everything up through a successful `ALLOW` or a valid
+  `DENY`. Once `execute()` has started, a failure inside the callback is not
+  represented as an `onDecision` record or an `onBoundaryEvent`. It is the
+  caller's own outcome, and the current lifecycle produces no final decision
+  record for it on either stream.
+
+None of these are claimed as solved by 2.0. Do not describe this package as
+guaranteeing state-source authority, generic external-resource TOCTOU safety,
+or complete post-execution-start audit coverage.
 
 ---
 

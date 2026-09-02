@@ -1,5 +1,5 @@
 # @oxdeai/langgraph
-LangGraph adapter for the OxDeAI execution-time authorization protocol (non-bypassable boundary).
+LangGraph adapter for the OxDeAI execution-time authorization protocol.
 Maps LangGraph tool calls to @oxdeai/guard; verification stays local and fail-closed.
 
 ---
@@ -36,6 +36,7 @@ const guard = createLangGraphGuard({
   getState,    // () => { state, version } | Promise<{ state, version }>
   setState,    // (state, expectedVersion) => boolean | Promise<boolean>  (CAS)
   agentId: "gpu-agent-1",
+  trustedKeySets: [myKeySet], // required, passed through to OxDeAIGuard
 });
 
 // In your LangGraph tool node:
@@ -84,6 +85,7 @@ const guard = createLangGraphGuard({
   getState,
   setState,
   agentId: "gpu-agent-1",
+  trustedKeySets: [myKeySet],
   mapActionToIntent(action) {
     // action.name, action.args, action.context.agent_id and intent_id are available
     return buildProvisionIntent(action.args.asset as string, action.args.region as string);
@@ -124,10 +126,14 @@ semantics as every other OxDeAI protocol demo:
 
 - **No Authorization = no execution**, even on ALLOW
 - **DENY** blocks the execute callback before it is called
-- **State transitions** happen only after successful execution
+- **State (CAS) commit happens before `execute()` runs**, not after; a failure
+  inside `execute()` does not roll the state commit back
 - **Envelope verification** remains offline and deterministic
 
-All of this is guaranteed by `@oxdeai/guard` - this package adds nothing on top.
+All of this is guaranteed by `@oxdeai/guard`, this package adds nothing on top.
+See [`@oxdeai/guard` Known limits](../guard/README.md#known-limits) for what
+this boundary does not cover (evaluator/state authority, external-resource
+TOCTOU, post-execution-start audit semantics).
 
 ---
 
@@ -149,8 +155,8 @@ would activate the module against a value the caller controls, which is weaker t
 leaving it unset.
 
 Deployments that require authenticated Tier 1 evaluator-input provenance should
-establish trusted execution context at an authenticating PEP — where a principal is
-actually authenticated and the route is resolved — and integrate `createSecureGuard`
+establish trusted execution context at an authenticating PEP (where a principal is
+actually authenticated and the route is resolved) and integrate `createSecureGuard`
 from `@oxdeai/guard` there. A framework adapter has no authenticated principal of its
 own, so it cannot construct that context honestly.
 

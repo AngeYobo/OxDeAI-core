@@ -1,8 +1,19 @@
 # @oxdeai/cli
-CLI for the OxDeAI execution-time authorization protocol (non-bypassable execution boundary).
-Runs local verification and artifact inspection; no valid authorization → execution should not proceed.
+CLI for the OxDeAI execution-time authorization protocol.
+Runs local verification and artifact inspection; no valid authorization means execution should not proceed.
 
 `@oxdeai/cli` is a thin Node.js wrapper around `@oxdeai/core` verification and local state workflows. It is framework-agnostic and intended for local policy operations, artifact inspection, and deterministic verification.
+
+## Version and registry status
+
+The published npm package (`npm view @oxdeai/cli version`) is `0.2.4`. This
+repository's current `packages/cli/package.json` version is `0.3.0`
+(unreleased). The two differ in behavior, not just number: per
+[`CHANGELOG.md`](./CHANGELOG.md), `0.3.0` enforces a valid `engine_secret` on
+the validation path and requires an explicit `--trusted-keyset` (or
+`--mode best-effort`) on strict `verify` entry points; the published `0.2.4`
+does neither. Commands below and their env-var requirements describe this
+repository's `0.3.0` behavior, not the currently published `0.2.4` artifact.
 
 ## Quickstart
 
@@ -12,6 +23,16 @@ Install the CLI:
 
 ```bash
 npm install -g @oxdeai/cli
+```
+
+This installs the published `0.2.4` line, not the `0.3.0` behavior described
+below. To run the behavior in this repository, use the local monorepo
+workflow instead (see "Local monorepo contributors").
+
+`build`, `verify auth`, and `launch dry-run` require a trusted engine secret:
+
+```bash
+export OXDEAI_ENGINE_SECRET='test-secret-must-be-at-least-32-chars!!'
 ```
 
 Basic commands:
@@ -76,7 +97,8 @@ Legacy helper commands are still available (`init`, `launch`, `state`, `audit`, 
 
 ### build
 
-Builds a canonical snapshot verification payload from state.
+Builds a canonical snapshot verification payload from state. Requires
+`OXDEAI_ENGINE_SECRET` (see Quickstart).
 
 ```bash
 oxdeai build snapshot
@@ -129,6 +151,7 @@ oxdeai verify all
 ### auth
 
 Creates and inspects authorization artifacts for local relying-party tests.
+`auth create` requires `OXDEAI_ENGINE_SECRET`; `auth inspect` does not.
 
 ```bash
 oxdeai auth create PROVISION 100 us-east-1 --agent agent-1 --nonce 1 --out authorization.json --json
@@ -154,7 +177,8 @@ oxdeai examples init
 
 ### launch dry-run
 
-Evaluates an action without mutating local state or audit files.
+Evaluates an action without mutating local state or audit files. Requires
+`OXDEAI_ENGINE_SECRET`.
 
 ```bash
 oxdeai launch dry-run PROVISION 100 us-east-1 --agent agent-1 --nonce 1 --json
@@ -162,7 +186,11 @@ oxdeai launch dry-run PROVISION 100 us-east-1 --agent agent-1 --nonce 1 --json
 
 ### replay
 
-Protocol-aware stub in `0.1.x`. It returns a clear unsupported response and points users to deterministic audit verification (`verify --kind audit`).
+Protocol-aware stub. The current implementation (`packages/cli/src/main.ts`)
+reports itself as `@oxdeai/cli v0.2.x` in this message; that string has not
+been updated to match this package's own `package.json` version (`0.3.0`,
+unreleased). It returns a clear unsupported response and points users to
+deterministic audit verification (`verify --kind audit`).
 
 ## Output and Exit Codes
 
