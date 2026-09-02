@@ -13,18 +13,22 @@
  *
  * The engine is only consulted for Agent A's parent authorization.
  * Agent B's actions are verified locally against the delegation artifact.
- * No engine call for child actions — authority flows without amplification.
+ * No engine call for child actions: authority flows without amplification.
  */
 
 import { generateKeyPairSync } from "node:crypto";
 import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
-import type { Intent, State } from "@oxdeai/core";
+import type { Intent, KeySet, State } from "@oxdeai/core";
 
 export const POLICY_ID =
   "demo-delegation-0000000000000000000000000000000000000000000000";
 
 export const AGENT_A = "agent-a";
 export const AGENT_B = "agent-b";
+
+export const AUTH_ISSUER = "delegation-demo-issuer";
+export const AUTH_KID = "delegation-demo-k1";
+export const AGENT_A_KID = "agent-a-demo-key";
 
 // Parent scope: 100 units * 1_000_000 micro-units
 export const PARENT_AMOUNT = 100_000_000n;
@@ -41,11 +45,34 @@ export const CHILD_ACTION_1_AMOUNT = BigInt(CHILD_ACTION_1_UNITS * 1_000_000);
 export const CHILD_ACTION_2_AMOUNT = BigInt(CHILD_ACTION_2_UNITS * 1_000_000);
 
 // Ed25519 keypair for Agent A to sign the delegation artifact.
-// Generated fresh each run; signature verification is not required in this demo.
-export const { privateKey: AGENT_A_PRIVATE_KEY_PEM } = generateKeyPairSync("ed25519", {
+// Generated fresh each run; the guard verifies it via TRUSTED_KEYSETS below.
+const agentAKeys = generateKeyPairSync("ed25519", {
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
   publicKeyEncoding:  { type: "spki",  format: "pem" },
 });
+export const AGENT_A_PRIVATE_KEY_PEM = agentAKeys.privateKey;
+
+// Ed25519 keypair the engine uses to sign parent AuthorizationV1 artifacts.
+const engineKeys = generateKeyPairSync("ed25519", {
+  privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  publicKeyEncoding:  { type: "spki",  format: "pem" },
+});
+
+// OxDeAIGuard requires Ed25519 signature verification (no HMAC path). Two
+// issuers are trusted: the engine (parent AuthorizationV1) and Agent A
+// (DelegationV1, issuer defaults to the parent's audience, AGENT_A).
+export const TRUSTED_KEYSETS: KeySet[] = [
+  {
+    issuer: AUTH_ISSUER,
+    version: "1",
+    keys: [{ kid: AUTH_KID, alg: "Ed25519", public_key: engineKeys.publicKey.toString() }],
+  },
+  {
+    issuer: AGENT_A,
+    version: "1",
+    keys: [{ kid: AGENT_A_KID, alg: "Ed25519", public_key: agentAKeys.publicKey.toString() }],
+  },
+];
 
 const DEFAULT_DEMO_SECRET = "test-secret-must-be-at-least-32-chars!!";
 const _engineSecret = process.env.OXDEAI_ENGINE_SECRET || DEFAULT_DEMO_SECRET;
@@ -59,8 +86,12 @@ export const engine = new PolicyEngine({
   policy_version: "v1.0.0",
   engine_secret: _engineSecret,
   authorization_ttl_seconds: 300,
-  // audience becomes delegation.delegator — set to Agent A's identity
+  // audience becomes delegation.delegator - set to Agent A's identity
   authorization_audience: AGENT_A,
+  authorization_issuer: AUTH_ISSUER,
+  authorization_signing_alg: "Ed25519",
+  authorization_signing_kid: AUTH_KID,
+  authorization_private_key_pem: engineKeys.privateKey.toString(),
   policyId: POLICY_ID,
   ...RECOMMENDED_TRUSTED_TIME_PROFILE,
 });

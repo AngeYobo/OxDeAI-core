@@ -1,4 +1,13 @@
-import { createHash } from "node:crypto";
+// examples/non-bypassable-openclaw/agent.mjs
+// How to run: pnpm -C examples/non-bypassable-openclaw start
+//
+// Simulates an OpenClaw agent issuing actions through the shared PEP gateway
+// and protected upstream from ../non-bypassable-demo. Only the agent side is
+// OpenClaw-driven; the gateway, upstream, and signing fixture are reused
+// as-is so the demo proves the same enforcement boundary, not a fork of it.
+
+import { hashAction, makeAuthorization } from "../non-bypassable-demo/auth-fixture.mjs";
+import { checkStateBinding } from "./state-boundary.mjs";
 
 const fetchFn =
   globalThis.fetch ??
@@ -13,88 +22,58 @@ const action = {
   params: { amount: "500", currency: "USD", user_id: "user_123" },
 };
 
-// --- Canonicalization (matches demo gateway) ---
-const SAFE_MIN = -9007199254740991n;
-const SAFE_MAX = 9007199254740991n;
-const normalize = (s) => s.normalize("NFC");
-const isPlainObject = (v) => Object.prototype.toString.call(v) === "[object Object]";
+const intentHash = hashAction(action);
 
-function canonicalize(value) {
-  if (value === null) return "null";
-  if (typeof value === "string") return JSON.stringify(normalize(value));
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") {
-    if (!Number.isInteger(value)) throw new Error("FLOAT_NOT_ALLOWED");
-    if (!Number.isSafeInteger(value)) throw new Error("UNSAFE_INTEGER_NUMBER");
-    return String(value);
-  }
-  if (typeof value === "bigint") {
-    if (value < SAFE_MIN || value > SAFE_MAX) throw new Error("UNSAFE_INTEGER_NUMBER");
-    return JSON.stringify(String(value));
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
-  if (isPlainObject(value)) {
-    const normalized = Object.entries(value).map(([k, v]) => [normalize(k), v]);
-    const seen = new Set();
-    for (const [k] of normalized) {
-      if (seen.has(k)) throw new Error("DUPLICATE_KEY");
-      seen.add(k);
-    }
-    const sorted = normalized.sort((a, b) =>
-      Buffer.compare(Buffer.from(a[0], "utf8"), Buffer.from(b[0], "utf8"))
-    );
-    const parts = sorted.map(([k, v]) => `${JSON.stringify(k)}:${canonicalize(v)}`);
-    return `{${parts.join(",")}}`;
-  }
-  throw new Error("UNSUPPORTED_TYPE");
-}
-
-const sha256Hex = (s) => createHash("sha256").update(s, "utf8").digest("hex");
-
-const canonicalAction = canonicalize(action);
-const intentHash = sha256Hex(canonicalAction);
-
-const allowAuth = {
-  auth_id: "auth-allow-1",
-  issuer: "demo",
-  audience: "pep-gateway.local",
-  decision: "ALLOW",
-  intent_hash: intentHash,
-  expiry: Math.floor(Date.now() / 1000) + 600,
-};
-
-const denyAuth = { ...allowAuth, auth_id: "auth-deny-1", intent_hash: "bad" };
-const replayAuth = allowAuth; // same id → replay after first use
-
-async function scenario(name, auth) {
-  const body = { action, authorization: auth };
-  const res = await fetchFn(GATEWAY_URL, {
+async function postJson(url, body) {
+  const res = await fetchFn(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  console.log(`SCENARIO: ${name}`, res.status, json);
+  return { status: res.status, body: json };
 }
 
-async function bypass() {
-  const res = await fetchFn(DIRECT_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(action.params),
-  });
-  console.log("SCENARIO: BYPASS", res.status, "(expected 403)");
+async function scenario(name, action_, auth) {
+  const res = await postJson(GATEWAY_URL, { action: action_, authorization: auth });
+  console.log(`SCENARIO: ${name}`, res.status, res.body);
+  return res;
 }
 
-(async () => {
-  console.log("SCENARIO: ALLOW");
-  await scenario("ALLOW", allowAuth);
+async function main() {
+  const allowAuth = makeAuthorization({ action, authId: "auth-allow-1", intentHash });
+  await scenario("ALLOW", action, allowAuth);
 
-  console.log("SCENARIO: DENY_HASH_MISMATCH");
-  await scenario("DENY_HASH_MISMATCH", denyAuth);
+  // Intent/action mutation: the auth was signed against `action`; the
+  // upstream request now carries a mutated action, so the gateway's
+  // recomputed intent_hash no longer matches authorization.intent_hash.
+  const mutatedAction = { ...action, params: { ...action.params, amount: "999999" } };
+  await scenario("INTENT_MUTATION", mutatedAction, allowAuth);
 
-  console.log("SCENARIO: REPLAY");
-  await scenario("REPLAY", replayAuth);
+  // Signature tamper: mutate state_hash after signing. state_hash is part of
+  // the Ed25519 signing payload, so this breaks the signature rather than
+  // the live-state binding check (see STATE_MUTATION below).
+  const tamperedAuth = makeAuthorization({ action, authId: "auth-tamper-1", intentHash });
+  tamperedAuth.state_hash = "0".repeat(64);
+  await scenario("SIGNATURE_TAMPER", action, tamperedAuth);
 
-  await bypass();
-})();
+  // State mutation: the AuthorizationV1 above is untouched and signature
+  // valid. What changes is the live state OxDeAIGuard hashes when it
+  // re-verifies the state_hash binding (guard.ts step 6c). The PEP gateway
+  // used for the scenarios above has no live-state concept at all, so this
+  // exercises OxDeAIGuard directly, in-process.
+  const stateResult = await checkStateBinding();
+  console.log("SCENARIO: STATE_MUTATION", stateResult);
+
+  // Replay: reuse the already-consumed ALLOW authorization.
+  await scenario("REPLAY", action, allowAuth);
+
+  // Direct bypass: no internal executor token.
+  const bypass = await postJson(DIRECT_URL, action.params);
+  console.log("SCENARIO: BYPASS", bypass.status, bypass.body, "(expected 403)");
+}
+
+main().catch((err) => {
+  console.error("unexpected error", err);
+  process.exit(1);
+});

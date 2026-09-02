@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "pnpm -C ../../packages/core build && pnpm -C ../../packages/guard build",
     "upstream": "node ../non-bypassable-demo/protected-upstream.mjs",
     "gateway": "node ../non-bypassable-demo/pep-gateway.mjs",
     "agent": "node agent.mjs",
-    "start": "pnpm run upstream & pnpm run gateway & sleep 2 && pnpm run agent"
+    "start": "pnpm run upstream & pnpm run gateway & sleep 2 && pnpm run agent",
+    "pretest": "pnpm -C ../../packages/core build && pnpm -C ../../packages/guard build",
+    "test": "node test.mjs"
   },
   "dependencies": {
     "@oxdeai/openclaw": "workspace:*",

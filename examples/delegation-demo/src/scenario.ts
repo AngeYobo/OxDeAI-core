@@ -17,7 +17,7 @@
  *   Agent B cannot exceed 30 units even though Agent A could authorize 100.
  *   Authority flows without amplification.
  *
- * Agent B's actions are verified locally — no engine call, no state mutation.
+ * Agent B's actions are verified locally: no engine call, no state mutation.
  * The scope check (50 > 30) is enforced at the delegation boundary.
  *
  * No mocked decisions. Real engine evaluation for Agent A's parent auth.
@@ -36,6 +36,8 @@ import {
   AGENT_A,
   AGENT_B,
   AGENT_A_PRIVATE_KEY_PEM,
+  AGENT_A_KID,
+  TRUSTED_KEYSETS,
   DELEGATION_MAX_AMOUNT,
   CHILD_ACTION_1_AMOUNT,
   CHILD_ACTION_2_AMOUNT,
@@ -69,7 +71,7 @@ export interface AuthDecision {
   scopeSummary?: string;
   /** Amount proposed (whole units, for display) */
   amountUnits: number;
-  /** Delegation max (whole units) — for child actions */
+  /** Delegation max (whole units), for child actions */
   maxUnits?: number;
   decision: "ALLOW" | "DENY";
   reason: string;
@@ -117,6 +119,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     getState: () => ({ state, version: 0 }),
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
+    trustedKeySets: TRUSTED_KEYSETS,
     mapActionToIntent: () => parentIntent,
     beforeExecute(_action, authorization) {
       parentDecision = "ALLOW";
@@ -157,18 +160,18 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     stateAfter: {
       parentAuthGranted: parentDecision === "ALLOW",
       delegationActive: false,
-      delegationScope: "—",
+      delegationScope: "-",
     },
   });
 
   if (!parentAuth) {
-    // Engine denied parent auth — scenario ends early
+    // Engine denied parent auth, scenario ends early
     steps.push({
       agent: {
         agentId: "A",
         type: "blocked",
         label: "Cannot delegate: parent authorization denied",
-        detail: "Engine evaluation failed — no delegation possible without parent auth",
+        detail: "Engine evaluation failed, no delegation possible without parent auth",
       },
     });
     return steps;
@@ -186,7 +189,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
         max_amount: DELEGATION_MAX_AMOUNT,
       },
       expiry: delegationExpiry,
-      kid: "agent-a-demo-key",
+      kid: AGENT_A_KID,
     },
     AGENT_A_PRIVATE_KEY_PEM
   );
@@ -217,7 +220,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     },
   });
 
-  // ── Step 4: Agent B action 1 — expect ALLOW (20 ≤ 30) ────────────────────
+  // -- Step 4: Agent B action 1: expect ALLOW (20 <= 30) --------------------
   const childNonce1 = 201n;
   const childIntent1 = buildChildIntent(AGENT_B, CHILD_ACTION_1_AMOUNT, ts, childNonce1);
 
@@ -229,6 +232,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     getState: () => ({ state, version: 0 }),
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
+    trustedKeySets: TRUSTED_KEYSETS,
     mapActionToIntent: () => childIntent1,
     beforeExecute() {
       child1Decision = "ALLOW";
@@ -281,7 +285,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     });
   }
 
-  // ── Step 5: Agent B action 2 — expect DENY (50 > 30) ──────────────────────
+  // -- Step 5: Agent B action 2: expect DENY (50 > 30) ---------------------
   const childNonce2 = 202n;
   const childIntent2 = buildChildIntent(AGENT_B, CHILD_ACTION_2_AMOUNT, ts + 1, childNonce2);
 
@@ -293,6 +297,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     getState: () => ({ state, version: 0 }),
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
+    trustedKeySets: TRUSTED_KEYSETS,
     mapActionToIntent: () => childIntent2,
     beforeExecute() {
       child2Decision = "ALLOW"; // should not be reached
