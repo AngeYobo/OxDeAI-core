@@ -9,6 +9,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import fc from "fast-check";
 
 import { verifyTrustedTime } from "../policy/verifyTrustedTime.js";
 import type { VerifyTrustedTimeInput } from "../policy/verifyTrustedTime.js";
@@ -247,5 +248,61 @@ test("verifyTrustedTime: malformed config AND malformed intentTimestamp → thro
   assert.throws(
     () => verifyTrustedTime(baseInput({ maxClockSkewSeconds: NaN, intentTimestamp: Infinity })),
     /maxClockSkewSeconds/
+  );
+});
+
+// ── Property: freshness boundary, generalized (mirrors the fixed-example ────
+//    boundary tests above; does not replace them) ───────────────────────────
+//
+// Generalizes the deterministic "exactly at boundary → ALLOW, one beyond →
+// DENY" examples above into an arbitrary sweep over (evaluationTime,
+// maxClockSkewSeconds, maxIntentAgeSeconds, delta). The expected decision is
+// derived directly from the function's own documented contract
+// (delta-vs-tolerance, both boundaries inclusive per spec §6) — this is not
+// an independent reimplementation, it is the same rule restated so a
+// regression in the implementation's comparison operators (`>` vs `>=`) is
+// caught regardless of which specific numbers a fixed example happens to use.
+//
+// `delta` is deliberately generated as a small offset from each sampled
+// tolerance (mode "future-boundary" / "stale-boundary"), not as an
+// independent wide-range value: a uniformly random delta over a wide range
+// has a near-zero chance of landing exactly on whatever tolerance value was
+// independently sampled in the same case, so it would almost never exercise
+// the equality boundary the deterministic tests pin by hand. The "wide" mode
+// still samples the broad interior/exterior region for general coverage.
+test("property: verifyTrustedTime freshness decision matches the delta-vs-tolerance contract for any (intentTimestamp, evaluationTime, tolerances)", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 0, max: 2_000_000_000 }),
+      fc.integer({ min: 0, max: 100_000 }),
+      fc.integer({ min: 0, max: 100_000 }),
+      fc.constantFrom("future-boundary", "stale-boundary", "wide"),
+      fc.integer({ min: -3, max: 3 }),
+      fc.integer({ min: -100_005, max: 100_005 }),
+      (evaluationTime, maxClockSkewSeconds, maxIntentAgeSeconds, mode, offset, wideDelta) => {
+        const delta =
+          mode === "future-boundary" ? maxClockSkewSeconds + offset
+          : mode === "stale-boundary" ? -maxIntentAgeSeconds - offset
+          : wideDelta;
+        const intentTimestamp = evaluationTime + delta;
+        fc.pre(Number.isSafeInteger(intentTimestamp) && intentTimestamp >= 0);
+
+        const out = verifyTrustedTime({
+          intentTimestamp,
+          evaluationTime,
+          maxClockSkewSeconds,
+          maxIntentAgeSeconds,
+        });
+
+        const actualDelta = intentTimestamp - evaluationTime;
+        if (actualDelta > maxClockSkewSeconds) {
+          assert.deepEqual(out, { decision: "DENY", reasons: ["INTENT_FRESHNESS_FUTURE"] });
+        } else if (-actualDelta > maxIntentAgeSeconds) {
+          assert.deepEqual(out, { decision: "DENY", reasons: ["INTENT_STALE"] });
+        } else {
+          assert.deepEqual(out, { decision: "ALLOW", reasons: [] });
+        }
+      },
+    ),
   );
 });

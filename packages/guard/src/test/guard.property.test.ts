@@ -597,7 +597,7 @@ test("G5 successful ALLOW always calls setState() before execute() and returns r
     let currentState = state;
     let currentVersion = 0;
 
-    let executeCalled = false;
+    let executeCount = 0;
     let setStateCalled = false;
     const callOrder: string[] = [];
 
@@ -618,11 +618,11 @@ test("G5 successful ALLOW always calls setState() before execute() and returns r
     const guard = OxDeAIGuard(config);
     const result = await guard(action, async () => {
       callOrder.push("execute");
-      executeCalled = true;
+      executeCount++;
       return SENTINEL;
     });
 
-    assert.ok(executeCalled, `seed=${seed} execute must be called on ALLOW`);
+    assert.equal(executeCount, 1, `seed=${seed} protected callback must execute exactly once on ALLOW`);
     assert.ok(setStateCalled, `seed=${seed} setState must be called on ALLOW`);
     assert.equal(result, SENTINEL, `seed=${seed} guard must return the execute() result`);
 
