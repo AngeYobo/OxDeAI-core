@@ -29,6 +29,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import fc from "fast-check";
 
 import { ReplayModule } from "../policy/modules/ReplayModule.js";
 import type { Intent } from "../types/intent.js";
@@ -59,11 +60,14 @@ function intentAt(timestamp: number, nonce: bigint): Intent {
   };
 }
 
-function stateWithNonces(entries: Array<{ nonce: string; ts: number }>): State {
+function stateWithNonces(
+  entries: Array<{ nonce: string; ts: number }>,
+  windowSeconds: number = WINDOW,
+): State {
   return {
     policy_version: "v1-replay-tt",
     replay: {
-      window_seconds: WINDOW,
+      window_seconds: windowSeconds,
       max_nonces_per_agent: 256,
       nonces: { [AGENT]: entries },
     },
@@ -192,4 +196,95 @@ test("#191 replay: malformed replay config still denies with STATE_INVALID", () 
 
   assert.equal(out.decision, "DENY");
   assert.deepEqual(out.reasons, ["STATE_INVALID"]);
+});
+
+// ── 5. Properties: replay monotonicity (mirrors the velocity/tool-window ────
+//    trusted-time property tests in style and scope)
+//
+// `ReplayModule` never reads `intent.timestamp` at all — only
+// `context.evaluationTime` and `intent.nonce`/`agent_id`. The properties below
+// generalize the fixed WINDOW/STAMP examples above into arbitrary-input
+// sweeps, so a future change that starts consulting `intent.timestamp` (the
+// exact regression #191 closed) is caught regardless of which specific
+// window/offset values a fixed example happens to use.
+//
+// Scope note: `max_nonces_per_agent` is held at its existing fixed value (256,
+// via `stateWithNonces`) throughout. Capacity-based list-size eviction is a
+// separate, pre-existing resource bound with no dedicated coverage anywhere in
+// this file today; generalizing that is out of scope for this pass and is not
+// asserted one way or the other here.
+
+test("#191 property: any intent.timestamp yields the identical decision for a given (nonce, state, evaluationTime)", () => {
+  fc.assert(fc.property(
+    fc.integer({ min: EVAL_NOW - 10 * WINDOW, max: EVAL_NOW + 10 * WINDOW }),
+    fc.integer({ min: EVAL_NOW - 10 * WINDOW, max: EVAL_NOW + 10 * WINDOW }),
+    (t1, t2) => {
+      const state = stateWithNonces([{ nonce: "500", ts: EVAL_NOW - 60 }]);
+      assert.deepEqual(
+        ReplayModule(intentAt(t1, 500n), state, { evaluationTime: EVAL_NOW }),
+        ReplayModule(intentAt(t2, 500n), state, { evaluationTime: EVAL_NOW }),
+      );
+    },
+  ));
+});
+
+test("#191 property: no intent.timestamp can evict a recorded nonce still inside the trusted window", () => {
+  fc.assert(fc.property(
+    fc.integer({ min: 1, max: 100_000 }),
+    fc.integer({ min: 0, max: 100_000 }),
+    fc.integer({ min: -10_000_000, max: 10_000_000 }),
+    (windowSeconds, elapsed, tsOffset) => {
+      fc.pre(elapsed < windowSeconds); // still inside the trusted window at evaluationTime
+      const recordedAt = EVAL_NOW;
+      const evaluationTime = recordedAt + elapsed;
+      const state = stateWithNonces([{ nonce: "77", ts: recordedAt }], windowSeconds);
+
+      // Attacker-controlled offset applied to the trusted evaluation time —
+      // arbitrarily postdated or backdated, and never bounded by a freshness
+      // gate here (that gate lives upstream in PolicyEngine.evaluatePure).
+      const attackerTimestamp = evaluationTime + tsOffset;
+      const out = ReplayModule(intentAt(attackerTimestamp, 77n), state, { evaluationTime });
+
+      assert.deepEqual(out, { decision: "DENY", reasons: ["REPLAY_NONCE"] });
+    },
+  ));
+});
+
+test("#191 property: activity under other nonces cannot make a consumed nonce valid again", () => {
+  fc.assert(fc.property(
+    fc.integer({ min: 0, max: 50 }), // intervening distinct-nonce calls, well under max_nonces_per_agent (256)
+    fc.integer({ min: 0, max: WINDOW - 1 }), // elapsed time, still inside the trusted window
+    (interveningCount, elapsed) => {
+      let entries: Array<{ nonce: string; ts: number }> = [];
+
+      const first = ReplayModule(intentAt(EVAL_NOW, 999n), stateWithNonces(entries), { evaluationTime: EVAL_NOW });
+      assert.equal(first.decision, "ALLOW", "setup: the target nonce must be consumable once");
+      entries = nonces(first);
+
+      let evalTime = EVAL_NOW;
+      for (let i = 0; i < interveningCount; i++) {
+        evalTime += 1;
+        const step = ReplayModule(
+          intentAt(evalTime, BigInt(2000 + i)),
+          stateWithNonces(entries),
+          { evaluationTime: evalTime },
+        );
+        assert.equal(step.decision, "ALLOW", `setup: intervening activity #${i} must itself be consumable`);
+        entries = nonces(step);
+      }
+
+      const finalEvalTime = EVAL_NOW + elapsed;
+      const replay = ReplayModule(
+        intentAt(finalEvalTime, 999n),
+        stateWithNonces(entries),
+        { evaluationTime: finalEvalTime },
+      );
+
+      assert.deepEqual(
+        replay,
+        { decision: "DENY", reasons: ["REPLAY_NONCE"] },
+        `interveningCount=${interveningCount} elapsed=${elapsed}`,
+      );
+    },
+  ));
 });
