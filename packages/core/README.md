@@ -1,5 +1,5 @@
 # @oxdeai/core
-Execution-time authorization protocol (ETA) - non-bypassable execution boundary.
+Execution-time authorization protocol (ETA): deterministic pre-execution decision layer.
 Deterministic decision: (intent, state, policy) → ALLOW | DENY, emits AuthorizationV1 artifacts.
 Fail-closed verification at the PEP; no valid authorization → no execution path.
 
@@ -22,7 +22,7 @@ Prevents retries, loops, and unintended side effects from ever reaching executio
 ## Quickstart (minimal)
 
 ```ts
-import { PolicyEngine, verifyAuthorization } from "@oxdeai/core";
+import { PolicyEngine, verifyAuthorization, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 
 const engine = new PolicyEngine({
   policy_version: "v1.7",
@@ -30,8 +30,11 @@ const engine = new PolicyEngine({
   authorization_signing_alg: "Ed25519",
   authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM!,
   engine_secret: process.env.OXDEAI_ENGINE_SECRET!,
-  strictDeterminism: true
+  strictDeterminism: true,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE // maxClockSkewSeconds / maxIntentAgeSeconds: required, no default
 });
+
+const evaluationTime = 1_730_000_000; // trusted PEP clock, sampled once per evaluation, never derived from intent.timestamp
 
 const intent = {
   intent_id: "intent-1",
@@ -60,7 +63,7 @@ const state = {
   tool_limits: { window_seconds: 60, max_calls: { "agent-123": 10 }, calls: {} }
 };
 
-const decision = engine.evaluatePure(intent, state);
+const decision = engine.evaluatePure(intent, state, evaluationTime);
 
 if (decision.decision === "DENY") {
   throw new Error(decision.reasons.join(", "));
@@ -68,7 +71,10 @@ if (decision.decision === "DENY") {
 
 // Allowed: authorization artifact is attached
 const auth = decision.authorization;
-const verified = verifyAuthorization(auth, { policyId: engine.computePolicyId() });
+const verified = verifyAuthorization(auth, {
+  now: evaluationTime, // trusted verifier time: never the ambient wall clock, never intent.timestamp
+  expectedPolicyId: engine.computePolicyId()
+});
 if (verified.status !== "ok") throw new Error("authorization failed verification");
 
 if (decision.decision === "ALLOW") {
@@ -86,7 +92,21 @@ if (decision.decision === "ALLOW") {
 
 Release policy note: OxDeAI uses package-scoped versions and package-scoped tags. `@oxdeai/core` has its own package version line; coordinated release commits do not imply shared package versions across `core`, `sdk`, or `conformance`. See [`docs/release/RELEASE.md`](../../docs/release/RELEASE.md).
 
-Current `@oxdeai/core` package line: **1.7.x**.
+Current `@oxdeai/core` package line: **2.0.0**.
+
+v2.0.0 is a breaking release. See [`CHANGELOG.md`](./CHANGELOG.md) for the full
+list; the changes that affect every call site are:
+
+- `evaluationTime` is now a **required** argument on `evaluate`, `evaluatePure`,
+  and `simulateSequence`. There is no implicit wall-clock fallback and no
+  derivation from `intent.timestamp`.
+- `EngineOptions.maxClockSkewSeconds` and `maxIntentAgeSeconds` are now
+  **required**. A `PolicyEngine` constructed without an explicit trusted-time
+  policy does not start. `RECOMMENDED_TRUSTED_TIME_PROFILE` supplies conformant
+  values for deployments that want to opt into the recommended profile
+  explicitly rather than choosing their own.
+- Verifier options use `expectedPolicyId` (not `policyId`) on
+  `verifyAuthorization`, `verifyAuditEvents`, and `verifyEnvelope`.
 
 v1.7.x adds on top of the preserved v1.6.x verification surface:
 
@@ -302,7 +322,7 @@ Strict mode removes implicit entropy sources.
 ## Show me the invariant
 
 ```ts
-const out = engine.evaluatePure(intent, state);
+const out = engine.evaluatePure(intent, state, evaluationTime);
 if (out.decision !== "ALLOW") throw new Error(out.reasons.join(", "));
 const policyId = engine.computePolicyId();
 const stateHash = engine.computeStateHash(out.nextState);
@@ -324,9 +344,9 @@ No non-deterministic ordering.
 ## Minimal Example
 
 ```ts
-import { PolicyEngine, verifyEnvelope } from "@oxdeai/core";
-const engine = new PolicyEngine({...});
-const decision = engine.evaluatePure(intent, state);
+import { PolicyEngine, verifyEnvelope, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
+const engine = new PolicyEngine({ ...RECOMMENDED_TRUSTED_TIME_PROFILE, /* ... */ });
+const decision = engine.evaluatePure(intent, state, evaluationTime);
 if (decision.decision !== "ALLOW") throw new Error(decision.reasons.join(", "));
 
 const result = verifyEnvelope(envelopeBytes);
@@ -431,21 +451,27 @@ Verification envelopes remain post-execution evidence artifacts verified with `v
 ## Example: Pure Evaluation
 
 ```ts
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import type { State, Intent } from "@oxdeai/core";
 
 // Policy configuration is bound in the engine instance.
-// evaluatePure(intent, state) evaluates against that bound policy.
+// evaluatePure(intent, state, evaluationTime) evaluates against that bound
+// policy at the given trusted evaluation time.
 const engine = new PolicyEngine({
   policy_version: "v1.7",
   authorization_ttl_seconds: 60,
   authorization_signing_alg: "Ed25519",
   authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM!,
   engine_secret: process.env.OXDEAI_ENGINE_SECRET!,
-  strictDeterminism: true
+  strictDeterminism: true,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE // maxClockSkewSeconds / maxIntentAgeSeconds: required, no default
 });
 
-const now = 1730000000; // injected timestamp (seconds)
+// `now` seeds the intent's own (untrusted) timestamp field below.
+// `evaluationTime` is the separate, trusted PEP clock sample passed to
+// evaluatePure. Never derived from intent.timestamp.
+const now = 1730000000;
+const evaluationTime = now;
 
 const state: State = {
   policy_version: "v1.7",
@@ -478,7 +504,7 @@ const intent: Intent = {
   depth: 0
 };
 
-const out = engine.evaluatePure(intent, state, { mode: "fail-fast" });
+const out = engine.evaluatePure(intent, state, evaluationTime, { mode: "fail-fast" });
 
 if (out.decision === "DENY") {
   console.error(out.reasons);
@@ -513,7 +539,7 @@ const releaseIntent: Intent = {
   timestamp: now
 };
 
-const rel = engine.evaluatePure(releaseIntent, out.nextState);
+const rel = engine.evaluatePure(releaseIntent, out.nextState, evaluationTime);
 ```
 
 ---
@@ -583,7 +609,7 @@ Snapshots are portable, deterministic, and verifiable across runtimes.
 ## Adapters (v0.8)
 
 ```ts
-import { PolicyEngine } from "@oxdeai/core";
+import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 import { FileStateStore, FileAuditSink } from "@oxdeai/core/adapters";
 
 const stateStore = new FileStateStore("./policy-state.bin");
@@ -595,11 +621,12 @@ const engine = new PolicyEngine({
   authorization_signing_alg: "Ed25519",
   authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM!,
   engine_secret: process.env.OXDEAI_ENGINE_SECRET!,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE, // maxClockSkewSeconds / maxIntentAgeSeconds: required, no default
   stateStore,
   auditSink
 });
 
-const out = engine.evaluate(intent, state);
+const out = engine.evaluate(intent, state, evaluationTime);
 engine.commitState(state);
 await engine.flushAudit();
 await engine.flushState();
@@ -617,19 +644,20 @@ In strict mode, verification returns `ok` once the audit trace includes at least
 `verifyAuditEvents(...)` recomputes `auditHeadHash` offline from the provided audit events, and validates policy binding (`policyId`) plus non-decreasing timestamps.
 
 ```ts
-import { PolicyEngine, verifyAuditEvents } from "@oxdeai/core";
+import { PolicyEngine, verifyAuditEvents, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
 const engine = new PolicyEngine({
   policy_version: "v1.7",
   authorization_ttl_seconds: 60,
   authorization_signing_alg: "Ed25519",
   authorization_private_key_pem: process.env.OXDEAI_SIGNING_KEY_PEM!,
-  checkpoint_every_n_events: 2
+  checkpoint_every_n_events: 2,
+  ...RECOMMENDED_TRUSTED_TIME_PROFILE // maxClockSkewSeconds / maxIntentAgeSeconds: required, no default
 });
-const first = engine.evaluatePure(intent1, state);
+const first = engine.evaluatePure(intent1, state, evaluationTime);
 if (first.decision !== "ALLOW") throw new Error(first.reasons.join(", "));
-const out = engine.evaluatePure(intent2, first.nextState);
+const out = engine.evaluatePure(intent2, first.nextState, evaluationTime);
 const events = engine.audit.snapshot();
-const verified = verifyAuditEvents(events, { policyId: engine.computePolicyId() }); // strict by default
+const verified = verifyAuditEvents(events, { expectedPolicyId: engine.computePolicyId() }); // strict by default
 console.log(verified.status === "ok"); // true when checkpoints exist
 ```
 
@@ -728,7 +756,17 @@ Stateless verification layer for protocol artifacts.
 * `@oxdeai/sdk@1.3.2`: JSDoc clarifications pointing to `createVerifier` and explicit trust
 * Conformance: deterministic secret fixture, env var override removed from validator
 
-### v2.x - Verifiable Execution Infrastructure (planned)
+### v2.0 - Trusted-Time & Verification Hardening (this release)
+
+- `evaluationTime` required on every evaluation entry point (`evaluate`, `evaluatePure`, `simulateSequence`); no implicit wall-clock fallback, no derivation from `intent.timestamp`
+- `EngineOptions.maxClockSkewSeconds` / `maxIntentAgeSeconds` required, with `RECOMMENDED_TRUSTED_TIME_PROFILE` as an explicit opt-in default
+- Verifier options renamed to `expectedPolicyId` across `verifyAuthorization`, `verifyAuditEvents`, `verifyEnvelope`
+- Public `AuthorizationV1` artifact boundary separated from the engine's internal representation (`toPublicAuthorizationV1`)
+- `@oxdeai/guard` Tier 1 secure path (`createSecureGuard`, `createTrustedExecutionContext`): see [`@oxdeai/guard`](../guard/README.md)
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for the complete breaking-change list.
+
+### v2.x - Verifiable Execution Infrastructure (planned, post-2.0)
 
 - deterministic execution receipts
 - binary Merkle batching of receipt hashes

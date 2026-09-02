@@ -39,7 +39,7 @@ Agent
   ▼
 PEP  (pep.ts)          ← enforcement point - thin by design, no policy logic
   │
-  ├─ evaluatePure(intent, state)
+  ├─ evaluatePure(intent, state, evaluationTime)
   │     ├─ DENY  → return denial, execution structurally blocked
   │     └─ ALLOW → Authorization artifact issued
   │
@@ -62,7 +62,7 @@ PDP  (policy.ts)       ← decision point - deterministic, pure, no side effects
 ## Execution flow
 
 1. Agent proposes `provision_gpu(asset, region)`
-2. PEP builds an Intent and calls `evaluatePure(intent, state)`
+2. PEP builds an Intent and calls `evaluatePure(intent, state, evaluationTime)`
 3. **DENY** → PEP returns denial; tool is never invoked
 4. **ALLOW** → PEP asserts the Authorization artifact is present (throws if missing)
 5. PEP calls the tool; commits `nextState` from the PDP result

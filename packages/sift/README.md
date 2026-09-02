@@ -407,7 +407,7 @@ const store = new SiftHttpKeyStore({
 
 **Single-node / single-writer.** `createFileBackedKrlWatermarkStore` uses read-modify-write and is NOT safe for concurrent writes from multiple processes. Multi-node deployments should implement `KrlWatermarkStore` backed by a database with atomic compare-and-set.
 
-**Last-known-good (LKG) signed-KRL cache.** Opt-in cache that improves cold-start and fetch-failure resilience. When configured, `SiftHttpKeyStore` writes the signed KRL payload to the cache after every successful signed verification + durable watermark persistence. On subsequent fetch failures, the cache provides a fallback — but **only after full re-verification through `verifyKrl`**. A cached payload is never trusted without re-verification.
+**Last-known-good (LKG) signed-KRL cache.** Opt-in cache that improves cold-start and fetch-failure resilience. When configured, `SiftHttpKeyStore` writes the signed KRL payload to the cache after every successful signed verification + durable watermark persistence. On subsequent fetch failures, the cache provides a fallback, but **only after full re-verification through `verifyKrl`**. A cached payload is never trusted without re-verification.
 
 ```ts
 import {
@@ -439,9 +439,9 @@ const store = new SiftHttpKeyStore({
 | `createFileBackedSignedKrlCache(path)` | Persistent single-node cache; atomic write |
 
 **Mode behavior:**
-- `signed_required` — valid LKG may be used after re-verification on fetch failure; invalid/expired/malformed LKG fails closed.
-- `signed_preferred` — LKG fallback attempted; if LKG is invalid or absent, preserves existing compatibility behavior.
-- `unsigned_legacy` — LKG is never read or written.
+- `signed_required`: valid LKG may be used after re-verification on fetch failure; invalid/expired/malformed LKG fails closed.
+- `signed_preferred`: LKG fallback attempted; if LKG is invalid or absent, preserves existing compatibility behavior.
+- `unsigned_legacy`: LKG is never read or written.
 
 **No constructor I/O.** LKG is never accessed at construction time. Cache access happens exclusively inside `refresh()`.
 
@@ -453,7 +453,7 @@ const store = new SiftHttpKeyStore({
 
 **Status fields:** `lkgCacheActive: boolean` (true when active `revokedKids` came from LKG), `lkgVerifiedAt?: number` (unix seconds of the LKG entry's `verifiedAt`). No payload, signature bytes, or key material is ever exposed in status.
 
-**Closing RT-TRUST-2.** The KRL transport-integrity gap is closeable for a given deployment when all three are configured: `signed_required` + `KrlWatermarkStore` + `SignedKrlCache`. Without all three, residual risks remain (see `docs/audits/protocol-audit-post-interoperability.md`).
+**Closing RT-TRUST-2.** The KRL transport-integrity gap is closeable for a given deployment when all three are configured: `signed_required` + `KrlWatermarkStore` + `SignedKrlCache`. Without all three, residual risks remain (see [`docs/audits/2.0-residual-scope.md`](../../docs/audits/2.0-residual-scope.md) and [`docs/audits/external-review-scope-v2.md`](../../docs/audits/external-review-scope-v2.md); `docs/audits/protocol-audit-post-interoperability.md` is a historical snapshot dated 2026-06-04, not a current-state reference).
 
 **Deprecation trajectory:**
 
@@ -461,7 +461,7 @@ const store = new SiftHttpKeyStore({
 |---------|--------|
 | Current (`signed_preferred` default) | `unsigned_legacy` warns at construction via `process.emitWarning(DEP_OXDEAI_KRL_UNSIGNED_LEGACY)`; `signed_preferred` unsigned fallback warns once per instance via `console.warn` |
 | `v-next` | See above (already landed) |
-| `v-after` | `unsigned_legacy` removed; default becomes `signed_required` — **breaking change for callers not wiring `verifyKrl`** |
+| `v-after` | `unsigned_legacy` removed; default becomes `signed_required`. **Breaking change for callers not wiring `verifyKrl`** |
 
 ---
 
@@ -480,7 +480,7 @@ import {
 import { verifySignedKrl } from "@oxdeai/core";
 import type { KeySet } from "@oxdeai/core";
 
-// Your KRL signing key sets — distinct from AuthorizationV1 signing keys.
+// Your KRL signing key sets, distinct from AuthorizationV1 signing keys.
 const krlSigningKeySets: KeySet[] = [
   {
     issuer: "your-krl-authority",
@@ -550,7 +550,7 @@ OxDeAI provides:
 - deterministic state binding
 - audience binding
 - replay protection
-- non-bypassable execution enforcement at the PEP
+- fail-closed execution enforcement at the reviewed PEP boundary
 
 These guarantees are intentionally separated.
 
@@ -836,10 +836,10 @@ authoritative at the Sift contract boundary.
 ## Related docs
 
 * `../../docs/adapters/sift.md`
-* `../../docs/spec/authorization-v1.md`
-* `../../docs/spec/pep-gateway-v1.md`
-* `../../docs/spec/verification-v1.md`
-* `../../docs/spec/canonicalization-v1.md`
+* `../../docs/spec/artifacts/authorization-v1.md`
+* `../../docs/spec/enforcement/pep-gateway-v1.md`
+* `../../docs/spec/verification/verification-v1.md`
+* `../../docs/spec/core/canonicalization-v1.md`
 
 ## Invariant
 

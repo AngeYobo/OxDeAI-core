@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/oxdeai/oxdeai/actions/workflows/ci.yml/badge.svg)](https://github.com/oxdeai/oxdeai/actions/workflows/ci.yml)
 
-Non-bypassable execution authorization for AI agents.
+Execution authorization for AI agents.
+No valid authorization, no execution through the reviewed enforcement boundary.
 
 Deterministic boundary:
 (intent, state, policy) → ALLOW | DENY
@@ -45,18 +46,36 @@ If `DENY` → execution is unreachable
 
 ## Execution Boundary
 
-OxDeAI enforces a strict invariant:
+OxDeAI enforces a strict invariant at the reviewed enforcement boundary:
 
-> **No authorization → no execution**
+> **No valid authorization, no execution through the reviewed enforcement boundary.**
 
-All tool calls **MUST** pass through the PEP Gateway:
+A tool call routed through the PEP Gateway:
 
-* authorization verified before execution
-* intent hash must match canonical input
-* replay protection enforced
-* fail-closed by default
+* has its authorization verified before execution
+* has its intent hash checked against canonical input
+* is subject to replay protection
+* fails closed by default
 
-There is **no execution path outside the boundary**.
+This holds for calls that go through the boundary. It does not by itself make
+every possible call path in a deployment non-bypassable: see
+[Scope and limits](#scope-and-limits).
+
+---
+
+## Scope and limits
+
+The guarantees above apply to the reviewed enforcement boundary
+(`@oxdeai/guard`), not to a deployment as a whole. A deployment is only as
+strong as its weakest unreviewed call path.
+
+Current, authoritative scope and residual-limit documents for the 2.0 line:
+
+- [`docs/audits/2.0-residual-scope.md`](./docs/audits/2.0-residual-scope.md): what 2.0 targets and what remains out of scope (evaluator/state authority, external-resource TOCTOU, post-execution-start audit semantics).
+- [`docs/audits/external-review-scope-v2.md`](./docs/audits/external-review-scope-v2.md): the current external review scope.
+
+`docs/audits/protocol-audit-post-interoperability.md` is a historical snapshot
+dated 2026-06-04 and is not a current-state reference.
 
 ---
 
@@ -115,7 +134,7 @@ Most agent systems control behavior.
 
 OxDeAI controls execution.
 
-Without an execution boundary, agents are not production-safe.
+Without an execution boundary, unauthorized or unintended execution is not prevented.
 
 ## Applicability
 
@@ -126,11 +145,11 @@ baseline and should generally be preferred.
 
 A detachable authorization artifact is justified in two cases:
 
-* **Independent verification** — the party that must verify the authorization
+* **Independent verification**: the party that must verify the authorization
   is not the party that ran the decision point or controls the enforcement log
   (counterparty, auditor, regulator). Decision logs are evidence the operator
   produced about the operator's own enforcement.
-* **Unreachable premises** — the executor cannot reach the authoritative
+* **Unreachable premises**: the executor cannot reach the authoritative
   inputs required to re-evaluate locally, across a separate trust/network zone
   or third-party boundary.
 
@@ -274,10 +293,11 @@ pnpm build
 
 export OXDEAI_ENGINE_SECRET='test-secret-must-be-at-least-32-chars!!'
 pnpm -C examples/openclaw start
-
----
+```
 
 Runs an OpenClaw agent with enforced execution authorization.
+
+---
 
 ## Delegated Authorization
 

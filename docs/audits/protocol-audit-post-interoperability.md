@@ -1,5 +1,22 @@
 # Protocol Audit - Post-Interoperability Hardening
 
+> ⚠️ **HISTORICAL SNAPSHOT. SUPERSEDED.** This document records the protocol
+> audit state as it stood on **2026-06-04**. It is preserved as-is for
+> historical record and is **not** the authoritative current-state audit.
+> Some entries below carry later strikethrough/"✓ resolved" annotations from
+> incremental edits made after that date; where those annotations conflict
+> with the surrounding prose (e.g. status labels, assertion counts) this
+> document is not reconciled and should not be read as internally consistent
+> current-state reporting. Do not treat any status, count, or "resolved" note
+> here as reflecting the OxDeAI 2.0 release.
+>
+> For the current OxDeAI 2.0 pre-freeze scope, use:
+>
+> - [`docs/audits/external-review-scope-v2.md`](./external-review-scope-v2.md): current external review scope
+> - [`docs/audits/2.0-residual-scope.md`](./2.0-residual-scope.md): current residual security scope and what 2.0 does/does not target
+>
+> The date below is the original audit date and has not been changed.
+
 **Date:** 2026-06-04
 **Scope:** OxDeAI execution authorization boundary protocol, after completion of the external-provider interoperability hardening sequence
 **Auditor:** Internal protocol audit (Ange)
@@ -342,7 +359,7 @@ New deployments start with an empty replay store. Authorization artifacts issued
 
 ### 7.1 External Implementer Readiness
 
-**Status: PARTIAL** — Status remains PARTIAL because external implementer readiness still depends on independent security review and establishing an external feedback / co-author channel. Profile C cross-language coverage is no longer the blocker; it was resolved by #119 and #120.
+**Status: PARTIAL.** Status remains PARTIAL because external implementer readiness still depends on independent security review and establishing an external feedback / co-author channel. Profile C cross-language coverage is no longer the blocker; it was resolved by #119 and #120.
 
 - `AuthorizationV1` is well-specified and has cross-language conformance vectors (Go harness).
 - Canonicalization-v1 is fully specified with cross-language vectors.

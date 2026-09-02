@@ -168,7 +168,7 @@ docker compose -f examples/lgf-frappe-pep/docker-compose.redis.yml down
 
 The replay backend is one implementation detail behind the PEP boundary. Redis here is used only to validate replay persistence behavior.
 
-CI now runs this same test in the `pep-redis-replay` job in [.github/workflows/ci.yml](/home/ange/OxDeAI-core/.github/workflows/ci.yml:93) against a real `redis:7-alpine` service.
+CI now runs this same test in the `pep-redis-replay` job in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) against a real `redis:7-alpine` service.
 
 That CI job:
 

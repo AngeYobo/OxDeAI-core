@@ -113,7 +113,13 @@ Signing domain: `OXDEAI_KRL_V1`. KRL signing fixture key (`krl-2026-01`, issuer 
 
 **Coverage scope:** TypeScript / `@oxdeai/core` conformance runner. No cross-language harness integration in Patch A. `SiftHttpKeyStore` integration deferred to Patch B.
 
-Current validator assertion count: `209`.
+### Trusted-Time Semantics (v2.0+)
+
+- `trusted-time.json` - exercises the trusted-time freshness gate (`docs/spec/core/trusted-time-v1.md`) end to end: issuance, velocity, tool-window, and replay evaluation under trusted `evaluationTime`, plus protocol-domain and malformed-input rejection.
+
+44 vectors, 1 assertion each, run via a dedicated `runTrustedTimeConformance` harness (`src/trustedTimeConformance.ts`) rather than the generic vector-comparison path used by the sets above.
+
+Current validator assertion count: `259` (re-run `pnpm -C packages/conformance validate` for the live figure before relying on this number).
 
 ### Adapter ops required for DelegationV1
 
@@ -143,6 +149,7 @@ compatibility but not used by the harness runners.
 | `delegation-signature-verification.json` | Ed25519 verification path | Yes - independently verified |
 | `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes - portable across any `verifyAuthorization` implementation |
 | `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | Yes - portable; no crypto required |
+| `trusted-time.json` | Trusted-time freshness gate: issuance, velocity, tool-window, replay under `evaluationTime`; protocol-domain and malformed-input rejection | TypeScript only (dedicated `runTrustedTimeConformance` harness) |
 | `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (TS runner); **Go + Python cover all 8 modes** via `docs/spec/test-vectors/profile-c-state-verification.json` (#120) |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
 | `guard.delegation.property.test.ts` (G-D1–G-D3) | Guard PEP delegation path | TypeScript only |
@@ -159,8 +166,11 @@ pnpm -C packages/conformance validate
 Expected success output includes:
 
 ```text
-Conformance passed: 209 assertions
+Conformance passed: 259 assertions
 ```
+
+(This figure moves as vectors are added. Treat the live `pnpm validate` output
+as authoritative, not this number.)
 
 ## Adapter Contract
 The validator is built around a pluggable adapter (`ConformanceAdapter`) so non-TypeScript runtimes can be checked against the same vectors.
