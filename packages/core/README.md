@@ -362,7 +362,7 @@ if (result.status === "ok") console.log("artifact verified");
 * Fail closed.
 * Make invariants explicit.
 * Make state portable.
-* Make execution replayable.
+* Make authorization decisions replayable.
 * Separate identity from proof.
 * Prefer deterministic containment over probabilistic detection.
 
