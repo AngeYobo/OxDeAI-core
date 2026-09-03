@@ -47,6 +47,7 @@ pnpm test
 pnpm -C packages/conformance validate
 pnpm test:vectors:all
 pnpm security:gate
+pnpm run security:policy-boundary
 ```
 
 Adapter validation, when relevant:
@@ -306,6 +307,7 @@ pnpm test
 pnpm -C packages/conformance validate
 pnpm test:vectors:all
 pnpm security:gate
+pnpm run security:policy-boundary
 ```
 
 When adapters are affected:

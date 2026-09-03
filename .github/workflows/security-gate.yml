@@ -7,7 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  security:
+  # Reproducible: depends only on repo state and inputs. Fails on a
+  # deterministic policy-boundary regression, independent of external
+  # advisory data.
+  security-policy-boundary:
+    name: Security Policy Boundary
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +35,36 @@ jobs:
       - name: Build protocol packages
         run: pnpm build:protocol
 
+      - name: Policy-boundary repro harness
+        run: pnpm run security:policy-boundary
+
+  # Freshness-dependent: the external advisory database can change while the
+  # commit and lockfile stay the same, so this can fail or pass differently
+  # on reruns of the same commit. Never invokes the policy-boundary harness.
+  security-advisory-gate:
+    name: Security Advisory Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install security-gate dependencies
+        run: >-
+          pnpm install --frozen-lockfile
+          --filter .
+          --filter @oxdeai/core...
+          --filter @oxdeai/sdk...
+          --filter @oxdeai/guard...
+
       - name: Audit
         run: pnpm audit --json > audit.json || true
 
-      - name: Security Gate
+      - name: Security advisory gate
         run: node scripts/security-gate.mjs audit.json security/vuln-policy.json
