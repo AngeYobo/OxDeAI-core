@@ -47,6 +47,9 @@ jobs:
       - name: Core API report fingerprint
         run: pnpm -C packages/core api:fingerprint:check
 
+      - name: Security-gate wiring regression tests
+        run: pnpm run security:gate:test
+
       - name: Website lint (best-effort)
         run: pnpm -C website lint || echo "website lint skipped (format locally)"
 

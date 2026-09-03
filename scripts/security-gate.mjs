@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Security gate: fails when audit findings lack a valid, non-expired exception.
+ * Security advisory gate: fails when audit findings lack a valid, non-expired
+ * exception.
+ *
+ * This is freshness-dependent evidence: the external advisory database can
+ * change while the commit and lockfile stay the same, so the same input can
+ * produce a different decision on a later run. It is deliberately separate
+ * from the reproducible policy-boundary check (`pnpm run security:policy-boundary`),
+ * which depends only on repo state and inputs. Do not reintroduce that
+ * harness here; run it as its own CI check instead.
  *
  * Usage: node scripts/security-gate.mjs audit.json security/vuln-policy.json
  */
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const [auditPath, policyPath] = args.filter((a) => !a.startsWith("--"));
@@ -150,7 +157,7 @@ for (const f of findings) {
 const fmt = (f) =>
   `${f.severity || "unknown"} | ${f.package || "?"} | id=${f.id || "?"} | path=${f.path || "-"}`;
 
-console.log("== Security Gate ==");
+console.log("== Security Advisory Gate ==");
 console.log(`Findings: ${findings.length}`);
 console.log(`Blocking: ${blocking.length}`);
 console.log(`Matched exceptions: ${matched.length}`);
@@ -207,11 +214,4 @@ if (artifactOut) {
   console.log(`Artifact written to ${artifactOut}`);
 }
 
-console.log("\n== Policy-Boundary Repro Harness ==");
-const harness = spawnSync("pnpm", ["run", "security:policy-boundary"], { stdio: "inherit" });
-const harnessOk = harness.status === 0;
-if (!harnessOk) {
-  console.log(`\nPolicy-boundary repro harness failed (exit code ${harness.status ?? "unknown"}).`);
-}
-
-process.exit(ok && harnessOk ? 0 : 1);
+process.exit(ok ? 0 : 1);

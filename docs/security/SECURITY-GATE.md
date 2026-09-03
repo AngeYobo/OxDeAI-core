@@ -9,9 +9,14 @@ Non-normative (developer documentation)
 
 
 
-Repo-level pre-merge security gate (non-normative). Protocol definitions live in `SPEC.md` and `docs/spec/`; this gate enforces repository policy, not OxDeAI protocol artifacts.
+Repo-level pre-merge security checks (non-normative). Protocol definitions live in `SPEC.md` and `docs/spec/`; these checks enforce repository policy, not OxDeAI protocol artifacts.
 
-Deterministic pre-merge authorization: audit intent + state + policy -> ALLOW / DENY.
+Two independent CI checks, both required for release:
+
+- **Security Policy Boundary**: reproducible release check. Runs the repo-local policy-boundary repro harness (`pnpm run security:policy-boundary`). Depends only on repo state and inputs; a given commit produces the same result on every rerun.
+- **Security Advisory Gate**: freshness-dependent security evidence. Evaluates the generated `pnpm audit` output against `security/vuln-policy.json` and the current exception list. The external advisory database can change while the commit and lockfile stay the same, so this check can pass or fail differently across reruns of an unchanged commit.
+
+The advisory gate never invokes the policy-boundary harness, and the harness never depends on advisory data. Neither check's failure is treated as a warning; both block merge on failure.
 
 ## Core invariant
 
@@ -63,7 +68,7 @@ Rules:
 2) Commit the change and re-run the gate.
 3) Remove exceptions once fixed.
 
-## How it runs
+## How the advisory gate runs
 - CI runs `pnpm audit --json > audit.json || true`
 - Then `node scripts/security-gate.mjs audit.json security/vuln-policy.json`
-- Gate prints blocking findings, matched/expired exceptions, warnings, and the final decision (ALLOW / DENY).
+- The gate prints blocking findings, matched/expired exceptions, warnings, and the final decision (ALLOW / DENY). It does not run the policy-boundary harness; that runs as the separate `Security Policy Boundary` CI check (`pnpm run security:policy-boundary`).
