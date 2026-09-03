@@ -12,13 +12,28 @@
  * harness here; run it as its own CI check instead.
  *
  * Usage: node scripts/security-gate.mjs audit.json security/vuln-policy.json
+ *   [--artifact-out=path]        write a SecurityGateDecision artifact
+ *   [--candidate-sha=sha]        pin the evaluated commit (else `git rev-parse HEAD`)
+ *   [--lockfile=path]            pin the evaluated lockfile (else repo-root pnpm-lock.yaml)
+ *   [--advisory-source=text]     pin the audit tool identity (else auto-detected pnpm version)
+ *
+ * The last three apply only with --artifact-out. See security/SECURITY-GATE-ARTIFACT.md.
  */
 import fs from "node:fs";
+import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const args = process.argv.slice(2);
 const [auditPath, policyPath] = args.filter((a) => !a.startsWith("--"));
-const artifactOut = args.find((a) => a.startsWith("--artifact-out="))?.split("=", 2)[1] ?? null;
+const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.split("=", 2)[1] ?? null;
+const artifactOut = flag("artifact-out");
+const candidateShaFlag = flag("candidate-sha");
+const lockfileFlag = flag("lockfile");
+const advisorySourceFlag = flag("advisory-source");
 
 if (!auditPath || !policyPath) {
   console.error(
@@ -189,29 +204,141 @@ const reason = ok
 console.log(`\nDecision: ${decision}`);
 console.log(`Reason: ${reason}`);
 
+// ── Release-evidence provenance (#268) ──────────────────────────────────────
+//
+// Binds the decision artifact to the exact freeze candidate and dependency
+// graph it was evaluated against. Only computed when an artifact is actually
+// requested (--artifact-out): the plain advisory-check path (no artifact)
+// keeps zero git/filesystem dependencies beyond audit.json and the policy
+// file, exactly as before.
+//
+// candidateSha and lockfileHash are binding, not descriptive: a caller must
+// be able to prove which commit and which exact pnpm-lock.yaml bytes were
+// evaluated. Neither is inferred from a branch name or other mutable ref.
+// If neither an explicit override nor ambient git/filesystem state can
+// establish them, evidence generation fails loudly rather than emitting an
+// artifact with absent or guessed provenance.
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+function resolveCandidateSha(explicit) {
+  if (explicit !== null) {
+    if (!SHA_RE.test(explicit)) {
+      throw new Error(
+        `--candidate-sha must be a hex git commit SHA (7-40 hex chars), got: ${JSON.stringify(explicit)}`
+      );
+    }
+    return explicit.toLowerCase();
+  }
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", "HEAD"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }).trim();
+  } catch (err) {
+    throw new Error(
+      "candidateSha could not be determined: not resolvable via `git rev-parse --verify HEAD` " +
+        `in ${repoRoot}. Pass --candidate-sha=<sha> explicitly for release/freeze tooling. (${err.message})`
+    );
+  }
+}
+
+function resolveLockfileHash(explicit) {
+  const lockfilePath = explicit !== null ? explicit : path.join(repoRoot, "pnpm-lock.yaml");
+  let bytes;
+  try {
+    bytes = fs.readFileSync(lockfilePath);
+  } catch (err) {
+    throw new Error(`lockfileHash could not be determined: cannot read ${lockfilePath} (${err.message})`);
+  }
+  return { lockfilePath, lockfileHash: crypto.createHash("sha256").update(bytes).digest("hex") };
+}
+
+function resolveAdvisorySource(explicit) {
+  if (explicit !== null) return explicit;
+  try {
+    const pnpmVersion = execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim();
+    return `pnpm audit --json (pnpm ${pnpmVersion})`;
+  } catch {
+    // Best-effort only: version detection is descriptive, not a binding
+    // field, so its absence does not fail evidence generation.
+    return "pnpm audit --json";
+  }
+}
+
+let evidenceError = null;
+
 if (artifactOut) {
-  const policyHash = sha256(rules);
-  const exceptionsHash = sha256(exceptions);
-  const findingsHash = sha256(findings);
-  const inputHash = sha256({ policyHash, exceptionsHash, findingsHash, decision, reason });
+  try {
+    const candidateSha = resolveCandidateSha(candidateShaFlag);
+    const { lockfileHash } = resolveLockfileHash(lockfileFlag);
+    const advisorySource = resolveAdvisorySource(advisorySourceFlag);
 
-  const artifact = {
-    formatVersion: 1,
-    type: "SecurityGateDecision",
-    decision,
-    reason,
-    timestamp: new Date().toISOString(),
-    policyHash,
-    exceptionsHash,
-    findingsHash,
-    inputHash
-  };
+    const artifactDir = path.dirname(artifactOut);
+    fs.mkdirSync(artifactDir, { recursive: true });
 
-  const artifactHash = sha256(artifact);
-  artifact.artifactHash = artifactHash;
+    // Retain the raw advisory input alongside the decision artifact. A
+    // findings hash alone is a commitment, not review evidence.
+    const retainedAuditPath = path.join(artifactDir, "audit.json");
+    if (path.resolve(retainedAuditPath) !== path.resolve(auditPath)) {
+      fs.copyFileSync(auditPath, retainedAuditPath);
+    }
 
-  fs.writeFileSync(artifactOut, stableStringify(artifact) + "\n", "utf8");
-  console.log(`Artifact written to ${artifactOut}`);
+    // Avoid silently overwriting unrelated prior evidence: if a decision
+    // artifact for a different candidate already sits at this path, say so.
+    if (fs.existsSync(artifactOut)) {
+      try {
+        const prior = JSON.parse(fs.readFileSync(artifactOut, "utf8"));
+        if (prior.candidateSha && prior.candidateSha !== candidateSha) {
+          console.log(`\nReplacing prior evidence at ${artifactOut}`);
+          console.log(`  previous candidateSha: ${prior.candidateSha}`);
+          console.log(`  new candidateSha:      ${candidateSha}`);
+        }
+      } catch {
+        console.log(`\n${artifactOut} exists but is not a readable prior SecurityGateDecision; overwriting.`);
+      }
+    }
+
+    const policyHash = sha256(rules);
+    const exceptionsHash = sha256(exceptions);
+    const findingsHash = sha256(findings);
+    const inputHash = sha256({ policyHash, exceptionsHash, findingsHash, decision, reason });
+
+    const artifact = {
+      formatVersion: 2,
+      type: "SecurityGateDecision",
+      decision,
+      reason,
+      timestamp: new Date().toISOString(),
+      candidateSha,
+      lockfileHash,
+      advisorySource,
+      policyHash,
+      exceptionsHash,
+      findingsHash,
+      inputHash
+    };
+
+    const artifactHash = sha256(artifact);
+    artifact.artifactHash = artifactHash;
+
+    fs.writeFileSync(artifactOut, stableStringify(artifact) + "\n", "utf8");
+    console.log(`\nArtifact written to ${artifactOut}`);
+    console.log(`Raw advisory input retained at ${retainedAuditPath}`);
+    console.log(`candidateSha: ${candidateSha}`);
+    console.log(`lockfileHash: ${lockfileHash}`);
+    console.log(`advisorySource: ${advisorySource}`);
+  } catch (err) {
+    evidenceError = err;
+    console.error(`\nEvidence generation failed: ${err.message}`);
+  }
+}
+
+// Evidence-capture failure never downgrades a DENY to a pass, and never
+// upgrades an ALLOW into a false "everything is fine": it is reported and
+// fails the process independently of the advisory decision itself.
+if (evidenceError) {
+  process.exit(1);
 }
 
 process.exit(ok ? 0 : 1);

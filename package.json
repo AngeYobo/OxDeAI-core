@@ -24,6 +24,7 @@
     "security:gate": "node scripts/security-gate.mjs audit.json security/vuln-policy.json",
     "security:policy-boundary": "tsx scripts/security/repro-policy-boundary-attacks.ts",
     "security:gate:test": "node scripts/test-security-gate.mjs",
+    "security:evidence": "pnpm run security:audit && node scripts/security-gate.mjs audit.json security/vuln-policy.json --artifact-out=security-evidence/security-gate-decision.json",
     "tags:audit": "node scripts/audit-tags.mjs",
     "tags:cleanup:dry": "node scripts/cleanup-legacy-tags.mjs",
     "tags:cleanup:local": "node scripts/cleanup-legacy-tags.mjs --apply-local --confirm=DELETE_LEGACY_TAGS",

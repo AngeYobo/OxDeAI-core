@@ -29,6 +29,7 @@ git.md
 go-harness/go-harness
 examples/rust-verifier/target/
 audit.json
+security-evidence/
 .local/keys/*
 *.pem
 *.der
