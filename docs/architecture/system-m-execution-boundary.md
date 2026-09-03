@@ -32,7 +32,9 @@ OxDeAI sits on the critical path non-optional, not a sidecar.
 - Capability invariant: actions restricted to approved capability set.  
 - Budget invariant: resource/time/financial ceilings enforced before dispatch.  
 - Failure invariant: repeated or critical faults force deny/lockdown.  
-Learning cannot escape constraints. Constraints are non-bypassable and independent of model behavior.
+For protected actions routed exclusively through the configured PEP, learning
+cannot escape those constraints. Alternate execution paths remain a deployment
+responsibility.
 
 **Learning-Safe Execution Semantics**
 - State inconclusive → DENY  
@@ -40,7 +42,7 @@ Learning cannot escape constraints. Constraints are non-bypassable and independe
 - Unknown action class → DENY  
 - Verification failure → DENY  
 Fail-closed is the default; authorization is deterministic.
-All hashes and signature preimages MUST use `canonicalization-v1`. Deterministic ordering and fail-closed semantics align with `docs/spec/conformance-v1.md`; Delegation single-hop/replay constraints align with `docs/spec/delegation-v1.md`.
+All hashes and signature preimages MUST use `canonicalization-v1`. Deterministic ordering and fail-closed semantics align with `docs/spec/conformance/conformance-v1.md`; Delegation single-hop/replay constraints align with `docs/spec/artifacts/delegation-v1.md`.
 
 **Positioning**
 - Deterministic execution authorization for autonomous learning systems.  

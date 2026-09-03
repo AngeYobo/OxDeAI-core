@@ -1,7 +1,7 @@
 {
   "name": "@oxdeai/cli",
   "version": "0.3.0",
-  "description": "Protocol-focused CLI tooling for OxDeAI artifact build/verify/replay workflows",
+  "description": "Protocol-focused CLI tooling for OxDeAI artifact build, verification, and inspection workflows",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {

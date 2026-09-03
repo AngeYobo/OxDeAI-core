@@ -259,22 +259,19 @@ verifyAuthorization(auth, {
 
 ---
 
-## Security Authorization Gate (CI)
+## Release Security Checks (CI)
 
-The repository itself is protected by a deterministic pre-merge authorization boundary.
+The repository uses two separate blocking checks:
 
-```text
-findings + exceptions + policy → ALLOW | DENY
-```
+* **Security Policy Boundary** - a reproducible check of the repo-local
+  policy-boundary attack harness.
+* **Security Advisory Gate** - freshness-dependent security evidence produced
+  from mutable external advisory data and the repository vulnerability policy.
 
-* No valid exception → no merge path
-* High/critical findings → always DENY
-
-The gate can emit a **verifiable decision artifact** (integrity proof).
-
-> Same principle:
-> No valid justification → no merge
-> No valid authorization → no execution
+The advisory gate can emit a hash-bound release-evidence record tied to the
+candidate SHA, lockfile, and retained advisory input. That record is not an
+OxDeAI runtime authorization artifact or an `ExecutionReceiptV1`. See
+[`docs/security/SECURITY-GATE.md`](./docs/security/SECURITY-GATE.md).
 
 ---
 

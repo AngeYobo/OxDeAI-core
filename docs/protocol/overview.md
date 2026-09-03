@@ -26,8 +26,10 @@ OxDeAI evaluates deterministically against the current policy state before execu
 If the decision is `ALLOW`, a signed authorization artifact is emitted.
 If the decision is `DENY`, execution MUST NOT proceed.
 
-No valid authorization artifact → no execution.
-Execution is only reachable through a verified authorization boundary.
+For protected actions routed exclusively through the documented PEP boundary:
+no valid authorization artifact means no execution through that boundary.
+Alternate call paths remain a deployment responsibility; see
+[`docs/audits/2.0-residual-scope.md`](../audits/2.0-residual-scope.md#9-residual-enforcement-placement).
 
 ---
 
@@ -39,7 +41,7 @@ OxDeAI defines the following first-class protocol artifacts:
 |---|---|
 | **AuthorizationV1** | Pre-execution `ALLOW` artifact. Signed, expiring, bound to intent and policy state. |
 | **DelegationV1** | Narrowed sub-authorization issued by a principal to a delegatee. Strictly scoped, locally verifiable. |
-| **VerificationEnvelopeV1** | Portable post-execution evidence bundle. Contains canonical snapshot + audit chain. *(pending specification in docs/spec/)* |
+| **VerificationEnvelopeV1** | Portable canonical snapshot + audit-event bundle for offline verification. It does not attest a complete execution outcome. *(codec/verifier implemented; specification pending in docs/spec/)* |
 | **ExecutionReceiptV1** | *(planned; not specified in this document)* Execution attestation binding receipt to a verified authorization. |
 
 Artifacts are language-independent and MUST be interpreted identically across conformant implementations.
@@ -74,14 +76,14 @@ All hashes and signature preimages MUST use `canonicalization-v1`.
 
 Authorization artifacts are portable and independently verifiable without re-running the policy engine.
 
-The protocol-stable verifier surface is:
+The implemented verifier surface is:
 
 | Verifier | What it checks |
 |---|---|
 | `verifyAuthorization` | Pre-execution gate. Validates an `AuthorizationV1` before allowing execution. |
 | `verifyDelegation` | Validates a `DelegationV1` artifact structurally and against its parent hash. |
 | `verifyDelegationChain` | Validates a delegation + parent authorization pair as a complete chain. |
-| `verifyEnvelope` | Post-execution evidence check. Validates a `VerificationEnvelopeV1` snapshot + audit chain. |
+| `verifyEnvelope` | Validates a `VerificationEnvelopeV1` snapshot + audit chain. The envelope remains Draft and is not an execution receipt. |
 
 Protocol decisions are ALLOW or DENY; error codes are defined in the respective specs (canonicalization, PEP, delegation).
 `ok` / `invalid` / `inconclusive` are interface-level summaries, not protocol-level decisions.
@@ -99,7 +101,8 @@ OxDeAI separates two distinct concerns:
 The OxDeAI boundary sits between them. An agent may have the capability to call an action. It may not execute unless a valid authorization exists for that specific intent and state.
 
 Delegation preserves this invariant: `DelegationV1` can only narrow the delegator's existing authority. Authority cannot be amplified through delegation.
-No valid authorization → no execution path (fail-closed).
+Within the documented PEP boundary, no valid authorization means no execution
+through that boundary (fail-closed).
 
 ---
 
