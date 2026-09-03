@@ -72,3 +72,14 @@ Rules:
 - CI runs `pnpm audit --json > audit.json || true`
 - Then `node scripts/security-gate.mjs audit.json security/vuln-policy.json`
 - The gate prints blocking findings, matched/expired exceptions, warnings, and the final decision (ALLOW / DENY). It does not run the policy-boundary harness; that runs as the separate `Security Policy Boundary` CI check (`pnpm run security:policy-boundary`).
+
+## Release evidence (freeze candidates)
+
+For a freeze candidate such as `S_freeze`, the plain CI decision above is not
+sufficient release evidence on its own: it does not record which commit or
+lockfile were evaluated. `pnpm run security:evidence` binds the decision to
+the exact candidate SHA and lockfile bytes and retains the raw advisory input.
+See [`security/SECURITY-GATE-ARTIFACT.md`](../../security/SECURITY-GATE-ARTIFACT.md)
+for the artifact schema, provenance fields, and generation/verification
+commands. This is release evidence only; it is not `ExecutionReceiptV1`,
+post-execution evidence, or an OxDeAI protocol artifact.
