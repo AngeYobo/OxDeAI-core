@@ -444,7 +444,9 @@ If an intent is allowed, the engine emits AuthorizationV1:
 * optional `nonce`, `capability`, `signature`
 * verified pre-execution via `verifyAuthorization()`
 
-Verification envelopes remain post-execution evidence artifacts verified with `verifyEnvelope()`.
+Verification envelopes package a snapshot and audit events for offline
+verification with `verifyEnvelope()`. They are not `ExecutionReceiptV1` and do
+not attest a complete execution outcome.
 
 ---
 

@@ -1,6 +1,6 @@
 # OxDeAI Specification (v1.3.0)
 
- See: docs/spec/eta-core-v1.md for the minimal Execution-Time Authorization profile. Locked conformance vectors are published for canonicalization, authorization, PEP, and delegation, and pass across TypeScript, Go, and Python verification harnesses executed in CI. AuthorizationV1, PEP Gateway, and DelegationV1 are specified as Stable normative artifacts. SPEC overall remains v1.3.0.
+ See: docs/spec/core/eta-core-v1.md for the minimal Execution-Time Authorization profile. Locked conformance vectors are published for canonicalization, authorization, PEP, and delegation, and pass across TypeScript, Go, and Python verification harnesses executed in CI. AuthorizationV1, PEP Gateway, and DelegationV1 are specified as Stable normative artifacts. SPEC overall remains v1.3.0.
  
 
 > **Status of this document:** This root `SPEC.md` is a versioned index and overview of the

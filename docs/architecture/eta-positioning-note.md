@@ -55,7 +55,7 @@ Learning cannot escape constraints.
 - Unknown action class → DENY  
 - Verification failure → DENY  
 Fully compatible with fail-closed doctrine.
-All hashes and signature preimages MUST use `canonicalization-v1`. Deterministic ordering per `docs/spec/conformance-v1.md`; delegation constraints per `docs/spec/delegation-v1.md`.
+All hashes and signature preimages MUST use `canonicalization-v1`. Deterministic ordering per `docs/spec/conformance/conformance-v1.md`; delegation constraints per `docs/spec/artifacts/delegation-v1.md`.
 
 **8) Positioning**
 - Deterministic execution authorization for autonomous learning systems.  

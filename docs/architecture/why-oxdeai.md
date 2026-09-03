@@ -43,7 +43,9 @@ The control point is pre-execution:
 - `ALLOW` - the engine emits `AuthorizationV1`
 - the PEP verifies that authorization artifact before the side effect occurs
 
-No execution happens without a verified `ALLOW`. No `AuthorizationV1` exists without a prior deterministic evaluation.
+Through a correctly placed PEP boundary, protected execution does not happen
+without a verified `ALLOW`. No `AuthorizationV1` exists without a prior
+deterministic evaluation.
 
 ## Architecture
 
@@ -115,17 +117,19 @@ parent agent receives AuthorizationV1
   -> child executes within delegated scope
 ```
 
-See [`docs/spec/delegation-v1.md`](../spec/artifacts/delegation-v1.md) for the full artifact specification and chain verification rules.
+See [`docs/spec/artifacts/delegation-v1.md`](../spec/artifacts/delegation-v1.md) for the full artifact specification and chain verification rules.
 
 ## Verification Evidence
 
 OxDeAI preserves a verification path independent of the live runtime:
 
 - **snapshot** - canonical encoding of evaluated policy state
-- **audit events** - hash-chained record of proposed actions, decisions, and execution or refusal
+- **audit events** - hash-chained record of proposed actions, decisions, and any execution or refusal events actually supplied
 - **verification envelope** - packages snapshot plus audit evidence into a portable artifact
 
-`verifyEnvelope()` provides stateless verification of that packaged evidence. It does not require access to the live engine or policy state.
+`verifyEnvelope()` provides stateless verification of that packaged evidence.
+It does not require access to the live engine or policy state, but it is not an
+`ExecutionReceiptV1` and does not establish a complete execution outcome.
 
 This evidence path supports:
 
@@ -187,9 +191,9 @@ OxDeAI does not replace runtimes, orchestration engines, or prompt layers. It en
 
 - [`README.md`](../../README.md)
 - [`SPEC.md`](../../SPEC.md)
-- [`docs/spec/delegation-v1.md`](../spec/artifacts/delegation-v1.md)
-- [`docs/adapter-contract.md`](../adapters/adapter-contract.md)
-- [`docs/pep-production-guide.md`](../architecture/pep-production-guide.md)
+- [`docs/spec/artifacts/delegation-v1.md`](../spec/artifacts/delegation-v1.md)
+- [`docs/adapters/adapter-contract.md`](../adapters/adapter-contract.md)
+- [`docs/architecture/pep-production-guide.md`](../architecture/pep-production-guide.md)
 - [`docs/integrations/README.md`](../integrations/README.md)
 - [`docs/integrations/shared-demo-scenario.md`](../integrations/shared-demo-scenario.md)
 - [`docs/cases/README.md`](../cases/README.md)

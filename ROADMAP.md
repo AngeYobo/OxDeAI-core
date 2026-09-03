@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** 2026-06-04
+**Last updated:** 2026-09-03
 
 ---
 
@@ -95,7 +95,8 @@ Current validation posture:
 * Go harness: 28 assertions
 * Python harness: 28 assertions
 * aggregate conformance posture: 265 assertions across TypeScript, Go, and Python
-* security gate: ALLOW
+* security policy-boundary check: pass
+* security advisory evidence: freshness-dependent; rerun and retain it for the exact freeze candidate
 * API fingerprint: unchanged where required
 
 ### Cross-language coverage
@@ -145,7 +146,7 @@ DENY
 * non-bypassable PEP boundary
 * portable offline verification
 * proof-carrying authorization artifacts
-* replay without re-reasoning
+* replay of authorization evaluation and decisions without model re-reasoning
 * explicit trust boundaries
 
 ### Not
@@ -528,7 +529,7 @@ Goal:
 Scope:
 
 * execution receipts
-* `VerificationEnvelopeV1`
+* `VerificationEnvelopeV1` specification/freeze (the Draft codec and verifier are already implemented)
 * Merkle batching
 * proof-of-inclusion
 * optional on-chain anchoring
@@ -588,11 +589,11 @@ authorization remains off-chain-first
 ## Core Specifications
 
 * `docs/spec/core/canonicalization-v1.md`
-* `docs/spec/core/authorization-v1.md`
-* `docs/spec/core/delegation-v1.md`
+* `docs/spec/artifacts/authorization-v1.md`
+* `docs/spec/artifacts/delegation-v1.md`
 * `docs/spec/artifacts/signed-krl-v1.md`
 * `docs/spec/enforcement/pep-gateway-v1.md`
-* `docs/spec/verification-v1.md`
+* `docs/spec/verification/verification-v1.md`
 
 ## Interoperability
 
@@ -606,9 +607,9 @@ authorization remains off-chain-first
 
 ## Operations and Security
 
-* `docs/spec/replay-store-ttl-alignment.md`
-* `docs/spec/threat-model-external-providers.md`
-* `docs/spec/key-custody-and-rotation.md`
+* `docs/architecture/replay-store-ttl-alignment.md`
+* `docs/architecture/threat-model-external-providers.md`
+* `docs/architecture/key-custody-and-rotation.md`
 * `SECURITY.md`
 
 ## Governance and Contribution
