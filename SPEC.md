@@ -74,6 +74,8 @@ Note: locked conformance vectors are currently published only for canonicalizati
 
 OxDeAI defines deterministic pre-execution authorization and post-execution evidence verification for autonomous systems.
 
+The 2.0 reference implementation implements the pre-execution authorization boundary (AuthorizationV1, DelegationV1, PEP Gateway). Post-execution evidence verification is a protocol-defined direction; `ExecutionReceiptV1` remains planned and is not part of the stable 2.0 implementation surface (see Protocol Status in README.md).
+
 A conformant implementation MUST produce deterministic outputs for equivalent inputs and MUST enforce the relying-party verification contract before execution occurs.
 
 The protocol defines portable artifacts that can be issued by one system and verified by another, including across language runtimes or infrastructure boundaries.
