@@ -159,7 +159,7 @@ points are solved by placing a decision point next to the executor.
 When neither condition applies, do not make the decision detachable.
 
 This boundary came out of a public exchange with a Cerbos maintainer:
-[r/AskNetsec thread](https://www.reddit.com/r/AskNetsec/comments/1vkh8za/) · [applicability discussion](#TBD)
+[r/AskNetsec thread](https://www.reddit.com/r/AskNetsec/comments/1vkh8za/) · [applicability discussion](docs/architecture/why-oxdeai.md#applicability)
 
 ---
 

@@ -15,7 +15,7 @@ Assert OxDeAI as the production enforcement layer for autonomous learning system
 
 **1) Framing Correction**
 - Before: OxDeAI is complementary.  
-- After: OxDeAI is a condition of deployability. Without an execution boundary, System M is control without enforcement; learning systems are not deployable.
+- After: An execution authorization boundary is a condition of deployability. Without one, System M is control without enforcement; learning systems are not deployable.
 
 **2) Territory**
 - Paper domain: learning, adaptation, autonomy.  
@@ -25,7 +25,7 @@ Assert OxDeAI as the production enforcement layer for autonomous learning system
 **3) Architecture Upgrade**
 - Paper path: `System M → Agent → Action → World`  
 - Production path: `System M → Agent → OxDeAI → Execution → World`  
-OxDeAI is on the critical path-non-optional, not a sidecar.
+OxDeAI is on the critical execution path. Authorization enforcement is mandatory, regardless of whether the PEP is deployed inline, as a sidecar, or through another non-bypassable topology.
 
 **4) Mapping to OxDeAI**
 - Auth(A,P,S): present (intent+policy+state → decision)  
