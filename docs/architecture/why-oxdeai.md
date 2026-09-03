@@ -175,6 +175,26 @@ The demos differ by runtime surface, not by OxDeAI semantics. Each produces the 
 
 Status signals: Canonicalization vectors are locked; AuthorizationV1 / PEP / DelegationV1 are Stable; VerificationEnvelopeV1 pending; ExecutionReceiptV1 planned. Proof points: locked vectors - `docs/spec/test-vectors/canonicalization-v1.json`, `authorization-v1.json`, `pep-vectors-v1.json`, `delegation-vectors-v1.json`.
 
+## Applicability
+
+OxDeAI's detachable authorization model is not the default architecture for every authorization problem.
+
+Prefer inline or sidecar policy evaluation when:
+
+- the evaluator and executor operate within the same trust domain; and
+- the executor can access or reconstruct the authoritative premises required to evaluate the action.
+
+Detachable authorization is justified when at least one of the following applies:
+
+1. An independent relying party must verify what was authorized without relying on the executor or operator's internal logs.
+2. The execution boundary cannot independently access or reconstruct the authoritative premises used to make the authorization decision.
+
+Topology, service separation, or latency alone are not sufficient reasons to introduce detachable authorization.
+
+Outside these cases, a simpler inline or local authorization architecture should generally be preferred.
+
+Here, "sidecar" refers to deployment topology. OxDeAI's enforcement boundary may itself be deployed as a sidecar. This is distinct from whether authorization decisions are detachable and independently verifiable across trust boundaries.
+
 ## Positioning
 
 | Layer | What it does | OxDeAI? |

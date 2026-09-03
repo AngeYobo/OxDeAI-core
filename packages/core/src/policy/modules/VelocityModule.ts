@@ -4,7 +4,12 @@ import type { State } from "../../types/state.js";
 import type { PolicyEvaluationContext, PolicyResult } from "../../types/policy.js";
 import { statelessModuleCodec } from "./_codec.js";
 
-/** @public */
+/**
+ * Enforces a fixed-window action limit using trusted evaluation time.
+ * This is not a rolling or sliding-window limiter.
+ *
+ * @public
+ */
 export function VelocityModule(
   intent: Intent,
   state: State,
