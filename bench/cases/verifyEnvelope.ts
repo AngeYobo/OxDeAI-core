@@ -1,4 +1,4 @@
-import { createFixtureSet } from "../fixtures";
+import { BENCHMARK_ENVELOPE_KEY_SET, createFixtureSet } from "../fixtures";
 import { verifyEnvelope } from "@oxdeai/core";
 
 export const name = "verifyEnvelope";
@@ -10,6 +10,7 @@ export function create(seed: number, mode: "strict" | "best-effort"): () => unkn
     const out = verifyEnvelope(fixture.envelopeBytes, {
       mode,
       expectedPolicyId: fixture.policy.id,
+      trustedKeySets: BENCHMARK_ENVELOPE_KEY_SET,
       requireSignatureVerification: false,
       now: 1_700_000_000,
     });

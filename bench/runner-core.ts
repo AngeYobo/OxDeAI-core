@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import type { BenchmarkConfig, ScenarioName } from "./config.js";
+import { BENCHMARK_ENVELOPE_KEY_SET } from "./fixtures.js";
 import { computeLatencyStats, median, measureIterations, type LatencyStats } from "./metrics.js";
 
 export type ScenarioHandle = {
@@ -138,11 +139,11 @@ function makeSyntheticToolExecutor() {
 }
 async function main() {
   const core = await import("@oxdeai/core");
-  const { scenario, mode, seed, warmup, iterations } = workerData;
+  const { scenario, mode, seed, warmup, iterations, trustedKeySets } = workerData;
   const policyId = "0123456789abcdef".repeat(4);
   const engine = new core.PolicyEngine({
     policy_version: "bench-complex-v1",
-    engine_secret: "bench-hmac-secret",
+    engine_secret: "benchmark-only-hmac-secret-at-least-32-chars",
     authorization_ttl_seconds: 120,
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",
@@ -165,7 +166,7 @@ async function main() {
     snapshot,
     events: [
       { type: "INTENT_RECEIVED", timestamp: 1700000000, policyId, intent_hash: "h".repeat(64), agent_id: "agent-1" },
-      { type: "DECISION", timestamp: 1700000001, policyId, intent_hash: "h".repeat(64), decision: "ALLOW", reasons: [] },
+      { type: "DECISION", timestamp: 1700000001, policyId, policy_version: state.policy_version, intent_hash: "h".repeat(64), decision: "ALLOW", reasons: [] },
       { type: "STATE_CHECKPOINT", timestamp: 1700000002, policyId, stateHash: snapVr.stateHash },
     ],
   });
@@ -186,14 +187,14 @@ async function main() {
       expectedPolicyId: policyId,
       consumedAuthIds: [],
       requireSignatureVerification: true,
-      legacyHmacSecret: "bench-hmac-secret",
+      legacyHmacSecret: "benchmark-only-hmac-secret-at-least-32-chars",
     };
     work = () => {
       const decision = engine.evaluatePure(intent, makeState(), 1700000000);
       if (decision.decision !== "ALLOW") return 0;
       const authVr = core.verifyAuthorization(auth, authOpts);
       if (authVr.status !== "ok") return 0;
-      const envVr = core.verifyEnvelope(envelope, { mode, expectedPolicyId: policyId, requireSignatureVerification: false, now: 1700000000 });
+      const envVr = core.verifyEnvelope(envelope, { mode, expectedPolicyId: policyId, trustedKeySets, requireSignatureVerification: false, now: 1700000000 });
       if (envVr.status !== "ok" && envVr.status !== "inconclusive") return 0;
       return runTool(actionType, target, amount);
     };
@@ -207,11 +208,11 @@ async function main() {
       expectedPolicyId: policyId,
       consumedAuthIds: [],
       requireSignatureVerification: true,
-      legacyHmacSecret: "bench-hmac-secret",
+      legacyHmacSecret: "benchmark-only-hmac-secret-at-least-32-chars",
     };
     work = () => core.verifyAuthorization(auth, opts);
   } else {
-    work = () => core.verifyEnvelope(envelope, { mode, expectedPolicyId: policyId, requireSignatureVerification: false, now: 1700000000 });
+    work = () => core.verifyEnvelope(envelope, { mode, expectedPolicyId: policyId, trustedKeySets, requireSignatureVerification: false, now: 1700000000 });
   }
   let sink = 0;
   for (let i = 0; i < warmup; i++) {
@@ -265,6 +266,7 @@ async function runWorkersAttempt(
             seed: config.seed + i,
             warmup: perWorkerWarmup,
             iterations: perWorkerIterations,
+            trustedKeySets: BENCHMARK_ENVELOPE_KEY_SET,
           },
         });
         worker.on("message", (msg) => resolve(msg as WorkerResult));

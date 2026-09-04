@@ -1,5 +1,5 @@
 import { verifyAuthorization, verifyEnvelope } from "@oxdeai/core";
-import { createProtectedPathFixture } from "../fixtures";
+import { BENCHMARK_ENVELOPE_KEY_SET, createProtectedPathFixture } from "../fixtures";
 
 export const name = "protectedPath";
 
@@ -40,7 +40,7 @@ export function create(seed: number, envelopeMode: "strict" | "best-effort"): ()
     expectedPolicyId: fx.policyId,
     consumedAuthIds: [] as string[],
     requireSignatureVerification: true,
-    legacyHmacSecret: "bench-hmac-secret",
+    legacyHmacSecret: "benchmark-only-hmac-secret-at-least-32-chars",
   };
 
   return () => {
@@ -53,6 +53,7 @@ export function create(seed: number, envelopeMode: "strict" | "best-effort"): ()
     const envResult = verifyEnvelope(fx.envelopeBytes, {
       mode: envelopeMode,
       expectedPolicyId: fx.policyId,
+      trustedKeySets: BENCHMARK_ENVELOPE_KEY_SET,
       requireSignatureVerification: false,
       now: 1_700_000_000,
     });

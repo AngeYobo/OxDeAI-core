@@ -2,26 +2,15 @@
 
 ## Executive Summary
 
-Latest full-suite local benchmark run:
+The current-HEAD full-suite run is recorded in
+[`BENCHMARK_SUMMARY.md`](./BENCHMARK_SUMMARY.md), including commit, environment,
+command, repeated-run percentiles, and noise classifications.
 
-- source: `bench/outputs/run-2026-03-11-12-25-55.json`
-- machine: Intel Core i5-7400, 4 logical cores, Node.js v22.9.0, Linux on WSL2
-- config: `--scenario=all --runs=5 --iterations=100000 --warmup=10000 --concurrency=1,4 --envelopeMode=both`
-
-Key results from that run indicate:
-
-- `evaluate` p50 was `23.8 us` on 1 worker.
-- `verifyEnvelope` p50 was `15.5 us` on 1 worker in both `best-effort` and `strict` modes.
-- `baselinePath` and `protectedPath` provide the most useful adoption comparison.
-- the key metric is absolute overhead (`protectedPath - baselinePath`) in microseconds.
-- `protectedPath - baselinePath` was `+14.8 us p50` / `+21.8 us mean` in `best-effort` mode on 1 worker.
-- `protectedPath - baselinePath` was `+16.6 us p50` / `+25.2 us mean` in `strict` mode on 1 worker.
-
-Protected execution therefore adds on the order of tens of microseconds at `p50` in single-worker mode on the tested machine.
-
-Results depend on hardware, runtime, and execution environment; the suite is designed to be reproducible rather than universal.
-
-A fuller run-specific summary is available in [`BENCHMARK_SUMMARY.md`](./BENCHMARK_SUMMARY.md).
+That run does not support a stable numeric overhead claim: relevant scenarios
+contain noise or outlier warnings, and results are specific to the measured
+host, runtime, fixture, and code revision. Use the suite to measure a deployment
+candidate on comparable hardware rather than treating one run as a universal
+runtime guarantee.
 
 ## Overview
 
@@ -49,7 +38,9 @@ Execution path scenarios:
 - `baselinePath`
 - `protectedPath`
 
-The protected path represents a realistic execution flow including OxDeAI authorization checks.
+The protected path is a synthetic execution flow containing OxDeAI
+authorization checks and deterministic in-memory tool work. It is not an
+end-to-end agent, model, network, or application benchmark.
 
 ## Benchmark Goals
 
@@ -58,7 +49,7 @@ The benchmark suite is designed to answer:
 1. How expensive is OxDeAI policy evaluation?
 2. How expensive is authorization verification?
 3. How expensive is envelope verification?
-4. What is the incremental cost of OxDeAI authorization in a realistic execution path?
+4. What is the incremental cost of OxDeAI authorization in this synthetic execution path?
 
 The most important measurement is:
 
@@ -66,7 +57,8 @@ The most important measurement is:
 
 which represents the incremental authorization overhead.
 
-`verifyAuthorization` remains part of the suite for completeness, but it is not emphasized as a primary result because its latency is extremely small and often dominated by runtime noise.
+`verifyAuthorization` remains a separate diagnostic, while public
+interpretation focuses on the complete protected-minus-baseline path.
 
 ## Why This Matters
 
@@ -74,7 +66,8 @@ Agent runtimes already spend time on orchestration, serialization, and tool exec
 
 This suite measures the additional latency introduced by running the protected execution path versus a baseline runtime path.
 
-OxDeAI is designed to add a small, bounded pre-execution authorization cost in exchange for deterministic fail-closed control.
+The suite measures pre-execution authorization cost; whether that cost is
+acceptable depends on the deployment workload and latency budget.
 
 ## Benchmark Methodology
 
@@ -100,7 +93,8 @@ which provides nanosecond resolution.
 
 Samples are stored in nanoseconds and reported in milliseconds.
 
-For documentation and interpretation, the project also reports the main results in microseconds because the protected-path overhead is small enough that microsecond-scale absolute deltas are the most useful engineering view.
+For documentation and interpretation, the project also reports the main
+results in microseconds so absolute deltas remain easy to compare.
 
 ### Multiple runs
 
@@ -144,6 +138,11 @@ only field/binding checks are evaluated.
 ### verifyEnvelope
 
 Measures verification of execution envelopes.
+
+The current fixture envelope is unsigned. The benchmark supplies a valid
+trusted key set for both modes but sets `requireSignatureVerification: false`,
+so this scenario includes snapshot and audit-envelope verification but not
+Ed25519 envelope-signature verification.
 
 Supported modes:
 
@@ -234,12 +233,10 @@ Percentage overhead may be misleading when the baseline path is extremely small.
 
 Therefore absolute microsecond overhead should be considered the primary metric.
 
-For the latest full-suite run on the tested host, the single-worker protected-path overhead was approximately:
-
-- `+14.8 us p50` and `+21.8 us mean` in `best-effort`
-- `+16.6 us p50` and `+25.2 us mean` in `strict`
-
-This is the main performance result to communicate externally.
+The current run contains noise and outlier warnings and therefore does not
+support a stable external numeric claim. See
+[`BENCHMARK_SUMMARY.md`](./BENCHMARK_SUMMARY.md) for the exact observations and
+their classifications.
 
 ## Result Interpretation
 
@@ -251,7 +248,8 @@ Primary interpretation should focus on:
 
 The benchmark is designed to emphasize absolute latency overhead in microseconds, not percentage overhead.
 
-When baseline latency is very small, percentage deltas can become unstable and visually misleading even when absolute overhead remains bounded.
+When baseline latency is very small, percentage deltas can become unstable and
+visually misleading. Absolute deltas remain host- and workload-specific.
 
 ## How To Compare Across Machines
 

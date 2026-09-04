@@ -329,8 +329,13 @@ Properties:
 
 ## Benchmarks
 
-* ~80–150µs overhead per action (p50)
-* negligible vs agent execution time
+The synthetic protected-path benchmark measures policy evaluation,
+authorization verification, envelope verification, and deterministic in-memory
+tool work against the same tool work without OxDeAI checks. Current results are
+host- and runtime-specific and contain noise/outlier warnings, so no stable
+per-action overhead is claimed. See the
+[benchmark summary](./bench/BENCHMARK_SUMMARY.md) for exact observations and
+limitations.
 
 ---
 
