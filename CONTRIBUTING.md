@@ -1,7 +1,8 @@
 # Contributing to OxDeAI
 
 **Status:** Working contribution guide for OxDeAI v1
-**Last updated:** 2026-06-04
+
+**Last updated:** 2026-09-04
 
 Thank you for considering contributing to OxDeAI.
 
@@ -273,29 +274,45 @@ A good pull request:
 
 ### 6.2 PR body should include
 
-For non-trivial PRs, include:
+Pull requests should use the repository pull request template at:
+
+```text
+.github/pull_request_template.md
+```
+
+Do not remove required sections from the template when they apply.
+
+For non-trivial PRs, the PR body should clearly describe:
 
 ```text
 Summary:
+
 What changed:
 
 Why:
-Why the change is needed:
 
 Boundary:
-What this does not change:
 
 Validation:
-Commands run and results:
 ```
 
-For protocol or security-sensitive PRs, also include:
+For protocol, bug-fix, or security-sensitive PRs, also include:
 
 ```text
+Security impact:
+
 Invariants preserved:
+
+Regression proof:
+
 Residual risks:
+
 Audit/spec updates:
 ```
+
+Regression proof should reproduce the failure mode where practical and show that the relevant test or CI signal fails when the protection is deliberately broken.
+
+Required CI checks must not be weakened, bypassed, or made advisory in order to merge a contribution.
 
 ### 6.3 Validation before PR
 
