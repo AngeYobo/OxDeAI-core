@@ -466,7 +466,7 @@ export class PolicyEngine {
         type: "INTENT_RECEIVED",
         intent_hash,
         agent_id: intent.agent_id,
-        timestamp: intent.timestamp,
+        timestamp: evaluationTime,
         policyId
       });
 
@@ -492,10 +492,10 @@ export class PolicyEngine {
           decision: "DENY",
           reasons: freshness.reasons,
           policy_version: state.policy_version,
-          timestamp: intent.timestamp,
+          timestamp: evaluationTime,
           policyId
         });
-        this.maybeEmitCheckpoint(policyId, intent.timestamp, state);
+        this.maybeEmitCheckpoint(policyId, evaluationTime, state);
         return { decision: "DENY", reasons: freshness.reasons };
       }
 
@@ -513,10 +513,10 @@ export class PolicyEngine {
           decision: "DENY",
           reasons: decisionResult.reasons,
           policy_version: state.policy_version,
-          timestamp: intent.timestamp,
+          timestamp: evaluationTime,
           policyId
         });
-        this.maybeEmitCheckpoint(policyId, intent.timestamp, state);
+        this.maybeEmitCheckpoint(policyId, evaluationTime, state);
         return { decision: "DENY", reasons: decisionResult.reasons };
       }
 
