@@ -356,3 +356,45 @@ test("issuance tripwire: issued_at and expiry derive from evaluationTime, not in
   assert.equal(out.authorization.expiry, T0 + 60);
   assert.notEqual(out.authorization.issued_at, intent.timestamp);
 });
+
+test("audit timestamps derive from evaluationTime across sequential evaluations", () => {
+  const engine = makeEngine();
+
+  // Regression for #279:
+  // audit event time must come from trusted evaluationTime, not intent.timestamp.
+  // Reusing an older proposer-controlled intent timestamp across later evaluations
+  // must not make the audit stream move backwards in time.
+  const first = engine.evaluatePure(
+    makeIntent({ nonce: 1001n, timestamp: T0 }),
+    freshState(),
+    T0
+  );
+
+  assert.equal(first.decision, "ALLOW");
+
+  const second = engine.evaluatePure(
+    makeIntent({ nonce: 1002n, timestamp: T0 }),
+    first.nextState,
+    T0 + 1
+  );
+
+  assert.equal(second.decision, "ALLOW");
+
+  const timestamps = engine.audit.snapshot().map((e) => e.timestamp);
+
+  for (let i = 1; i < timestamps.length; i++) {
+    assert.ok(
+      timestamps[i] >= timestamps[i - 1],
+      `audit timestamp regressed at index ${i}: ${timestamps[i - 1]} -> ${timestamps[i]}`
+    );
+  }
+
+  const received = engine.audit
+    .snapshot()
+    .filter((e) => e.type === "INTENT_RECEIVED");
+
+  assert.deepEqual(
+    received.map((e) => e.timestamp),
+    [T0, T0 + 1]
+  );
+});
