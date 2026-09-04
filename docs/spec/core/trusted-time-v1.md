@@ -274,6 +274,13 @@ Replay, velocity, and tool-call windows MUST key off `evaluation_time` only.
   Missing or malformed required containers and non-finite, fractional,
   negative, or unsafe values MUST fail closed with `STATE_INVALID`.
 
+  > **Operational consequence (non-normative).** Fixed-window semantics may
+  > permit bursts approaching `2 × maxActions` across adjacent window
+  > boundaries. A configured limit of `N` actions per `T` seconds therefore
+  > does not imply a strict bound of `N` actions over every rolling interval of
+  > length `T`. Deployments requiring that property should use a
+  > rolling/sliding-window control instead.
+
 - **Tool-call windows.** Retention and new call timestamps MUST derive only
   from `evaluation_time`. `intent.timestamp` is non-authoritative and MUST NOT
   start, advance, reset, expire, or otherwise influence tool-call quota. A
