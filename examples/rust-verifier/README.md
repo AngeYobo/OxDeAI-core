@@ -62,6 +62,11 @@ Expected outcomes in general:
 cargo test
 ```
 
+From the repo root, `pnpm test:rust` runs the same suite with `--locked`. CI runs
+it on every push and pull request (`rust-verifier` job in
+`.github/workflows/ci.yml`), so the bundled fixture cannot silently expire
+or drift out of contract without a red build.
+
 `tests/verify_authorization.rs` verifies the bundled fixture directly:
 
 - ALLOW at its last valid second (`expiry - 1`)

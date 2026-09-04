@@ -109,6 +109,27 @@ jobs:
         env:
           OXDEAI_ENGINE_SECRET: ci-adapter-validation-secret-testing!!
 
+  rust-verifier:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: examples/rust-verifier
+
+      - name: Rust verifier tests
+        # Pins the bundled fixture's ALLOW/DENY cases at deterministic protocol
+        # time (issue #262). Fails if the fixture or the expiry contract rots.
+        run: cargo test --locked
+        working-directory: examples/rust-verifier
+
   pep-redis-replay:
     runs-on: ubuntu-latest
     services:
