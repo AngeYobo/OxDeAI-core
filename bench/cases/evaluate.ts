@@ -26,7 +26,7 @@ export function create(seed: number): () => unknown {
   const fx = fixtures.complex;
   const engine = new PolicyEngine({
     policy_version: fx.policy.version,
-    engine_secret: "bench-hmac-secret",
+    engine_secret: "benchmark-only-hmac-secret-at-least-32-chars",
     authorization_ttl_seconds: 120,
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",

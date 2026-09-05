@@ -5,7 +5,21 @@ import {
   RECOMMENDED_TRUSTED_TIME_PROFILE,
   verifySnapshot,
 } from "@oxdeai/core";
-import type { Authorization, Intent, State } from "@oxdeai/core";
+import type { AuthorizationV1, Intent, State } from "@oxdeai/core";
+import type { KeySet } from "@oxdeai/core";
+
+export const BENCHMARK_ENVELOPE_KEY_SET: KeySet = {
+  issuer: "bench-envelope-issuer",
+  version: "1",
+  keys: [
+    {
+      kid: "bench-envelope-key",
+      alg: "Ed25519",
+      public_key:
+        "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----",
+    },
+  ],
+};
 
 export type FixtureProfile = "minimal" | "complex" | "adversarial";
 
@@ -14,7 +28,7 @@ type BenchFixture = {
   policy: { id: string; version: string };
   intent: Intent;
   state: State;
-  auth: Authorization;
+  auth: AuthorizationV1;
   envelopeBytes: Uint8Array;
 };
 
@@ -78,7 +92,7 @@ function deepCloneState(state: State): State {
 function makeEngine(policyId: string, policyVersion: string): PolicyEngine {
   return new PolicyEngine({
     policy_version: policyVersion,
-    engine_secret: "bench-hmac-secret",
+    engine_secret: "benchmark-only-hmac-secret-at-least-32-chars",
     authorization_ttl_seconds: 120,
     authorization_issuer: "bench-issuer",
     authorization_audience: "bench-rp",
@@ -169,7 +183,15 @@ function makeEnvelope(policyId: string, state: State, nowTs: number): Uint8Array
     snapshot,
     events: [
       { type: "INTENT_RECEIVED", timestamp: nowTs, policyId, intent_hash: "h".repeat(64), agent_id: "agent-1" },
-      { type: "DECISION", timestamp: nowTs + 1, policyId, intent_hash: "h".repeat(64), decision: "ALLOW", reasons: [] },
+      {
+        type: "DECISION",
+        timestamp: nowTs + 1,
+        policyId,
+        policy_version: state.policy_version,
+        intent_hash: "h".repeat(64),
+        decision: "ALLOW",
+        reasons: [],
+      },
       { type: "STATE_CHECKPOINT", timestamp: nowTs + 2, policyId, stateHash: snapshotResult.stateHash },
     ],
   } as any);
@@ -252,7 +274,7 @@ export type ProtectedPathFixture = {
   engine: PolicyEngine;
   intent: Intent;
   state: State;
-  auth: Authorization;
+  auth: AuthorizationV1;
   envelopeBytes: Uint8Array;
   toolExecute: (actionType: string, target: string, costMinorUnits: number) => number;
 };

@@ -667,11 +667,15 @@ console.log(verified.status === "ok"); // true when checkpoints exist
 
 ## Benchmarks
 
-Adds ~80–150µs per action (p50) for the full protected path (evaluation + authorization verification).
+The synthetic protected-path benchmark includes deterministic policy
+evaluation, shared-secret HMAC authorization verification, unsigned envelope
+verification, and deterministic in-memory tool work. It does not measure model,
+network, or application execution.
 
-Negligible compared to multi-second agent loops.
-
-The protected path includes deterministic policy evaluation and authorization verification before execution becomes reachable.
+Current measurements are host- and runtime-specific and contain noise/outlier
+warnings, so no stable per-action overhead is claimed. See the
+[benchmark summary](../../bench/BENCHMARK_SUMMARY.md) for exact observations,
+provenance, and limitations.
 
 ## Roadmap
 

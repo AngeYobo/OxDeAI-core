@@ -13,7 +13,7 @@ export function create(seed: number): () => unknown {
     expectedPolicyId: fixture.policy.id,
     consumedAuthIds: [] as string[],
     requireSignatureVerification: true,
-    legacyHmacSecret: "bench-hmac-secret",
+    legacyHmacSecret: "benchmark-only-hmac-secret-at-least-32-chars",
   };
 
   return () => {
