@@ -198,7 +198,7 @@
 | Area | Status | Notes |
 |------|--------|-------|
 | `DelegationV1` structure | `DONE` | Specified in `delegation-v1.md`. Conformance vectors. |
-| Delegation chain verification | `DONE` | `verifyDelegationChain`. Tested. Cross-language via Go harness. |
+| Delegation chain verification | `DONE` | `verifyDelegationChain`. Tested in TypeScript. A Go adapter references the vectors but `test:vectors:go` does not exercise them; the Python adapter fails at import (#306). Not cross-language verified. |
 | Scope narrowing | `DONE` | Tools + max_amount. Tested. Conformance vectors. |
 | Delegation scope verification in guard | `DONE` | Guard step 3: checks `scope.tools`, `scope.max_amount`. |
 | Delegation replay | `DONE` | `consumeDelegationId` + `consumeAuthId(parentAuth)`. |
