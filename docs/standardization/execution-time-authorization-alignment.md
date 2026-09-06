@@ -130,7 +130,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **OxDeAI mechanisms:**
 
-**The portable conformance vector suite** ([`docs/spec/test-vectors/`](../spec/test-vectors/)) establishes that verification is independently reproducible. The 12 portable `authorization-v1.json` vectors (Encoding A and Encoding B), the 8 Profile C state-hash vectors (modes 001–008), and the 9 SignedKRLV1 vectors are each exercised by independent Go and Python harnesses that:
+**The portable conformance vector suite** ([`docs/spec/test-vectors/`](../spec/test-vectors/)) establishes that verification is independently reproducible. The 11 canonicalization-v1 vectors, the 8 Profile C state-hash vectors (modes 001–008), and the 9 SignedKRLV1 vectors are each exercised by independent Go and Python harnesses that:
 
 - Independently implement canonicalization-v1
 - Independently compute Ed25519 preimages
@@ -139,7 +139,7 @@ Attribution: the invariant names and section references above are drawn from the
 
 **Byte-equivalence proof.** The `KRL_DUPLICATE_REVOKED_KIDS` vector signature (`+mwEd2QP5+tx6pCKAiF8BKzMAHf1c28mcTQF575pDn/DwgRiJ+PkYnv+sasIdgj1S7E9mSZZK1pOTP43nlnsDA==`) and the Profile C mode 006–008 Encoding B artifact signature (`jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA`) serve as concrete byte-equivalence proof points: three independent implementations (TypeScript, Go, Python) compute identical preimage bytes from identical inputs and verify identical signatures. This is not a claimed property - it is a mechanically verified fact with every run of `pnpm test:vectors:all`.
 
-**Cross-language harness assertion counts** as of #120: 209 TypeScript assertions, 28 Go assertions, 28 Python assertions, covering canonicalization, AuthorizationV1 verification, Profile C state-hash semantics, Profile C Encoding B, and SignedKRLV1.
+**Cross-language harness assertion counts** as of #120: 209 TypeScript assertions, 28 Go assertions, 28 Python assertions. The 28 per language are canonicalization-v1 (11), Profile C state-hash semantics including Encoding B (8), and SignedKRLV1 (9). The 12 portable `authorization-v1.json` vectors are verified in TypeScript only; the Go and Python authorization-verification harness integration is not yet implemented.
 
 **Replayability of individual authorization decisions.** Any verifier holding the issuer's public key, the AuthorizationV1 artifact, and the proposed action can independently verify: signature validity, expiry, audience, issuer, intent hash binding, and (with the live state) state hash binding. The `verify-authorization-vectors.mjs` script demonstrates this for the portable authorization vectors.
 
