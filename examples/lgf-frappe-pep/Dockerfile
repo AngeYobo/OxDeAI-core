@@ -10,7 +10,7 @@
 # build context is the repo root.
 
 FROM node:20-alpine AS build
-RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
@@ -31,7 +31,7 @@ RUN pnpm --filter @oxdeai/core build && \
     pnpm --filter @oxdeai/example-lgf-frappe-pep build
 
 FROM node:20-alpine
-RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 WORKDIR /app
 
 LABEL org.opencontainers.image.title="OxDeAI PEP Sidecar"
