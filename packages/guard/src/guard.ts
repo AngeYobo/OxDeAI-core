@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Authorization, AuthorizationV1, DelegationScope, Intent, KeySet } from "@oxdeai/core";
-import { verifyDelegationChain, verifyAuthorization as strictVerifyAuthorization, intentHash } from "@oxdeai/core";
+import { verifyDelegationChain, verifyAuthorization as strictVerifyAuthorization, intentHash, resolveEffectiveChildScope } from "@oxdeai/core";
 import type { OxDeAIGuardConfig, ProposedAction, GuardDecisionRecord, GuardCallOptions } from "./types.js";
 import { defaultNormalizeAction } from "./normalizeAction.js";
 import { createInMemoryReplayStore } from "./replayStore.js";
@@ -296,17 +296,24 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
         }
       }
 
-      // Guard-level scope enforcement: is the proposed action within
-      // the delegation's declared scope?
-      if (delegation.scope.tools !== undefined && !delegation.scope.tools.includes(action.name)) {
+      // Guard-level scope enforcement: is the proposed action within the
+      // delegation's EFFECTIVE scope? A field the delegation omits inherits
+      // the corresponding parentScope constraint rather than being read as
+      // unconstrained (issue #284) — resolved via the same
+      // resolveEffectiveChildScope() core also uses for chain-level
+      // narrowing, so guard does not carry a second, independent scope
+      // semantic.
+      const effectiveScope = resolveEffectiveChildScope(delegation.scope, parentScope);
+
+      if (effectiveScope.tools !== undefined && !effectiveScope.tools.includes(action.name)) {
         violationMessages.push(
-          `action "${action.name}" is not permitted by delegation scope.tools [${delegation.scope.tools.join(", ")}]`
+          `action "${action.name}" is not permitted by delegation scope.tools [${effectiveScope.tools.join(", ")}]`
         );
       }
 
-      if (delegation.scope.max_amount !== undefined && intent.amount > delegation.scope.max_amount) {
+      if (effectiveScope.max_amount !== undefined && intent.amount > effectiveScope.max_amount) {
         violationMessages.push(
-          `intent amount ${intent.amount} exceeds delegation scope.max_amount ${delegation.scope.max_amount}`
+          `intent amount ${intent.amount} exceeds delegation scope.max_amount ${effectiveScope.max_amount}`
         );
       }
 

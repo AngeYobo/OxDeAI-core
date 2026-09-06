@@ -144,18 +144,63 @@ Implementations MUST produce identical byte sequences for identical inputs.
 
 ### 4.1 Scope Narrowing
 
-A `DelegationV1` MUST NOT expand authority relative to the parent `AuthorizationV1`.
+A `DelegationV1` MUST NOT expand authority relative to the parent scope. This
+holds for every scope field without exception — an earlier version of this
+document carved `scope.max_actions` out of this invariant ("no equivalent
+parent field; MAY be set freely"); that carve-out was incorrect and is
+withdrawn as of this revision. `scope.max_actions` is an ordinary optional
+`DelegationScope` field with no structural difference from the other three,
+and is subject to the same narrowing rule.
+
+**Omission semantics.** A scope field the child omits is not "unconstrained."
+It resolves to an *effective* value before narrowing is checked:
+
+```
+effectiveChild.field =
+  rawChild.field       if the child explicitly supplies it
+  parentScope.field    if the child omits it AND parentScope constrains it
+  unconstrained         only if neither side constrains it
+```
+
+This resolution MUST be performed before any narrowing comparison. A
+verifier that skips the comparison entirely when the child field is absent —
+rather than resolving it against the parent first — does not satisfy this
+invariant, even if it never accepts a field the child *explicitly* sets to a
+wider value than the parent's.
 
 | Field | Rule |
 |---|---|
-| `scope.tools` | MUST be a subset of parent allowed tools (or omitted to inherit) |
-| `scope.max_amount` | MUST be ≤ parent `amount` |
-| `scope.max_actions` | No equivalent parent field; MAY be set freely |
-| `scope.max_depth` | MUST be ≤ parent `max_depth` if parent defines one |
+| `scope.tools` | Effective child tools MUST be a subset of parent allowed tools. Omitted child tools inherit the parent's tool set unchanged; an explicitly supplied child list is compared against the parent's as given. Equal sets are valid. |
+| `scope.max_amount` | Effective child `max_amount` MUST be ≤ parent `amount`. Equality is valid. |
+| `scope.max_actions` | Effective child `max_actions` MUST be ≤ parent `max_actions` when the parent defines one. Equality is valid. |
+| `scope.max_depth` | Effective child `max_depth` MUST be ≤ parent `max_depth` when the parent defines one. Equality is valid. |
 | `policy_id` | MUST equal parent `policy_id` |
 | `expiry` | MUST be ≤ parent `expiry` |
 
 Violation of any narrowing rule MUST result in DENY. Verification MUST NOT proceed past the first narrowing failure.
+
+**Resolution is verification-time only.** Effective-scope resolution is
+performed by the verifier, not the issuer. `createDelegation` (or an
+equivalent issuer-side constructor) continues to sign exactly the raw scope
+the caller supplies — an omitted field stays absent from the signed
+`DelegationV1` artifact. Implementations MUST NOT materialize inherited
+fields into the signed artifact; doing so would change the canonical signing
+bytes of every delegation that currently omits a field, which is unnecessary
+to close the gap this section addresses.
+
+**Multi-hop is out of scope.** This resolution rule operates on exactly one
+`(child scope, parent scope)` pair. It does not define or require any
+behavior for a delegation chain longer than one hop — see §5 Step 4, which
+already denies a `DelegationV1` presented as another delegation's parent.
+
+**Residual trust boundary.** `parentScope` is supplied by the verifying
+party's caller (the deployment/integrator), not derived from a field on the
+parent `AuthorizationV1` artifact itself — the wire format has no native
+`amount`/`allowed_tools`/`max_depth`/`max_actions` fields to read it from.
+This section defines correct narrowing against whatever `parentScope` is
+supplied; it does not establish that the supplied `parentScope` accurately
+reflects an external or independently authoritative grant. That remains a
+deployment responsibility outside this specification's scope.
 
 ### 4.2 Delegator Binding
 
@@ -206,12 +251,21 @@ Inputs:
 - `keyset`: the issuer's `KeySet`
 - `now`: current timestamp in seconds (injected, not ambient)
 - `consumed_ids`: optional set of previously seen delegation IDs
+- `parentScope`: optional `DelegationScope` supplied separately by the
+  verifying party's caller as the parent constraint input for scope
+  narrowing (§4.1). It is **not** derived from `parent_auth` — the
+  `AuthorizationV1` wire format has no native `amount`/`allowed_tools`/
+  `max_depth`/`max_actions` fields to derive it from. When `parentScope` is
+  absent, Step 9 has nothing to narrow against. Proving narrowing against a
+  supplied `parentScope` does not by itself establish that `parentScope`
+  reflects an external, independently authoritative grant — see the
+  residual trust boundary in §4.1.
 
 Returns: `ALLOW` or `DENY` with a reason list.
 Canonicalization: all `canonicalJson(...)` calls use `canonicalization-v1` rules.
 
 ```
-function verifyDelegation(delegation, parent_auth, keyset, now, consumed_ids?):
+function verifyDelegation(delegation, parent_auth, keyset, now, consumed_ids?, parentScope?):
 
   // Step 1: Structural validation
   if delegation is missing required fields:
@@ -255,16 +309,30 @@ function verifyDelegation(delegation, parent_auth, keyset, now, consumed_ids?):
   if delegation.expiry < now:
     return DENY("delegation expired")
 
-  // Step 9: Validate scope narrowing
-  if delegation.scope.max_amount is set AND delegation.scope.max_amount > parent_auth.amount:
+  // Step 9: Resolve effective scope, then validate narrowing.
+  //
+  // An omitted delegation.scope field is NOT unconstrained when parentScope
+  // constrains it — it inherits the parent's value first. Comparison always
+  // runs against the resolved effective value, never against the raw
+  // (possibly absent) child field directly.
+  effective_max_amount  = delegation.scope.max_amount  ?? parentScope.amount
+  effective_tools       = delegation.scope.tools       ?? parentScope.allowed_tools
+  effective_max_actions = delegation.scope.max_actions ?? parentScope.max_actions
+  effective_max_depth   = delegation.scope.max_depth   ?? parentScope.max_depth
+
+  if effective_max_amount is set AND effective_max_amount > parentScope.amount:
     return DENY("max_amount exceeds parent amount")
 
-  if delegation.scope.tools is set:
-    if not delegation.scope.tools ⊆ parent_auth.allowed_tools:
+  if effective_tools is set:
+    if not effective_tools ⊆ parentScope.allowed_tools:
       return DENY("tool scope exceeds parent allowed tools")
 
-  if delegation.scope.max_depth is set AND parent_auth.max_depth is set:
-    if delegation.scope.max_depth > parent_auth.max_depth:
+  if effective_max_actions is set AND parentScope.max_actions is set:
+    if effective_max_actions > parentScope.max_actions:
+      return DENY("max_actions exceeds parent max_actions")
+
+  if effective_max_depth is set AND parentScope.max_depth is set:
+    if effective_max_depth > parentScope.max_depth:
       return DENY("max_depth exceeds parent max_depth")
 
   // Step 10: Replay check

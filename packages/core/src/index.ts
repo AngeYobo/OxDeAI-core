@@ -34,6 +34,7 @@ export {
   verifyDelegationChain,
   delegationParentHash,
   delegationSigningPayload,
+  resolveEffectiveChildScope,
 } from "./verification/verifyDelegation.js";
 export type { VerifyDelegationOptions } from "./verification/verifyDelegation.js";
 export { createDelegation } from "./delegation/createDelegation.js";

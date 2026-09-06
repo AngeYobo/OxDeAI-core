@@ -266,6 +266,57 @@ export function verifyDelegationChain(
   return verifyDelegation(delegation, opts);
 }
 
+// ── Effective scope resolution ─────────────────────────────────────────────────
+
+/**
+ * Resolve the effective child delegation scope against a parent scope.
+ *
+ * For each field:
+ *   - an explicitly supplied child value is kept as-is (the child may narrow
+ *     further than the parent, but never widen — that is enforced separately
+ *     by the internal `checkScopeNarrowing` narrowing check);
+ *   - an omitted child value inherits the parent's value when the parent
+ *     constrains that field — omission MUST NOT be read as "unconstrained"
+ *     when the parent has already placed a limit on it (issue #284: a child
+ *     that simply leaves a field out of its scope was previously able to
+ *     obtain broader effective authority than its parent on that field);
+ *   - a field left unconstrained by both the child and the parent remains
+ *     unconstrained — there is nothing to inherit.
+ *
+ * This applies uniformly to every `DelegationScope` field (`tools`,
+ * `max_amount`, `max_actions`, `max_depth`). `max_actions` is included on the
+ * same basis as the others: it is an ordinary optional `DelegationScope`
+ * field with no structural distinction from the rest, and the invariant that
+ * a `DelegationV1` MUST NOT expand authority relative to its parent does not
+ * carve out an exception for it.
+ *
+ * Resolution happens only at verification time. It never mutates its inputs
+ * and its result is never written back into a signed `DelegationV1` artifact
+ * — `createDelegation()` continues to sign exactly the raw scope the caller
+ * supplied. This keeps existing signed bytes, and every existing signature,
+ * unchanged.
+ *
+ * @public
+ */
+export function resolveEffectiveChildScope(
+  child: DelegationScope,
+  parent: DelegationScope
+): DelegationScope {
+  const effective: DelegationScope = {};
+
+  effective.tools = child.tools !== undefined ? child.tools : parent.tools;
+  effective.max_amount = child.max_amount !== undefined ? child.max_amount : parent.max_amount;
+  effective.max_actions = child.max_actions !== undefined ? child.max_actions : parent.max_actions;
+  effective.max_depth = child.max_depth !== undefined ? child.max_depth : parent.max_depth;
+
+  if (effective.tools === undefined) delete effective.tools;
+  if (effective.max_amount === undefined) delete effective.max_amount;
+  if (effective.max_actions === undefined) delete effective.max_actions;
+  if (effective.max_depth === undefined) delete effective.max_depth;
+
+  return effective;
+}
+
 // ── Scope narrowing ───────────────────────────────────────────────────────────
 
 function checkScopeNarrowing(
@@ -273,10 +324,11 @@ function checkScopeNarrowing(
   parent: DelegationScope
 ): VerificationViolation[] {
   const violations: VerificationViolation[] = [];
+  const effective = resolveEffectiveChildScope(child, parent);
 
-  // tools: child must be a subset of parent
-  if (child.tools !== undefined && parent.tools !== undefined) {
-    const notAllowed = child.tools.filter((t) => !parent.tools!.includes(t));
+  // tools: effective child must be a subset of parent
+  if (effective.tools !== undefined && parent.tools !== undefined) {
+    const notAllowed = effective.tools.filter((t) => !parent.tools!.includes(t));
     if (notAllowed.length > 0) {
       violations.push({
         code: "DELEGATION_SCOPE_VIOLATION",
@@ -285,32 +337,32 @@ function checkScopeNarrowing(
     }
   }
 
-  // max_amount: child must be <= parent
-  if (child.max_amount !== undefined && parent.max_amount !== undefined) {
-    if (child.max_amount > parent.max_amount) {
+  // max_amount: effective child must be <= parent
+  if (effective.max_amount !== undefined && parent.max_amount !== undefined) {
+    if (effective.max_amount > parent.max_amount) {
       violations.push({
         code: "DELEGATION_SCOPE_VIOLATION",
-        message: `scope.max_amount ${child.max_amount} exceeds parent max_amount ${parent.max_amount}`,
+        message: `scope.max_amount ${effective.max_amount} exceeds parent max_amount ${parent.max_amount}`,
       });
     }
   }
 
-  // max_actions: child must be <= parent
-  if (child.max_actions !== undefined && parent.max_actions !== undefined) {
-    if (child.max_actions > parent.max_actions) {
+  // max_actions: effective child must be <= parent
+  if (effective.max_actions !== undefined && parent.max_actions !== undefined) {
+    if (effective.max_actions > parent.max_actions) {
       violations.push({
         code: "DELEGATION_SCOPE_VIOLATION",
-        message: `scope.max_actions ${child.max_actions} exceeds parent max_actions ${parent.max_actions}`,
+        message: `scope.max_actions ${effective.max_actions} exceeds parent max_actions ${parent.max_actions}`,
       });
     }
   }
 
-  // max_depth: child must be <= parent
-  if (child.max_depth !== undefined && parent.max_depth !== undefined) {
-    if (child.max_depth > parent.max_depth) {
+  // max_depth: effective child must be <= parent
+  if (effective.max_depth !== undefined && parent.max_depth !== undefined) {
+    if (effective.max_depth > parent.max_depth) {
       violations.push({
         code: "DELEGATION_SCOPE_VIOLATION",
-        message: `scope.max_depth ${child.max_depth} exceeds parent max_depth ${parent.max_depth}`,
+        message: `scope.max_depth ${effective.max_depth} exceeds parent max_depth ${parent.max_depth}`,
       });
     }
   }

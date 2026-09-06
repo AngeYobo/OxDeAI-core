@@ -37,6 +37,13 @@ export type CreateDelegationParams = {
  * The policy_id is inherited from parent.policy_id.
  * The signature is computed over the canonical signing payload using Ed25519.
  *
+ * `scope` is signed exactly as supplied — a field the caller omits stays
+ * absent from the signed artifact. It is not materialized against a parent
+ * scope here. Effective-scope inheritance for an omitted field (see
+ * `resolveEffectiveChildScope` in `verifyDelegation.ts`) is resolved only at
+ * verification time, so existing signed bytes and signatures are unaffected
+ * by that resolution.
+ *
  * @public
  */
 export function createDelegation(
