@@ -6,6 +6,10 @@
  * Cases 7 (guard success) and 8 (guard failure) are covered in
  * packages/guard/src/test/guard.delegation.matrix.test.ts.
  *
+ * CASE-10 (below) adds regression coverage for issue #284: an omitted
+ * delegation.scope field must inherit the corresponding parentScope
+ * constraint rather than being treated as unconstrained.
+ *
  * All timestamps are fixed integers — no Date.now() calls in test logic.
  * Key material is generated once per file load (deterministic within a run).
  */
@@ -21,6 +25,7 @@ import {
   verifyDelegationChain,
   delegationParentHash,
   delegationSigningPayload,
+  resolveEffectiveChildScope,
 } from "../verification/verifyDelegation.js";
 import type { KeySet } from "../types/keyset.js";
 import type { AuthorizationV1 } from "../types/authorization.js";
@@ -579,4 +584,111 @@ test("CASE-9e: delegationParentHash changes when any parent field changes", () =
       "hash must change when any parent field changes"
     );
   }
+});
+
+// ── CASE 10: Omission inheritance (issue #284) ────────────────────────────────
+//
+// A delegation.scope field the child omits must inherit the corresponding
+// parentScope constraint, not be treated as unconstrained. These tests
+// exercise resolveEffectiveChildScope() directly — the unit responsible for
+// this behavior — plus one end-to-end verifyDelegation() case reproducing the
+// exact PoC reported in the issue.
+
+test("CASE-10a: parent constrains max_amount, child omits it → effective child inherits parent max_amount", () => {
+  const effective = resolveEffectiveChildScope({}, { max_amount: 100n });
+  assert.equal(effective.max_amount, 100n);
+});
+
+test("CASE-10b: parent constrains tools, child omits it → effective child inherits parent tools", () => {
+  const effective = resolveEffectiveChildScope({}, { tools: ["read"] });
+  assert.deepEqual(effective.tools, ["read"]);
+});
+
+test("CASE-10c: parent constrains max_actions, child omits it → effective child inherits parent max_actions", () => {
+  const effective = resolveEffectiveChildScope({}, { max_actions: 10 });
+  assert.equal(effective.max_actions, 10);
+});
+
+test("CASE-10d: parent constrains max_depth, child omits it → effective child inherits parent max_depth", () => {
+  const effective = resolveEffectiveChildScope({}, { max_depth: 2 });
+  assert.equal(effective.max_depth, 2);
+});
+
+test("CASE-10e: explicit child value narrower than parent → child value preserved, still accepted", () => {
+  const effective = resolveEffectiveChildScope({ max_amount: 10n }, { max_amount: 100n });
+  assert.equal(effective.max_amount, 10n);
+
+  const parent = makeParent();
+  const d = createDelegation(
+    parent,
+    { delegatee: "agent-B", scope: { max_amount: 10n }, expiry: T_DEL_EXP, kid: "k1" },
+    KEYS.privateKey
+  );
+  const result = verifyDelegation(d, { now: T_NOW, parentScope: { max_amount: 100n } });
+  assert.equal(result.ok, true);
+});
+
+test("CASE-10f: explicit child value equal to parent → still accepted (equality is valid)", () => {
+  const effective = resolveEffectiveChildScope({ max_depth: 2 }, { max_depth: 2 });
+  assert.equal(effective.max_depth, 2);
+
+  const parent = makeParent();
+  const d = createDelegation(
+    parent,
+    { delegatee: "agent-B", scope: { max_depth: 2 }, expiry: T_DEL_EXP, kid: "k1" },
+    KEYS.privateKey
+  );
+  const result = verifyDelegation(d, { now: T_NOW, parentScope: { max_depth: 2 } });
+  assert.equal(result.ok, true);
+});
+
+test("CASE-10g: explicit child value broader than parent → still rejected", () => {
+  const parent = makeParent();
+  const d = createDelegation(
+    parent,
+    { delegatee: "agent-B", scope: { max_actions: 50 }, expiry: T_DEL_EXP, kid: "k1" },
+    KEYS.privateKey
+  );
+  const result = verifyDelegation(d, { now: T_NOW, parentScope: { max_actions: 10 } });
+  assert.equal(result.ok, false);
+  assert.ok(result.violations.some((v) => v.code === "DELEGATION_SCOPE_VIOLATION"));
+});
+
+test("CASE-10h: unconstrained parent + omitted child field → remains unconstrained", () => {
+  const effective = resolveEffectiveChildScope({}, {});
+  assert.equal(effective.max_amount, undefined);
+  assert.equal(effective.tools, undefined);
+  assert.equal(effective.max_actions, undefined);
+  assert.equal(effective.max_depth, undefined);
+});
+
+test("CASE-10i: combined omission — reproduces the originally reported fail-open PoC", () => {
+  // Parent grants at most 100 units on the "read" tool only. The child
+  // delegation's scope is empty — no fields at all, exactly as in the
+  // original issue #284 proof of concept. Before this fix, an empty scope
+  // was treated as fully unconstrained on both dimensions simultaneously.
+  const parentScope = { max_amount: 100n, tools: ["read"] };
+  const effective = resolveEffectiveChildScope({}, parentScope);
+
+  assert.equal(effective.max_amount, 100n, "max_amount must not silently become unconstrained");
+  assert.deepEqual(effective.tools, ["read"], "tools must not silently become unconstrained");
+
+  const parent = makeParent();
+  const d = createDelegation(
+    parent,
+    { delegatee: "agent-B", scope: {}, expiry: T_DEL_EXP, kid: "k1" },
+    KEYS.privateKey
+  );
+  const result = verifyDelegationChain(d, parent, {
+    now: T_NOW,
+    trustedKeySets: KEYSET,
+    requireSignatureVerification: true,
+    parentScope,
+  });
+
+  // The delegation itself is still valid (an empty scope narrower-or-equal
+  // to the parent is legitimate) — the regression this guards against is
+  // silently losing the parent's bounds, which the assertions above confirm
+  // does not happen.
+  assert.equal(result.ok, true);
 });

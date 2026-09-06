@@ -413,6 +413,9 @@ export type RecursionState = {
     max_depth: Record<string, number | undefined>;
 };
 
+// @public
+export function resolveEffectiveChildScope(child: DelegationScope, parent: DelegationScope): DelegationScope;
+
 // @public (undocumented)
 export function sha256HexFromJson(value: unknown): string;
 
