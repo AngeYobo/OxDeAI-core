@@ -141,14 +141,20 @@ compatibility but not used by the harness runners.
 
 ### Coverage distinction
 
+The `Cross-language?` column reports what `pnpm test:vectors:go` and
+`pnpm test:vectors:py` actually execute, not what is portable in principle.
+Those commands exercise three corpora: canonicalization-v1 (11 vectors),
+Profile-C state verification (8), and SignedKRLV1 (9) - 28 assertions per
+language. Everything else is TypeScript-only today.
+
 | Layer | What it covers | Cross-language? |
 |-------|---------------|-----------------|
-| `delegation-parent-hash.json` | Hash stability, I1 key-order invariance | Yes - SHA256 + canonical JSON only |
-| `delegation-verification.json` | Field checks, expiry, scope, replay, trust-missing | Yes - no crypto required |
-| `delegation-chain-verification.json` | Chain structural checks (hash binding, delegator, expiry ceiling, policy) | Yes - independently recomputed |
-| `delegation-signature-verification.json` | Ed25519 verification path | Yes - independently verified |
-| `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | Yes - portable across any `verifyAuthorization` implementation |
-| `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | Yes - portable; no crypto required |
+| `delegation-parent-hash.json` | Hash stability, I1 key-order invariance | TypeScript only - portable in principle (SHA256 + canonical JSON), but not exercised by `test:vectors:go` |
+| `delegation-verification.json` | Field checks, expiry, scope, replay, trust-missing | TypeScript only - portable in principle (no crypto required), but not exercised by `test:vectors:go` |
+| `delegation-chain-verification.json` | Chain structural checks (hash binding, delegator, expiry ceiling, policy) | TypeScript only - Go and Python adapters exist in `go-harness/` but are not exercised by `test:vectors:go`; the Python adapter fails at import (#306) |
+| `delegation-signature-verification.json` | Ed25519 verification path | TypeScript only - Go and Python adapters exist in `go-harness/` but are not exercised by `test:vectors:go`; the Python adapter fails at import (#306) |
+| `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | TypeScript only - portable across any `verifyAuthorization` implementation, but `validate.ts` is its only consumer |
+| `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | TypeScript only - portable, no crypto required, but `validate.ts` is its only consumer |
 | `trusted-time.json` | Trusted-time freshness gate: issuance, velocity, tool-window, replay under `evaluationTime`; protocol-domain and malformed-input rejection | TypeScript only (dedicated `runTrustedTimeConformance` harness) |
 | `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (TS runner); **Go + Python cover all 8 modes** via `docs/spec/test-vectors/profile-c-state-verification.json` (#120) |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
