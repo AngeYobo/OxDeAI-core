@@ -1,6 +1,6 @@
 # OxDeAI: A Deterministic Execution Authorization Protocol
 
-**Ange Yobo**
+**Ange Thierry Yobo**
 *OxDeAI Project*
 *research@oxdeai.dev*
 
@@ -109,7 +109,7 @@ An authorization artifact accepted once by a conformant PEP cannot be accepted a
 
 A delegation artifact cannot grant a delegatee any authority that the delegating authorization did not itself possess.
 
-*Mechanism:* `DelegationV1` carries a `parent_auth_hash` that cryptographically binds the delegation to a specific parent `AuthorizationV1`. The verifier checks that the delegation's scope (tools, budget ceiling, expiry) is a strict narrowing of the parent's scope. Any scope expansion produces `DELEGATION_SCOPE_VIOLATION`.
+*Mechanism:* `DelegationV1` carries a `parent_auth_hash` that cryptographically binds the delegation to a specific parent `AuthorizationV1`. With a caller-supplied `parentScope`, the verifier checks that the effective declared scope (`tools`, `max_amount`, `max_actions`, `max_depth`) is equal to or more restrictive than each constrained parent dimension. Expansion produces `DELEGATION_SCOPE_VIOLATION`. Top-level `expiry` is checked separately against the parent authorization's expiry. This proves narrowing against the supplied scope, not that the scope represents an external authoritative grant (§7.3).
 
 *Residual:* `DelegationV1` v1 supports only single-hop delegation. Multi-hop delegation is specified but not in scope for v1. The current verifier explicitly rejects chains deeper than one hop with `DELEGATION_SINGLE_HOP`.
 
@@ -379,7 +379,7 @@ The evaluation produces one of two outcomes. If the action is not authorized, th
 
 The authorization artifact, if issued, is presented to the PEP. The PEP verifies the artifact through a sequential pipeline: signature validity against the trusted key sets, issuer match, audience match, expiry check, intent binding check, state binding check (in Profile C), and replay consumption. Any failure terminates the pipeline before the execution boundary is reached (G6). Only when every check passes does the PEP permit the execution to proceed.
 
-Optionally, between the parent authorization and a sub-component, a `DelegationV1` artifact may narrow the parent's authority and bind it to a delegatee. The delegation cannot expand the parent's scope (G4); it can only restrict the tools, the budget ceiling, or the validity window. The PEP verifies the delegation chain alongside the authorization.
+Optionally, between the parent authorization and a sub-component, a `DelegationV1` artifact may narrow the parent's authority and bind it to a delegatee. Its effective declared scope must be equal to or more restrictive than the caller-supplied `parentScope` on every constrained dimension (`tools`, `max_amount`, `max_actions`, `max_depth`), and its top-level expiry must not exceed the parent authorization's expiry (§7.3). The PEP verifies the delegation chain alongside the authorization.
 
 This flow is illustrated in Figure 1 (the Core Model diagram). The critical structural property is visible in the diagram: the path from proposed action to execution passes through the PEP, and the PEP is unreachable around. Execution is not a sibling of authorization that happens to follow it; execution is downstream of a verification gate that fails closed.
 
@@ -519,7 +519,7 @@ Only when every check passes is the artifact accepted and the execution path rea
 
 ## 7. DelegationV1: Scoped Delegation
 
-`DelegationV1` extends the protocol to the case where an authorized principal delegates a narrowed portion of its authority to a sub-component. A parent holds an `AuthorizationV1`; it issues a `DelegationV1` that grants a delegatee the right to act, but only within a scope that is a strict subset of the parent's. The delegation cannot expand the parent's authority; it can only restrict it. This is the protocol's realization of the delegation-non-expansion goal (G4).
+`DelegationV1` extends the protocol to the case where an authorized principal delegates authority to a sub-component. A parent holds an `AuthorizationV1`; it issues a `DelegationV1` whose effective declared scope must be equal to or more restrictive than the caller-supplied `parentScope` on every constrained dimension. Equality is valid. This is the protocol's realization of the delegation-non-expansion goal (G4), subject to the `parentScope` trust boundary described in §7.3.
 
 This section specifies the artifact's structure, the parent-binding mechanism, the scope-narrowing rules, the single-hop constraint, and the verification the PEP performs. The complete field catalog appears in Appendix A.
 
@@ -547,13 +547,15 @@ The delegation carries its own signature, over a domain-prefixed preimage (`OXDE
 
 ### 7.3 Scope narrowing
 
-The delegation's `scope` defines the narrowed authority. The protocol enforces narrowing on the scope dimensions it defines: the tool allowlist, the budget ceiling (maximum amount), the action count, and the expiry. For each dimension, the delegation's value must be equal to or more restrictive than the parent's.
+The delegation's `scope` has four optional fields: `tools`, `max_amount`, `max_actions`, and `max_depth`. The effective child scope is resolved against the caller-supplied `parentScope` at verification time. For every field, an explicit child value is used; an omitted child value inherits the corresponding parent constraint when one exists; a field omitted by both child and parent remains unconstrained. Resolution does not modify the signed `DelegationV1` artifact.
 
-For the tool allowlist, the delegation's permitted tools must be a subset of the parent's permitted tools. A delegation that lists a tool the parent does not permit is a scope violation. For the budget ceiling, the delegation's maximum amount must not exceed the parent's. For the action count, the delegation's maximum must not exceed the parent's. For the expiry, the delegation's expiry must not extend beyond the parent's; a delegatee cannot act after the parent's own authority has lapsed.
+For each dimension constrained by `parentScope`, the effective child must be equal to or more restrictive than that constraint. Effective `tools` must be a subset of `parentScope.tools` when defined. Effective `max_amount`, `max_actions`, and `max_depth` must each be no greater than the corresponding defined `parentScope` value. Equality is valid. Any expansion produces `DELEGATION_SCOPE_VIOLATION`, even if another dimension narrows.
 
-Any violation of these narrowing rules — a tool not in the parent's set, a higher budget ceiling, a larger action count, a later expiry — produces `DELEGATION_SCOPE_VIOLATION` at verification, and the delegation confers no authority. The verifier checks each dimension; a delegation that narrows some dimensions but expands another is rejected on the expanded dimension.
+`max_actions` is a declared action-count ceiling used for inheritance and narrowing. The current implementation does not count delegated actions or consume a runtime quota against it. `max_depth` likewise participates in declared scope inheritance and narrowing; it does not add runtime recursion-depth enforcement, and multi-hop delegation remains prohibited (§7.4). The guard checks the proposed action's tool and amount against effective `tools` and `max_amount`, including inherited constraints.
 
-The scope is validated structurally before the delegation chain is verified. The reference implementation requires the parent scope to be supplied as an explicit, typed field (`parentScope`) on the delegation input, structurally validated before chain verification proceeds. An earlier design that inferred the parent scope through an unsafe cast was removed during the protocol's hardening (audit item P0-3); the explicit typed field ensures that a missing or malformed parent scope fails closed before the chain verification path is reached, rather than being silently coerced. This is the fail-closed principle (G6) applied to the delegation input itself: ambiguity in the parent scope produces rejection, not a permissive default.
+`expiry` is a required top-level `DelegationV1` field, separate from `DelegationScope`. It must not exceed the parent authorization's `expiry`; a later value produces `DELEGATION_EXPIRY_EXCEEDS_PARENT`.
+
+The guard requires an explicit, typed `parentScope` on the delegation input and structurally validates it before chain verification; a missing or malformed value fails closed. The standalone `verifyDelegationChain()` checks scope narrowing when `parentScope` is supplied. This value is supplied by the caller or integrator: verification proves non-expansion against it, but does not independently establish that it represents an external authoritative grant. Establishing that authority is the integrator's responsibility.
 
 ### 7.4 The single-hop constraint
 
@@ -573,7 +575,7 @@ The verifier then confirms the parent binding: it recomputes `parent_auth_hash` 
 
 The verifier confirms the delegation's own signature over its domain-prefixed preimage, resolving the signing key against `trustedKeySets` and confirming the key is not revoked.
 
-The verifier confirms scope narrowing: each scope dimension (tools, budget ceiling, action count, expiry) is checked to be equal to or more restrictive than the parent's, with any expansion producing `DELEGATION_SCOPE_VIOLATION`.
+The verifier confirms scope narrowing: effective `tools`, `max_amount`, `max_actions`, and `max_depth` are checked against the corresponding constrained dimensions of the supplied `parentScope`, with any expansion producing `DELEGATION_SCOPE_VIOLATION`. The guard separately checks the proposed action against effective `tools` and `max_amount`; `max_actions` and `max_depth` participate only in declared scope inheritance and narrowing (§7.3). The top-level delegation expiry is checked against the parent authorization's expiry, with an excess producing `DELEGATION_EXPIRY_EXCEEDS_PARENT`.
 
 The verifier confirms the single-hop constraint: a chain deeper than one hop produces `DELEGATION_SINGLE_HOP`.
 
@@ -626,7 +628,7 @@ First, the engine decision is checked. If the decision is not ALLOW, the pipelin
 
 Second, the presence and structural validity of the authorization artifact are checked. An ALLOW decision without an accompanying valid authorization artifact, or with an artifact missing required fields, throws (`OxDeAIAuthorizationError`). The PEP does not proceed on a decision that lacks the artifact that proves it.
 
-Third, in a delegation case, the delegation scope is checked. The guard validates the delegation's scope against the parent scope (§7.3) before chain verification, with a missing or malformed parent scope failing closed.
+Third, in a delegation case, the guard structurally validates the caller-supplied `parentScope`, failing closed if it is missing or malformed. Chain verification checks non-expansion of the effective declared scope, and the guard checks the proposed action's tool and amount against the effective child scope, including inherited constraints (§7.3).
 
 Fourth, the signature is verified. The artifact's signature is checked against the public key resolved from `trustedKeySets` by the artifact's `kid`, over the reconstructed preimage (§6.4). In strict mode, an absent `trustedKeySets` produces `TRUSTED_KEYSETS_REQUIRED` here. A key not present in `trustedKeySets` produces `AUTH_KID_UNKNOWN`; a key present but revoked produces a key-inactive failure; a signature that does not verify produces `AUTH_SIGNATURE_INVALID`; an algorithm identifier not matching case-exactly produces `AUTH_ALG_UNSUPPORTED`.
 
@@ -694,7 +696,7 @@ The protocol exposes a set of verification primitives, each a pure function of i
 
 `verifyAuthorization` verifies an `AuthorizationV1` artifact: signature validity against the resolved key, algorithm match, issuer and audience binding, expiry, and (given the proposed action) intent binding. It does not, by itself, consume the `auth_id` against a replay store — replay consumption is a stateful operation belonging to the PEP, not the stateless verifier. The stateless verifier confirms the artifact's cryptographic and binding validity; the PEP adds the stateful replay consumption.
 
-`verifyDelegationChain` verifies a `DelegationV1` against its parent `AuthorizationV1`: parent validity, parent binding (`parent_auth_hash` recomputation), delegation signature, scope narrowing, and the single-hop constraint (Section 7). Like `verifyAuthorization`, it performs the stateless checks; replay consumption is the PEP's stateful addition.
+`verifyDelegationChain` verifies a `DelegationV1` against its parent `AuthorizationV1`: parent expiry, parent binding (`parent_auth_hash` recomputation), delegation signature, effective declared scope narrowing when `parentScope` is supplied, top-level delegation expiry against parent expiry, and the single-hop constraint (Section 7). Like `verifyAuthorization`, it performs the stateless checks; replay consumption is the PEP's stateful addition and does not consume a `max_actions` quota.
 
 `verifySnapshot` verifies a canonical state snapshot: that it decodes correctly, that its format version is recognized, and that its policy binding matches the expected policy. This allows a party to confirm that a state snapshot is well-formed and bound to the expected policy without access to the engine that produced it.
 
@@ -906,7 +908,7 @@ The mapping is intended to be auditable. A reviewer should be able to take any g
 
 *Goal:* A delegation artifact cannot grant a delegatee any authority that the delegating authorization did not itself possess.
 
-*Realization:* Non-expansion is enforced by the scope-narrowing verification (§7.3). The delegation's `parent_auth_hash` binds it to a specific parent authorization (§7.2), and the verifier checks each scope dimension — tool allowlist, budget ceiling, action count, expiry — to be equal to or more restrictive than the parent's, rejecting any expansion (`DELEGATION_SCOPE_VIOLATION`). The parent scope is supplied as an explicit typed field and structurally validated before chain verification, failing closed on a missing or malformed parent scope (§7.3). The single-hop constraint (§7.4) bounds delegation to the case the verification fully covers.
+*Realization:* Non-expansion is enforced by the scope-narrowing verification (§7.3). The delegation's `parent_auth_hash` binds it to a specific parent authorization (§7.2). For each constrained dimension of the caller-supplied `parentScope`, the verifier checks that effective `tools`, `max_amount`, `max_actions`, and `max_depth` are equal to or more restrictive, rejecting expansion with `DELEGATION_SCOPE_VIOLATION`. The guard structurally validates `parentScope`, failing closed on a missing or malformed value, and checks the proposed action against effective `tools` and `max_amount`. `max_actions` and `max_depth` participate in declared inheritance and narrowing only. Top-level expiry is checked separately; an excess over parent expiry produces `DELEGATION_EXPIRY_EXCEEDS_PARENT`. Verification does not independently establish the authority represented by `parentScope`. The single-hop constraint (§7.4) bounds delegation to the case the verification fully covers.
 
 *Verification:* The delegation vectors verify scope-narrowing enforcement across the scope dimensions, rejection of scope violations, rejection of delegations bound to an invalid or mismatched parent, and rejection of chains deeper than one hop. The cross-adapter delegation guard tests verify that these rejections hold at the enforcement boundary.
 
@@ -1256,19 +1258,22 @@ relation to a presented parent `AuthorizationV1`.
 
 | Field | Required | Role |
 |-------|----------|------|
+| `delegation_id` | yes | Delegation replay identifier used by the PEP's replay store (body §7.5); distinct from `scope.max_actions`. |
 | `parent_auth_hash` | yes | `SHA-256(canonicalize(toPublicAuthorizationV1(parent)))`. Binds the delegation to one specific parent (body §7.2). Mismatch with presented parent → rejection. |
-| `scope` | yes | The narrowed authority. Each dimension must be ≤ the parent's; expansion → `DELEGATION_SCOPE_VIOLATION` (body §7.3). |
-| `scope.tools` | yes | Permitted tool allowlist; must be a subset of the parent's. |
-| `scope.max_amount` | yes | Budget ceiling; must not exceed the parent's. **[verify field name]** |
-| `scope.max_actions` | optional | Action-count ceiling; must not exceed the parent's. **[verify field name and required status]** |
-| `scope.expiry` | yes | Delegation expiry; must not extend beyond the parent's. |
+| `scope` | yes | Declared scope. Each effective dimension must be equal to or more restrictive than the corresponding constraint in the supplied `parentScope`; expansion → `DELEGATION_SCOPE_VIOLATION` (body §7.3). |
+| `scope.tools` | optional | Tool allowlist. Effective value must be a subset of `parentScope.tools` when defined; the guard checks the proposed tool against it. |
+| `scope.max_amount` | optional | Amount ceiling. Effective value must not exceed `parentScope.max_amount` when defined; the guard checks the proposed amount against it. |
+| `scope.max_actions` | optional | Declared action-count ceiling, inherited and narrowed against `parentScope.max_actions` when defined. The current implementation does not count delegated actions or consume a runtime quota against it. |
+| `scope.max_depth` | optional | Declared depth ceiling, inherited and narrowed against `parentScope.max_depth` when defined. No additional runtime recursion-depth enforcement; multi-hop delegation remains prohibited. |
+| `expiry` | yes | Top-level delegation expiry; must not exceed the parent authorization's `expiry`. Excess → `DELEGATION_EXPIRY_EXCEEDS_PARENT`. |
 | `alg` | yes | Signature algorithm identifier (as A.1). |
 | `kid` | yes | Signing-key identifier (as A.1). |
 | `signature` | yes | Ed25519 signature over the domain-prefixed delegation preimage (prefix `OXDEAI_DELEGATION_V1\n`, Appendix A.4). |
 
-Additional delegation identity/uniqueness fields (e.g., a delegation identifier
-consumed for replay, body §7.5) follow the reference implementation. **[verify
-exact field names for the delegation replay identifier]**
+All four scope subfields use the same resolution rule: an explicit child value
+is used; an omitted child field inherits the corresponding `parentScope`
+constraint; if neither constrains the field, it remains unconstrained. Resolution
+occurs at verification time and leaves the signed artifact unchanged (body §7.3).
 
 The single-hop constraint (body §7.4) is a verification rule, not a field: a
 chain deeper than one hop → `DELEGATION_SINGLE_HOP`.

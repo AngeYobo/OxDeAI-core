@@ -327,7 +327,7 @@ Public-key verifiable `AuthorizationV1` is the preferred v1.2 form.
 
 ## 5. Delegation Artifact (DelegationV1)
 
-`DelegationV1` is a signed delegation artifact that allows a principal holding a valid `AuthorizationV1` to delegate a strictly narrowed subset of that authority to a child agent.
+`DelegationV1` is a signed delegation artifact that allows a principal holding a valid `AuthorizationV1` to delegate authority to a child agent, with scope equal to or more restrictive than the parent's.
 
 `DelegationV1` is locally verifiable without any control-plane interaction.
 It is cryptographically bound to the parent `AuthorizationV1` by hash and MUST be verified as a complete chain by the relying party.
@@ -367,7 +367,7 @@ A `DelegationV1` artifact MUST include all of the following fields:
 - `parent_auth_hash`: SHA-256 hex digest of the canonical parent `AuthorizationV1`, including its `signature` field. Used for cryptographic hash binding to the parent.
 - `delegator`: Identifier of the principal granting authority. MUST equal `parent.audience`.
 - `delegatee`: Identifier of the agent receiving delegated authority.
-- `scope`: Constrained authority granted to the delegatee. MUST be a strict subset of the parent authorization scope. Sub-fields are defined in Section 5.4.
+- `scope`: Declared authority granted to the delegatee. Its effective scope MUST be equal to or more restrictive than the supplied parent scope. Sub-fields are defined in Section 5.4.
 - `policy_id`: Policy context identifier. MUST equal `parent.policy_id`.
 - `issued_at`: Issuance time as Unix timestamp (seconds).
 - `expiry`: Expiration time as Unix timestamp (seconds). MUST be less than or equal to `parent.expiry`.
@@ -377,15 +377,20 @@ A `DelegationV1` artifact MUST include all of the following fields:
 
 ### 5.4 Scope Sub-Fields
 
-The `scope` object MAY carry any combination of the following sub-fields:
+The `scope` object MAY carry any combination of `tools`, `max_amount`, `max_actions`, and `max_depth`. For each field, the verifier MUST resolve the effective child scope as follows:
 
-- `tools`: array of permitted tool or action names. If present, the child agent MUST only execute actions whose name appears in this array.
-- `max_amount`: maximum permitted amount for a single action (bigint). MUST be less than or equal to any `max_amount` in the parent scope if both are present.
-- `max_actions`: maximum number of actions permitted under this delegation. MUST be less than or equal to any `max_actions` in the parent scope if both are present.
-- `max_depth`: maximum recursion or nesting depth permitted. MUST be less than or equal to any `max_depth` in the parent scope if both are present.
+- If the child explicitly supplies a value, use that value.
+- If the child omits the field and `parentScope` constrains it, inherit the parent value.
+- If neither the child nor `parentScope` constrains the field, it remains unconstrained.
 
-An absent scope sub-field imposes no constraint for that dimension from the delegation artifact itself.
-A relying party MAY enforce additional scope constraints beyond those carried in the artifact.
+Resolution occurs at verification time, before narrowing comparisons, and MUST NOT modify the signed `DelegationV1` artifact. The following rules refer to the effective child scope:
+
+- `tools`: array of permitted tool or action names. When effective tools are defined, the child agent MUST only execute actions whose name appears in that array.
+- `max_amount`: maximum permitted amount for a single action (bigint). Its effective value MUST be less than or equal to `parentScope.max_amount` when the parent constrains that field.
+- `max_actions`: optional declared action-count ceiling used for delegation scope narrowing. Its effective value MUST be less than or equal to `parentScope.max_actions` when the parent constrains that field. The current implementation does not count or consume delegated actions against this field at runtime.
+- `max_depth`: optional declared depth ceiling used for scope inheritance and narrowing. Its effective value MUST be less than or equal to `parentScope.max_depth` when the parent constrains that field. The current implementation does not track runtime recursion depth against this field; multi-hop delegation remains prohibited (Section 5.7).
+
+A relying party MAY impose additional constraints beyond those in the effective child scope.
 
 ### 5.5 Security Properties
 
@@ -396,7 +401,7 @@ A relying party MAY enforce additional scope constraints beyond those carried in
 - Audience-bound: validity is scoped to the designated `delegatee`.
 - Parent-bound: validity is cryptographically bound to a specific parent `AuthorizationV1` via `parent_auth_hash`. A delegation presented with a mismatched parent MUST be rejected.
 - Policy-bound: `policy_id` MUST equal `parent.policy_id`. Cross-policy delegation is prohibited.
-- Narrowing-only: delegated scope MUST NOT exceed the parent authorization scope in any dimension.
+- Narrowing-only: effective delegated scope MUST NOT exceed the supplied `parentScope` in any parent-constrained dimension.
 - Short-lived: `expiry` MUST be less than or equal to `parent.expiry`. A delegation cannot outlive its parent.
 - Non-forgeable: `signature` MUST validate under the `OXDEAI_DELEGATION_V1` signing domain and the delegating principal's key.
 
@@ -404,19 +409,21 @@ These properties are mandatory protocol constraints, not operational recommendat
 
 ### 5.6 Narrowing-Only Invariant
 
-A `DelegationV1` MUST narrow authority relative to the parent authorization.
+A `DelegationV1` MUST NOT expand authority relative to the supplied `parentScope`. Equality is valid.
 
-The following narrowing invariants MUST hold when both child and parent values are present:
+Verifiers MUST resolve the effective child scope using Section 5.4 before comparing each field constrained by `parentScope`:
 
-- `scope.tools`: child set MUST be a subset of parent set. A tool not present in the parent scope MUST NOT appear in the child scope.
-- `scope.max_amount`: child value MUST be less than or equal to parent value.
-- `scope.max_actions`: child value MUST be less than or equal to parent value.
-- `scope.max_depth`: child value MUST be less than or equal to parent value.
-- `expiry`: MUST be less than or equal to `parent.expiry`.
+- `scope.tools`: the effective child set MUST be a subset of `parentScope.tools`.
+- `scope.max_amount`: the effective child value MUST be less than or equal to `parentScope.max_amount`.
+- `scope.max_actions`: the effective child value MUST be less than or equal to `parentScope.max_actions`.
+- `scope.max_depth`: the effective child value MUST be less than or equal to `parentScope.max_depth`.
+
+Separately, the top-level delegation `expiry` MUST be less than or equal to `parent.expiry`.
 
 Verifiers MUST enforce these invariants. Scope widening is a protocol violation and MUST be rejected.
 
-When the parent scope is not explicitly known to the verifier, the narrowing invariant for that dimension is the deployer's responsibility.
+`parentScope` is supplied by the caller/integrator, not derived from the parent `AuthorizationV1`. Verification proves narrowing against the supplied scope; it does not independently establish that this scope represents an external authoritative grant.
+When the parent scope is not supplied to the verifier, the narrowing invariant is the deployer's responsibility.
 Verifiers SHOULD require explicit parent scope when scope enforcement is a security requirement.
 
 ### 5.7 One-Hop Constraint
@@ -744,10 +751,10 @@ When the relying party receives a `DelegationV1` artifact and its associated par
 
 The relying party MUST perform the full chain verification sequence defined in Section 5.8.
 
-In addition to the chain verification, the relying party MUST verify that the proposed action falls within the delegation scope:
+In addition to the chain verification, the relying party MUST verify that the proposed action falls within the effective child scope (Section 5.4):
 
-- If `scope.tools` is present, the action name MUST appear in `scope.tools`.
-- If `scope.max_amount` is present, the action amount MUST NOT exceed `scope.max_amount`.
+- When the effective child scope constrains `tools`, the action name MUST appear in the effective `tools` set.
+- When the effective child scope constrains `max_amount`, the action amount MUST NOT exceed the effective `max_amount`.
 
 If any chain or scope check fails, the relying party MUST reject the action.
 
@@ -876,7 +883,7 @@ Implementations MUST enforce state isolation per evaluation to preserve the prot
 10. Verify scope narrowing constraints (Section 5.6).
 11. Resolve delegation signing key from (delegation.issuer, delegation.kid, delegation.alg).
 12. Verify delegation.signature using OXDEAI_DELEGATION_V1 domain.
-13. Verify proposed action is within scope (tools, max_amount).
+13. Verify proposed action is within the effective child scope (tools, max_amount), including inherited parent constraints.
 14. Check delegation_id is not consumed.
 15. Execute action.
 16. Mark delegation_id as consumed.

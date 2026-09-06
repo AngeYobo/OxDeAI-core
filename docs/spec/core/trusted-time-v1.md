@@ -130,7 +130,7 @@ A conformant trusted-time evaluation MUST hold all four invariants:
 | `replayWindowSeconds` | nonce retention window, keyed to `evaluation_time` | REQUIRED |
 | `maxTtlSeconds` | specification name for the resolved fixed issuance TTL; implementation mapping: `authorization_ttl_seconds ?? 60` | REQUIRED after resolution; implementation default 60 |
 | `maxInterPepSkewSeconds` | bound on inter-PEP clock disagreement (§2.1) | profile-defined; REQUIRED for multi-PEP |
-| `velocity.maxActions`, `velocity.windowSeconds` | actions per trusted-time window | profile-defined |
+| `state.velocity.config.max_actions`, `state.velocity.config.window_seconds` | actions per trusted-time window | profile-defined |
 
 - **REQUIRED** fields MUST be present after configuration resolution for a
   conformant trusted-time evaluation. The fixed authorization TTL is resolved
@@ -204,8 +204,8 @@ coercion:
   within the safe-integer range (unix seconds).
 - Every duration field — `maxClockSkewSeconds`, `maxIntentAgeSeconds`,
   `replayWindowSeconds`, `maxTtlSeconds`, `maxInterPepSkewSeconds`,
-  `velocity.windowSeconds` — MUST be a finite non-negative
-  integer; `velocity.maxActions` MUST be a finite non-negative integer count.
+  `state.velocity.config.window_seconds` — MUST be a finite non-negative
+  integer; `state.velocity.config.max_actions` MUST be a finite non-negative integer count.
   `maxTtlSeconds` / `effective_ttl` MUST additionally be `≥ 1` (a zero TTL
   would mint `expiry == issued_at`).
 - A malformed `intent.timestamp` (NaN, Infinity, non-integer, negative, or
@@ -247,7 +247,7 @@ Replay, velocity, and tool-call windows MUST key off `evaluation_time` only.
   restate the formula. A future-dated `intent.timestamp` MUST NOT evict a nonce
   still inside it. Reuse of a retained nonce → `DENY`.
 - **Velocity.** The action window is
-  `[window_start, window_start + velocity.windowSeconds)` in `evaluation_time`.
+  `[window_start, window_start + state.velocity.config.window_seconds)` in `evaluation_time`.
   `window_start` and every reset decision MUST derive exclusively from
   `evaluation_time`; `intent.timestamp`, authorization timestamps, metadata,
   ambient clocks, and fallback clocks MUST NOT affect them. The exact rule is:
@@ -264,18 +264,18 @@ Replay, velocity, and tool-call windows MUST key off `evaluation_time` only.
   At the exact boundary a new window begins. If `evaluation_time <
   window_start`, evaluation MUST fail closed with `STATE_INVALID`; it MUST NOT
   reset, grant quota, decrease `window_start`, or substitute another clock.
-  Exceeding `maxActions` within an active trusted window →
+  Exceeding `max_actions` within an active trusted window →
   `VELOCITY_EXCEEDED`. A denied action does not consume quota or mutate
   velocity state.
 
   Velocity configuration and persisted counter leaves MUST be validated
-  without coercion. `windowSeconds` MUST be a positive safe integer;
-  `maxActions`, `window_start`, and `count` MUST be non-negative safe integers.
+  without coercion. `window_seconds` MUST be a positive safe integer;
+  `max_actions`, `window_start`, and `count` MUST be non-negative safe integers.
   Missing or malformed required containers and non-finite, fractional,
   negative, or unsafe values MUST fail closed with `STATE_INVALID`.
 
   > **Operational consequence (non-normative).** Fixed-window semantics may
-  > permit bursts approaching `2 × maxActions` across adjacent window
+  > permit bursts approaching `2 × max_actions` across adjacent window
   > boundaries. A configured limit of `N` actions per `T` seconds therefore
   > does not imply a strict bound of `N` actions over every rolling interval of
   > length `T`. Deployments requiring that property should use a
