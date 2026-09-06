@@ -201,7 +201,7 @@ Authorization artifacts prove what was allowed.
 OxDeAI is validated through **verifiable invariants**, not claims:
 
 * frozen canonicalization vectors
-* cross-language verification (TypeScript / Go / Python)
+* cross-language verification on canonicalization, Profile-C state verification and SignedKRLV1 (TypeScript / Go / Python); other surfaces are TypeScript-only
 * conformance suite (CI validated)
 * cross-adapter equivalence
 
