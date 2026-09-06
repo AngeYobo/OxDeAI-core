@@ -1,6 +1,8 @@
+#!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash, sign as nodeSign } from "node:crypto";
 import {
   encodeCanonicalState,
@@ -338,8 +340,10 @@ const coreAdapter: ConformanceAdapter = {
   verifyAuthorization
 };
 
+const here = fileURLToPath(new URL(".", import.meta.url));
+
 function loadJson<T>(name: string): T {
-  const p = resolve(process.cwd(), "vectors", name);
+  const p = resolve(here, "../../vectors", name);
   return JSON.parse(readFileSync(p, "utf8")) as T;
 }
 

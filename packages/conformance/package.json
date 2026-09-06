@@ -16,6 +16,17 @@
     "envelope"
   ],
   "type": "module",
+  "main": "dist/src/trustedTimeConformance.js",
+  "types": "dist/src/trustedTimeConformance.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/src/trustedTimeConformance.js",
+      "types": "./dist/src/trustedTimeConformance.d.ts"
+    }
+  },
+  "bin": {
+    "oxdeai-conformance": "dist/src/validate.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/oxdeai/oxdeai.git",

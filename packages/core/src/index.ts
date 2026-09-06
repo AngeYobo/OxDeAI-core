@@ -42,6 +42,8 @@ export type { CreateDelegationParams } from "./delegation/createDelegation.js";
 export { PolicyEngine } from "./policy/PolicyEngine.js";
 export type { EngineOptions, EngineEvalOptions, EvaluateOutput, EvaluatePureOutput, SimulationResult, EngineAuthorizationVerificationResult } from "./policy/PolicyEngine.js";
 export { RECOMMENDED_TRUSTED_TIME_PROFILE } from "./policy/trustedTimeProfile.js";
+export { verifyTrustedTime } from "./policy/verifyTrustedTime.js";
+export type { VerifyTrustedTimeInput } from "./policy/verifyTrustedTime.js";
 export { HashChainedLog } from "./audit/HashChainedLog.js";
 export {
   verifySignedKrl,
