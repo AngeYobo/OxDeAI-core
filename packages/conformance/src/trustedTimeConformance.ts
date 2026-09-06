@@ -3,24 +3,9 @@ import {
   PolicyEngine,
   signAuthorizationEd25519,
   verifyAuthorization,
+  verifyTrustedTime,
 } from "@oxdeai/core";
 import type { AuthorizationV1, Intent, KeySet, ReasonCode, State } from "@oxdeai/core";
-import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-// Conformance-only reference surface. Core builds before this package, so the
-// emitted declaration/runtime pair is available without widening Core's public API.
-const trustedTimeReference = await import(pathToFileURL(resolve(
-  fileURLToPath(new URL("../../../../", import.meta.url)),
-  "packages/core/dist/policy/verifyTrustedTime.js",
-)).href) as {
-  verifyTrustedTime(input: {
-    intentTimestamp: number;
-    evaluationTime: number;
-    maxClockSkewSeconds: number;
-    maxIntentAgeSeconds: number;
-  }): { decision: "ALLOW"; reasons: [] } | { decision: "DENY"; reasons: ReasonCode[] };
-};
-const { verifyTrustedTime } = trustedTimeReference;
 import {
   TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,
   TEST_ONLY_ED25519_PUBLIC_KEY_PEM_DO_NOT_USE_IN_PRODUCTION,

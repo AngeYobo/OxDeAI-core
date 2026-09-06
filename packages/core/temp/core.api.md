@@ -654,6 +654,17 @@ export function verifySnapshot(snapshotBytes: Uint8Array, opts?: {
     expectedPolicyId?: string;
 }): VerificationResult;
 
+// @public
+export function verifyTrustedTime(input: VerifyTrustedTimeInput): PolicyResult;
+
+// @public
+export type VerifyTrustedTimeInput = {
+    intentTimestamp: number;
+    evaluationTime: number;
+    maxClockSkewSeconds: number;
+    maxIntentAgeSeconds: number;
+};
+
 // @public (undocumented)
 export function withModuleState(state: CanonicalState_2, moduleId: string, payload: unknown): CanonicalState_2;
 
