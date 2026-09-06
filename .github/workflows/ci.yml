@@ -109,6 +109,35 @@ jobs:
         env:
           OXDEAI_ENGINE_SECRET: ci-adapter-validation-secret-testing!!
 
+  packed-artifact-consumer-gate:
+    # Self-contained by design (does not reuse build-test's dist/ output):
+    # this job proves the actual packed-tarball install path end to end,
+    # independently of whatever the source-workspace jobs above already
+    # verified. See scripts/verify-packed-artifacts.mjs.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Packed Artifact Consumer Gate
+        run: pnpm run verify:packed-artifacts
+
   rust-verifier:
     runs-on: ubuntu-latest
 

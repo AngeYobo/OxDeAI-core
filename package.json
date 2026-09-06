@@ -16,6 +16,7 @@
     "typecheck": "pnpm build:protocol && pnpm -r typecheck",
     "test": "pnpm build && pnpm -r test",
     "validate:adapters": "node scripts/validate-adapters.mjs",
+    "verify:packed-artifacts": "node scripts/verify-packed-artifacts.mjs",
     "ci": "pnpm install --frozen-lockfile && pnpm -r build && pnpm test && pnpm validate:adapters",
     "oxdeai": "pnpm -C packages/cli start --",
     "cli": "pnpm -C packages/cli start --",
