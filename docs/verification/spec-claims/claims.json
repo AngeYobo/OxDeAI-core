@@ -1,0 +1,1957 @@
+{
+  "version": 2,
+  "claims": [
+    {
+      "id": "CANON-001",
+      "title": "Canonical object key ordering",
+      "source": {
+        "path": "docs/spec/core/canonicalization-v1.md",
+        "section": "## 6. Serialization Rules (normative)",
+        "quote": "- Object keys: NFC-normalize, reject duplicates after normalization, then sort keys by byte-wise UTF-8 order.",
+        "role": "normative"
+      },
+      "strength": "normative-statement",
+      "category": "ARTIFACT",
+      "implementation": [
+        {
+          "path": "packages/core/src/crypto/hashes.ts",
+          "symbol": "canonicalizeToJson"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/test/canonicalization.property.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "C-P2: canonical output is invariant to object key insertion order at every nesting level"
+          },
+          "kind": "unit",
+          "negative": false,
+          "portable": false,
+          "runner": {
+            "path": "packages/core/package.json",
+            "contains": "dist/test/*.test.js",
+            "command": "pnpm -C packages/core test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Core canonicalization property test for the selected serialization rule."
+        },
+        {
+          "path": "docs/spec/test-vectors/canonicalization-v1.json",
+          "selector": {
+            "type": "vector",
+            "id": "v1-object-key-ordering"
+          },
+          "kind": "cross-runtime",
+          "negative": false,
+          "portable": true,
+          "runner": {
+            "path": "python-harness/verify_canonicalization_vectors.py",
+            "contains": "canonicalization-v1.json",
+            "command": "pnpm test:vectors:py",
+            "runtime": "Python"
+          },
+          "supports": "Exact sorted canonical JSON and SHA-256; Python independent implementation."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "CONFORMANCE_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "portable",
+      "portableRequired": true,
+      "notes": "Only object ordering is claimed; NFC normalization and collision rejection need separate claims. Negative cases are not required for this ordering-only claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "CANON-002",
+      "title": "Reject floating point numbers",
+      "source": {
+        "path": "docs/spec/core/canonicalization-v1.md",
+        "section": "## 6. Serialization Rules (normative)",
+        "quote": "- Numbers: only integers in the safe IEEE-754 range **[-9007199254740991, 9007199254740991]** are allowed as JSON numbers. Floating-point values and `NaN`/`\u00b1Inf` MUST be rejected.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ARTIFACT",
+      "implementation": [
+        {
+          "path": "packages/core/src/crypto/hashes.ts",
+          "symbol": "canonicalizeToJson"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/test/canonicalization.property.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "C-P6: floats, NaN, and \u00b1Infinity are always rejected with FLOAT_NOT_ALLOWED"
+          },
+          "kind": "unit",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/core/package.json",
+            "contains": "dist/test/*.test.js",
+            "command": "pnpm -C packages/core test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Core canonicalization property test for the selected serialization rule."
+        },
+        {
+          "path": "docs/spec/test-vectors/canonicalization-v1.json",
+          "selector": {
+            "type": "vector",
+            "id": "i1-float-rejected"
+          },
+          "kind": "cross-runtime",
+          "negative": true,
+          "portable": true,
+          "runner": {
+            "path": "python-harness/verify_canonicalization_vectors.py",
+            "contains": "canonicalization-v1.json",
+            "command": "pnpm test:vectors:py",
+            "runtime": "Python"
+          },
+          "supports": "Float rejection and expected error code."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED",
+        "CONFORMANCE_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": true,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "CANON-003",
+      "title": "Reject duplicate keys at raw input parsing",
+      "source": {
+        "path": "docs/spec/core/canonicalization-v1.md",
+        "section": "## 5. Input Parsing Requirements",
+        "quote": "- duplicate keys MUST be detected during parsing",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ARTIFACT",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Core canonicalJson receives objects, after raw duplicate keys may be lost. NFC collision detection is not evidence of duplicate-key-aware raw JSON parsing.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "gap",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "AUTH-ARTIFACT-001",
+      "title": "Reject decisions other than ALLOW",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "## 4. Canonical Semantic Model",
+        "quote": "The `decision` field **MUST** be `\"ALLOW\"`. Any other value **MUST** be rejected.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ARTIFACT",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/authorization-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "authorization-verify-004"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "authorization-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Non-ALLOW decision rejected with AUTH_DECISION_INVALID."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-VERIFY-001",
+      "title": "Reject invalid Ed25519 signatures",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "## 8. Signature Requirements",
+        "quote": "* Verify the Ed25519 signature over the preimage",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "VERIFY",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/authorization-signature-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "authorization-sig-002"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "authorization-signature-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Corrupted signature fails verification."
+        },
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-1 tampered signature: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Guard blocks execute on corrupted signature."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-VERIFY-002",
+      "title": "Issuer-scoped trusted key resolution",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "## 8. Signature Requirements",
+        "quote": "* Resolve `kid` to a trusted public key for the artifact's issuer",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TRUST",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/authorization-signature-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "authorization-sig-004"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "authorization-signature-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Wrong issuer yields issuer mismatch and unknown key."
+        },
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-2 unknown issuer: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Unknown issuer signed with separate key cannot execute."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "expectedIssuer is meaningful when independently established. Scalar expectations are not inherently defective; this claim does not prove provenance of configuration.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-VERIFY-003",
+      "title": "Audience matches execution boundary",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "### audience",
+        "quote": "* **MUST** match the execution boundary",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "VERIFY",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        },
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/authorization-signature-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "authorization-sig-005"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "authorization-signature-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Wrong expected audience rejects."
+        },
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-3 wrong audience: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Wrong audience blocks callback execution."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-BIND-001",
+      "title": "Intent hash exactly matches requested action",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "### intent_hash",
+        "quote": "* **MUST** exactly match the requested action",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ENFORCEMENT",
+      "implementation": [
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        },
+        {
+          "path": "packages/core/src/crypto/hashes.ts",
+          "symbol": "intentHash"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/guard.intent-binding.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "IB-2 wrong intent_hash in auth: OxDeAIAuthorizationError thrown, execute blocked"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.intent-binding.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Authorization for action A cannot execute action B."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "Guard integration checks normalized action binding. Pure verifyAuthorization does not recompute the requested action; no portable vector is asserted here.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-TIME-001",
+      "title": "Strict expiry at now greater than or equal to expiry",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "### expiry / expires_at",
+        "quote": "* **MUST** be strictly enforced: valid iff `now < expiry`; `now >= expiry` \u2192 `AUTH_EXPIRED`",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TIME",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/authorization-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "authorization-verify-002"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "authorization-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "now equals expiry returns AUTH_EXPIRED."
+        },
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-4 expired auth: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Expired signed authorization cannot execute."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-TRUST-001",
+      "title": "Missing strict trust configuration fails closed",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "### Strict mode",
+        "quote": "* Missing trust configuration **MUST** fail closed",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TRUST",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        },
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-5 missing trustedKeySets: OxDeAIGuardConfigurationError thrown at construction"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Guard construction rejects missing trustedKeySets."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "Evidence is guard configuration enforcement. It does not establish honesty of supplied keys or policy premises.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "AUTH-REPLAY-001",
+      "title": "Reused auth_id cannot execute",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "## 11. Replay Protection",
+        "quote": "* `auth_id` **MUST** be single-use",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "REPLAY",
+      "implementation": [
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        },
+        {
+          "path": "packages/guard/src/replayStore.ts",
+          "symbol": "createInMemoryReplayStore"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/guard.replay-store.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "RS-1 default store: auth_id replay blocked on second call to same guard instance"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.replay-store.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Second use blocked; exactly one execution."
+        },
+        {
+          "path": "packages/guard/src/test/guard.replay-store.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "RS-3 shared store: auth_id replay blocked across two distinct guard instances"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.replay-store.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Shared store blocks replay across guard instances."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "In-memory/shared-store integration scope only; not proof of distributed durable replay storage.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "TRUSTED-TIME-001",
+      "title": "Issuance uses trusted evaluation time",
+      "source": {
+        "path": "docs/spec/core/trusted-time-v1.md",
+        "section": "## 4. Consistency Invariants",
+        "quote": "   `issued_at = evaluation_time`.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TIME",
+      "implementation": [
+        {
+          "path": "packages/core/src/policy/PolicyEngine.ts",
+          "symbol": "PolicyEngine"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/test/trusted-time-integration.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "issuance tripwire: issued_at and expiry derive from evaluationTime, not intent.timestamp"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/core/package.json",
+            "contains": "dist/test/*.test.js",
+            "command": "pnpm -C packages/core test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Future-side freshness-valid intent does not drive issuance or expiry."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "TRUSTED-TIME-002",
+      "title": "Reject future freshness violations",
+      "source": {
+        "path": "docs/spec/core/trusted-time-v1.md",
+        "section": "## 6. Freshness Semantics (Future and Stale)",
+        "quote": "- **Future-dated.** `\u0394 > maxClockSkewSeconds` \u2192 `DENY`, no authorization minted.",
+        "role": "normative"
+      },
+      "strength": "normative-statement",
+      "category": "TIME",
+      "implementation": [
+        {
+          "path": "packages/core/src/policy/verifyTrustedTime.ts",
+          "symbol": "verifyTrustedTime"
+        },
+        {
+          "path": "packages/core/src/policy/PolicyEngine.ts",
+          "symbol": "PolicyEngine"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/test/trusted-time-integration.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "future-dated intent \u2192 exactly DENY/INTENT_FRESHNESS_FUTURE"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/core/package.json",
+            "contains": "dist/test/*.test.js",
+            "command": "pnpm -C packages/core test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Future timestamp yields exactly DENY/INTENT_FRESHNESS_FUTURE."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "DELEGATION-001",
+      "title": "Child tools cannot widen supplied parentScope",
+      "source": {
+        "path": "docs/spec/artifacts/delegation-v1.md",
+        "section": "### 4.1 Scope Narrowing",
+        "quote": "| `scope.tools` | Effective child tools MUST be a subset of `parentScope.tools` when defined. Omitted child tools inherit that constraint unchanged; an explicitly supplied child list is compared against it as given. Equal sets are valid. |",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "DELEGATION",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyDelegation.ts",
+          "symbol": "verifyDelegation"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/delegation-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "delegation-verify-005"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "delegation-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Tool outside caller-supplied parent scope rejected."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Narrowing is relative to caller-supplied parentScope; no evidence that the scope originated from an authoritative external grant.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "DELEGATION-002",
+      "title": "Reject delegation as parent (single hop)",
+      "source": {
+        "path": "docs/spec/artifacts/delegation-v1.md",
+        "section": "### 4.4 Single-Hop Enforcement",
+        "quote": "A `DelegationV1` artifact MUST NOT be used as the parent of another `DelegationV1`. The PEP MUST reject any chain where the parent artifact is itself a delegation.",
+        "role": "normative"
+      },
+      "strength": "MUST NOT",
+      "category": "DELEGATION",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyDelegation.ts",
+          "symbol": "verifyDelegationChain"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/delegation-chain-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "delegation-chain-006"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "delegation-chain-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Delegation parent rejected as multihop."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "DELEGATION-003",
+      "title": "Delegation policy equals parent policy",
+      "source": {
+        "path": "docs/spec/artifacts/delegation-v1.md",
+        "section": "### 4.1 Scope Narrowing",
+        "quote": "| `policy_id` | MUST equal parent `policy_id` |",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "DELEGATION",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifyDelegation.ts",
+          "symbol": "verifyDelegationChain"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/delegation-chain-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "delegation-chain-007"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "delegation-chain-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Child-parent policy mismatch rejected."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "This binds two artifacts. It does not prove that an issuer is independently authorized for that policy. Generic expectedPolicyId remains valid when independently configured.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "SIGNED-KRL-001",
+      "title": "Duplicate revoked kids rejected",
+      "source": {
+        "path": "docs/spec/artifacts/signed-krl-v1.md",
+        "section": "## 9. `revoked_kids` deduplication",
+        "quote": "Verifiers MUST reject any artifact containing duplicate entries.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TRUST",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifySignedKrl.ts",
+          "symbol": "verifySignedKrl"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/signed-krl-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "krl-005"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "signed-krl-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Duplicate revoked kid entries rejected."
+        },
+        {
+          "path": "docs/spec/test-vectors/signed-krl-v1.json",
+          "selector": {
+            "type": "vector",
+            "id": "KRL_DUPLICATE_REVOKED_KIDS"
+          },
+          "kind": "cross-runtime",
+          "negative": true,
+          "portable": true,
+          "runner": {
+            "path": "python-harness/verify_signed_krl_vectors.py",
+            "contains": "signed-krl-v1.json",
+            "command": "pnpm test:vectors:py",
+            "runtime": "Python"
+          },
+          "supports": "Independent Python duplicate-entry rejection."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED",
+        "CONFORMANCE_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": true,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [
+        {
+          "id": "RT-TRUST-2",
+          "relation": "conditional-mitigation",
+          "reason": "Artifact verification alone does not close the deployment KRL residual."
+        }
+      ],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "KRL_SIGNATURE_VALID",
+          "to": "KRL_DEPLOYMENT_RESIDUAL_CLOSED",
+          "reason": "Required deployment configuration and persistent stores are not established by artifact vectors."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "SIGNED-KRL-002",
+      "title": "Invalid KRL signature rejected",
+      "source": {
+        "path": "docs/spec/artifacts/signed-krl-v1.md",
+        "section": "## 11. Reason codes",
+        "quote": "| `KRL_SIG_INVALID` | Ed25519 signature verification fails. |",
+        "role": "normative"
+      },
+      "strength": "normative-statement",
+      "category": "VERIFY",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/verifySignedKrl.ts",
+          "symbol": "verifySignedKrl"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/conformance/vectors/signed-krl-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "krl-002"
+          },
+          "kind": "vector",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/conformance/src/validate.ts",
+            "contains": "signed-krl-verification.json",
+            "command": "pnpm -C packages/conformance validate",
+            "runtime": "TypeScript"
+          },
+          "supports": "Tampered signature rejected."
+        },
+        {
+          "path": "docs/spec/test-vectors/signed-krl-v1.json",
+          "selector": {
+            "type": "vector",
+            "id": "KRL_SIGNED_INVALID_SIG"
+          },
+          "kind": "cross-runtime",
+          "negative": true,
+          "portable": true,
+          "runner": {
+            "path": "python-harness/verify_signed_krl_vectors.py",
+            "contains": "signed-krl-v1.json",
+            "command": "pnpm test:vectors:py",
+            "runtime": "Python"
+          },
+          "supports": "Independent Python Ed25519 verification rejects tampering."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "ADVERSARIAL_TESTED",
+        "CONFORMANCE_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": true,
+      "notes": "Evidence demonstrates the selected cases only; review semantic adequacy when changing this claim.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [
+        {
+          "id": "RT-TRUST-2",
+          "relation": "conditional-mitigation",
+          "reason": "Artifact verification alone does not close the deployment KRL residual."
+        }
+      ],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "KRL_SIGNATURE_VALID",
+          "to": "KRL_DEPLOYMENT_RESIDUAL_CLOSED",
+          "reason": "Required deployment configuration and persistent stores are not established by artifact vectors."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "PROFILE-C-001",
+      "title": "Live-state hash must match committed state hash",
+      "source": {
+        "path": "docs/spec/interoperability/external-provider-profile.md",
+        "section": "#### 2.3.2 Additional Verifier Requirements (beyond Profile B)",
+        "quote": "| Live-state hash match | `computeStateHash(state)` == `authorization.state_hash` | `OxDeAIAuthorizationError` |",
+        "role": "normative"
+      },
+      "strength": "normative-statement",
+      "category": "STATE",
+      "implementation": [
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/guard.state-binding.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "SB-2 mismatched state_hash: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.state-binding.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Mismatched state hash blocks execute."
+        },
+        {
+          "path": "docs/spec/test-vectors/profile-c-state-verification.json",
+          "selector": {
+            "type": "vector",
+            "id": "profile-c-002"
+          },
+          "kind": "cross-runtime",
+          "negative": true,
+          "portable": true,
+          "runner": {
+            "path": "python-harness/verify_profile_c_vectors.py",
+            "contains": "profile-c-state-verification.json",
+            "command": "pnpm test:vectors:py",
+            "runtime": "Python"
+          },
+          "supports": "Portable hash comparison mismatch, not execution or provider honesty."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED",
+        "CONFORMANCE_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "portable",
+      "portableRequired": true,
+      "notes": "Portable evidence covers hash comparison only. Guard integration covers callback blocking separately. Neither establishes current or honest state.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [
+        {
+          "id": "RT-TRUST-1",
+          "relation": "trust-premise",
+          "reason": "State-hash consistency does not establish state-provider integrity."
+        }
+      ],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "STATE_HASH_MATCH",
+          "to": "STATE_SOURCE_TRUSTED",
+          "reason": "Honest, current, authoritative state is a deployment premise."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "PEP-ENFORCE-001",
+      "title": "Invalid authorization prevents execution",
+      "source": {
+        "path": "docs/spec/artifacts/authorization-v1.md",
+        "section": "## 1. Purpose",
+        "quote": "> If no valid `AuthorizationV1` is present, execution **MUST NOT** occur.",
+        "role": "normative"
+      },
+      "strength": "MUST NOT",
+      "category": "ENFORCEMENT",
+      "implementation": [
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/guard.authorization.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "A-1 tampered signature: execute is blocked and OxDeAIAuthorizationError is thrown"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.authorization.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Invalid signature prevents execute callback."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "Selected guard rejection case only. Does not prove every possible execution path is non-bypassable.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "PEP-DEPLOY-001",
+      "title": "Gateway is sole execution boundary",
+      "source": {
+        "path": "docs/spec/enforcement/pep-gateway-v1.md",
+        "section": "### 4.1 Execution Boundary",
+        "quote": "The PEP Gateway **MUST** act as the **sole execution boundary** for protected actions.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TRUST",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "deployment-assumption",
+      "portableRequired": false,
+      "notes": "Deployment topology and upstream access control must be independently evidenced. Gateway tests cannot prove arbitrary deployment non-bypassability.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "gap",
+      "scopeDisposition": "deployment",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "STATE-TRUST-001",
+      "title": "State provider serves coherent view",
+      "source": {
+        "path": "docs/spec/state-provider-requirements.md",
+        "section": "### 2.1 Requirement",
+        "quote": "A compliant state provider MUST serve a coherent state view to `getState()`.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "STATE",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "deployment-assumption",
+      "portableRequired": false,
+      "notes": "Provider honesty/coherence is an external deployment obligation. Hash equality and CAS tests do not demonstrate it for a deployed provider.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "gap",
+      "scopeDisposition": "deployment",
+      "appliesWhen": [],
+      "dependsOn": [
+        {
+          "id": "RT-TRUST-1",
+          "relation": "trust-premise",
+          "reason": "State-hash consistency does not establish state-provider integrity."
+        }
+      ],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "STATE_HASH_MATCH",
+          "to": "STATE_SOURCE_TRUSTED",
+          "reason": "Honest, current, authoritative state is a deployment premise."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "VERIFY-ORDER-001",
+      "title": "Normative verification ordering",
+      "source": {
+        "path": "docs/spec/verification/verification-v1.md",
+        "section": "## 9. Determinism and Ordering",
+        "quote": "- Check ordering **MUST** follow the sequences in \u00a7\u00a75\u20136 to ensure deterministic results across implementations.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "VERIFY",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Verification \u00a75 puts signature before expiry; AuthorizationV1 \u00a710 puts expiry before signature. Core collects/sorts violations. No claim of satisfying both incompatible sequences.",
+      "recordType": "requirement",
+      "normativeState": "ambiguous",
+      "evidenceState": "gap",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "DELEGATION-AUDIT-001",
+      "title": "PEP delegation events included in hash-chained audit log",
+      "source": {
+        "path": "docs/spec/artifacts/delegation-v1.md",
+        "section": "## 7. Audit Event",
+        "quote": "Both events MUST be included in the hash-chained audit log.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "AUDIT",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": false,
+      "negativeRequired": false,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "No direct mapping found for required DELEGATION_EXECUTION/DELEGATION_DENIED hash-chained events. Guard boundary event callbacks alone are not evidence of this contract.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "gap",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "ETA-SIGNING-001",
+      "title": "ETA signing payload excludes entire signature field",
+      "source": {
+        "path": "docs/spec/core/eta-core-v1.md",
+        "section": "## 5. Authorization Artifact (AuthorizationV1)",
+        "quote": "- The signature preimage MUST be the canonical JSON bytes of the AuthorizationV1 object, **excluding the `signature` field**, using the canonicalization rules in `canonicalization-v1.md`.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ARTIFACT",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "ETA excludes entire signature field; AuthorizationV1 \u00a75 retains nested alg/kid and defines encoding-specific prefix. Normative docs vectors use another verifier/preimage; do not equate corpora.",
+      "recordType": "requirement",
+      "normativeState": "ambiguous",
+      "evidenceState": "gap",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "ETA-DETERMINISM-001",
+      "title": "Identical trusted inputs produce deterministic signed authorizations",
+      "source": {
+        "path": "docs/spec/core/eta-core-v1.md",
+        "section": "### Requirements",
+        "quote": "- Identical inputs MUST produce identical outputs.",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "ARTIFACT",
+      "implementation": [
+        {
+          "path": "packages/core/src/policy/PolicyEngine.ts",
+          "symbol": "PolicyEngine"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/core/src/test/authorization.trusted-time-issuance.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "identical trusted inputs produce deterministic Ed25519 authorizations"
+          },
+          "kind": "integration",
+          "negative": false,
+          "portable": false,
+          "runner": {
+            "path": "packages/core/package.json",
+            "contains": "dist/test/*.test.js",
+            "command": "pnpm -C packages/core test",
+            "runtime": "TypeScript"
+          },
+          "supports": "Repeated trusted inputs produce identical Ed25519 authorization objects."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "portable",
+      "portableRequired": false,
+      "notes": "Inputs include trusted evaluationTime and fixed configuration per trusted-time profile. This selected test does not prove all decision modules deterministic.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
+      "id": "CANON-ESC-001",
+      "title": "Unresolved canonicalization corpus lock (maintainer-supplied identifier)",
+      "source": {
+        "path": "docs/spec/core/canonicalization-v1.md",
+        "section": "## 6. Serialization Rules (normative)",
+        "quote": "- Strings: normalize to Unicode NFC and encode as JSON strings.",
+        "role": "context"
+      },
+      "strength": "not-applicable",
+      "category": "ARTIFACT",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "documentation-only",
+      "portableRequired": false,
+      "notes": "CANON-ESC-001 was requested for registration by the maintainer; no existing repository definition of this identifier was found. This source is context only. Exact escaping/corpus-lock meaning and disposition require a maintainer decision; no new serialization rule is asserted.",
+      "recordType": "corpus-lock",
+      "normativeState": "unresolved",
+      "evidenceState": "unassessed",
+      "scopeDisposition": "deferred",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "SELECTED_CANONICALIZATION_VECTORS_PASS",
+          "to": "CANON_ESC_LOCK_RESOLVED",
+          "reason": "Existing vectors do not resolve an undefined corpus lock."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "RT-TRUST-1",
+      "title": "State provider integrity residual",
+      "source": {
+        "path": "docs/audits/protocol-audit-post-interoperability.md",
+        "section": "### 5.3 Residual Trust Risks",
+        "quote": "**RT-TRUST-1: State provider integrity** *(SPECIFIED WITH RESIDUAL)*",
+        "role": "context"
+      },
+      "strength": "not-applicable",
+      "category": "TRUST",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "documentation-only",
+      "portableRequired": false,
+      "notes": "The residual is not closed. Minimum state-provider requirements exist, but provider compliance and integrity remain deployment responsibilities. This lock is an audit observation, not another executable protocol requirement.",
+      "recordType": "corpus-lock",
+      "normativeState": "non-normative",
+      "evidenceState": "unassessed",
+      "scopeDisposition": "deployment",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "STATE_HASH_MATCH",
+          "to": "STATE_SOURCE_TRUSTED",
+          "reason": "Matching state can be manufactured by a compromised provider."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    },
+    {
+      "id": "RT-TRUST-2",
+      "title": "Conditional KRL transport-integrity residual",
+      "source": {
+        "path": "docs/spec/interoperability/external-provider-profile.md",
+        "section": "#### 2.2.5 KRL Integrity at Profile B",
+        "quote": "Full RT-TRUST-2 closure requires `signed_required` + `verifyKrl` + `KrlWatermarkStore` + `SignedKrlCache`; compatibility modes retain residual transport-trust risk.",
+        "role": "context"
+      },
+      "strength": "not-applicable",
+      "category": "TRUST",
+      "implementation": [],
+      "evidence": [],
+      "requiredLevels": [],
+      "securityCritical": true,
+      "negativeRequired": false,
+      "classification": "documentation-only",
+      "portableRequired": false,
+      "notes": "Conditional closure is documented for configured deployments, not established here. Compatibility modes retain residual risk. Applicability conditions describe the documented closure context; the checker never evaluates a deployment or declares this lock closed.",
+      "recordType": "corpus-lock",
+      "normativeState": "non-normative",
+      "evidenceState": "unassessed",
+      "scopeDisposition": "conditional",
+      "appliesWhen": [
+        {
+          "setting": "krlMode",
+          "equals": "signed_required"
+        },
+        {
+          "setting": "verifyKrl",
+          "equals": "configured"
+        },
+        {
+          "setting": "KrlWatermarkStore",
+          "equals": "configured"
+        },
+        {
+          "setting": "SignedKrlCache",
+          "equals": "configured"
+        }
+      ],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "KRL_SIGNATURE_VALID",
+          "to": "KRL_DEPLOYMENT_RESIDUAL_CLOSED",
+          "reason": "Signature verification does not establish integrity mode, callback, durable watermark or signed cache configuration."
+        }
+      ],
+      "maintainerDecisionRequired": true
+    }
+  ]
+}
