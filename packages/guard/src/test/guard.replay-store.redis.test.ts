@@ -32,7 +32,7 @@ import { OxDeAIAuthorizationError } from "../errors.js";
 import type { Authorization, AuthorizationV1, Intent, State } from "@oxdeai/core";
 import { stateSnapshotHash, intentHash } from "@oxdeai/core";
 import { defaultNormalizeAction } from "../normalizeAction.js";
-import { TEST_KEYSET, signAuth } from "./helpers/fixtures.js";
+import { TEST_KEYSET, signAuth, DELEGATION_AUTHORITIES } from "./helpers/fixtures.js";
 
 // ---------------------------------------------------------------------------
 // FakeRedisClient
@@ -145,6 +145,7 @@ function makeFakeEngine(auth: AuthorizationV1) {
       };
     },
     computeStateHash: (state: State) => stateSnapshotHash(state),
+    computePolicyId: () => auth.policy_id,
   };
 }
 
@@ -168,6 +169,7 @@ function makeGuardConfig(
     },
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: createRedisReplayStore({ client: redisClient }),
   };
 }
@@ -321,11 +323,12 @@ test("RS-R7 Redis error in consumeDelegationId: throws OxDeAIAuthorizationError 
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-redis",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: createRedisReplayStore({ client: hybridClient }),
   });
 
@@ -362,6 +365,7 @@ test("RS-R8 shared Redis client: replay blocked across two distinct guard instan
     setState: async (s, v) => { if (v !== versionA) return false; stateA = s; versionA++; return true; },
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: sharedStore,
   });
 
@@ -373,6 +377,7 @@ test("RS-R8 shared Redis client: replay blocked across two distinct guard instan
     setState: async (s, v) => { if (v !== versionB) return false; stateB = s; versionB++; return true; },
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: sharedStore,
   });
 

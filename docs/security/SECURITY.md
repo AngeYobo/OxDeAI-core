@@ -119,7 +119,10 @@ Relying parties MUST enforce:
 - strict `expiry` checks
 - intent binding (`intent_hash`)
 - state binding (`state_hash`)
-- issuer and audience binding
+- audience binding, and issuer key trust (key resolution is issuer-scoped)
+- issuer-policy authority at enforcement boundaries that accept externally supplied
+  authorizations: a valid signature does not by itself establish that the issuer may
+  issue for the claimed `policy_id` (#301)
 
 Relying parties SHOULD execute immediately after successful verification.
 If the execution context changes materially, verification SHOULD be repeated.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
+import type { AuthorizationAuthority, AuthorizationV1, DelegationScope, DelegationV1, Intent, KeySet, PolicyEngine, State } from "@oxdeai/core";
 import type { ReplayStore } from "./replayStore.js";
 import type { GuardBoundaryEventHook } from "./boundaryEvent.js";
 
@@ -181,6 +181,36 @@ export type OxDeAIGuardConfig = {
    * Required; `validateConfig` throws when absent or empty.
    */
   trustedKeySets?: KeySet | readonly KeySet[];
+
+  /**
+   * Deployer-configured (issuer, policyId) pairs authorized to act as a
+   * DELEGATION ROOT at this boundary.
+   *
+   * Required whenever a call supplies `opts.delegation`. `parentAuth` arrives
+   * from the caller, so a valid signature under {@link trustedKeySets} proves
+   * only that a trusted key for the *claimed* issuer signed it — never that the
+   * issuer may issue for the claimed `policy_id`. Without an independent
+   * authority list there is nothing to check that against, so the guard fails
+   * closed rather than accepting the parent's own claim.
+   *
+   * ```text
+   * undefined  -> delegation call fails closed (missing required configuration)
+   * []         -> valid configuration authorizing no delegation root
+   * ```
+   *
+   * `undefined` is NOT "accept any issuer/policy". The distinction between
+   * absent and empty is deliberate and must not be collapsed.
+   *
+   * Optional in the type because the ordinary `guard(action, execute)` path
+   * never reads it: there, the authorization is the untouched return value of
+   * `engine.evaluatePure()` in the same call, and its expectations come from
+   * the engine's own trusted configuration. Framework adapters do not expose
+   * delegation and therefore need not configure this.
+   *
+   * Authority is a complete pair. Do not decompose it into separate issuer and
+   * policy allow-lists — that authorizes their Cartesian product.
+   */
+  trustedDelegationAuthorities?: readonly AuthorizationAuthority[];
 
   /**
    * Pluggable replay store for durable auth_id and delegation_id tracking.

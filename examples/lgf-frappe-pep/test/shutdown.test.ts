@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { PepConfig } from "../src/config.js";
 import { createPepServer, installShutdownHandlers } from "../src/server.js";
 import type { ReplayStoreHandle } from "../src/replay.js";
+import { POLICY_ID } from "../src/policy.js";
 
 function makeConfig(replayStore: PepConfig["replayStore"]): Pick<PepConfig, "mode" | "replayStore" | "port"> {
   return {
@@ -182,6 +183,7 @@ describe("PEP runtime shutdown hardening", () => {
         signingPublicKeyPem: "test-public-key",
         signingKid: "test-key-1",
         issuer: "oxdeai.lgf-frappe-pep",
+        trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
         authorizationTtlSeconds: 60,
       },
       replayStoreHandleFactory: (): ReplayStoreHandle => ({

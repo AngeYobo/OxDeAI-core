@@ -77,6 +77,7 @@ function makeGuardConfig(overrides: Partial<OpenAIAgentsGuardConfig> = {}): Open
 function makeDenyEngine(): PolicyEngine {
   return {
     evaluatePure: () => ({ decision: "DENY" as const, reasons: ["KILL_SWITCH_GLOBAL"] }),
+    computePolicyId: () => "p".repeat(64),
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }
@@ -89,6 +90,7 @@ function makeNoAuthEngine(state: State): PolicyEngine {
       authorization: undefined as unknown as Authorization,
       nextState: state,
     }),
+    computePolicyId: () => "p".repeat(64),
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }

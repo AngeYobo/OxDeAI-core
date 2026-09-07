@@ -40,6 +40,15 @@ function authByRef(authVectors: any, id: string): AuthorizationV1 {
   return structuredClone(vector.artifact) as AuthorizationV1;
 }
 
+/**
+ * Issuer-policy authority for the locked vector corpus.
+ *
+ * Fixed corpus constants, NOT read off the artifact under test. The previous
+ * helper passed `expectedPolicyId: auth.policy_id`, which compared each vector
+ * against itself and could never fail (#301).
+ */
+const VECTOR_AUTHORITIES = [{ issuer: "issuer-1", policyId: "policy-1" }] as const;
+
 function expectedAuthorizationDecision(vector: any, authVectors: any): { decision: "ALLOW" | "DENY"; error: string | null } {
   const auth = structuredClone(vector.artifact) as AuthorizationV1;
   const keySet = vectorKeySet(authVectors);
@@ -49,8 +58,7 @@ function expectedAuthorizationDecision(vector: any, authVectors: any): { decisio
     trustedKeySets: [keySet],
     requireSignatureVerification: true,
     expectedAudience: "pep-gateway.local",
-    expectedIssuer: keySet.issuer,
-    expectedPolicyId: auth.policy_id,
+    trustedAuthorizationAuthorities: VECTOR_AUTHORITIES,
   });
 
   if (verification.status !== "ok") {
@@ -103,7 +111,7 @@ test("pep-gateway-v1 locked vectors execute through reusable gateway", async () 
   for (const vector of pepVectors.vectors) {
     const gateway = createPepGatewayExecutor({
       expectedAudience: "pep-gateway.local",
-      expectedIssuer: keySet.issuer,
+      trustedAuthorizationAuthorities: VECTOR_AUTHORITIES,
       trustedKeySets: [keySet],
       internalExecutorToken: pepVectors.gateway_secret,
       now: () => fixedNow,

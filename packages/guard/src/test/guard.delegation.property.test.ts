@@ -83,6 +83,9 @@ const KEYSET: KeySet = {
   keys: [{ kid: "k1", alg: "Ed25519", public_key: KEYS.publicKey.toString() }],
 };
 
+/** #301 delegation-root authority: one explicit pair, never issuers x policies. */
+const PROP_AUTHORITIES = [{ issuer: KEYSET.issuer, policyId: "policy-1" }] as const;
+
 const TOOL_POOL = [
   "provision_gpu",
   "query_db",
@@ -146,6 +149,7 @@ function makeGuardConfig(overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardCon
     setState: () => true,
     trustedKeySets: [KEYSET],
     expectedAudience: "parent-agent",
+    trustedDelegationAuthorities: PROP_AUTHORITIES,
     ...overrides,
   };
 }

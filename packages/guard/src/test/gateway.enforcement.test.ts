@@ -12,6 +12,10 @@ import {
 import { TEST_KEYSET, signAuth } from "./helpers/fixtures.js";
 
 const AUDIENCE = "gateway-test-audience";
+/** Default fixture policy_id; see signAuth() in helpers/fixtures.ts. */
+const POLICY_ID = "p".repeat(64);
+/** #301: one explicit pair, never issuers x policies. */
+const AUTHORITIES = [{ issuer: TEST_KEYSET.issuer, policyId: POLICY_ID }] as const;
 const TOKEN = "internal-token-for-tests";
 const ACTION = {
   type: "EXECUTE",
@@ -33,7 +37,7 @@ test("gateway valid AuthorizationV1 forwards with internal capability and execut
   const seenHeaders: Record<string, string>[] = [];
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
-    expectedIssuer: TEST_KEYSET.issuer,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async (_action, headers) => {
@@ -55,6 +59,7 @@ test("gateway missing AuthorizationV1 denies without upstream call", async () =>
   let upstreamCalled = false;
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => {
@@ -76,6 +81,7 @@ test("gateway malformed request denies without upstream call", async () => {
   let upstreamCalled = false;
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => {
@@ -100,6 +106,7 @@ test("gateway invalid signature denies without upstream call", async () => {
   auth.signature = "not-a-valid-signature";
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => {
@@ -121,6 +128,7 @@ test("gateway intent mismatch denies without upstream call", async () => {
   const auth = makeAuth({ intent_hash: "d".repeat(64) });
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => {
@@ -141,6 +149,7 @@ test("gateway auth_id replay denies second submission without upstream call", as
   let upstreamCalls = 0;
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => {
@@ -211,6 +220,7 @@ test("protected upstream executes only with valid internal token", async () => {
 test("gateway maps upstream error to 502 and never reports executed=true", async () => {
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     executeUpstream: async () => ({ status: 500, body: { error: "boom", executed: false } }),
@@ -226,6 +236,7 @@ test("gateway maps upstream error to 502 and never reports executed=true", async
 test("gateway maps upstream timeout to 504 and never reports executed=true", async () => {
   const gateway = createPepGatewayExecutor({
     expectedAudience: AUDIENCE,
+    trustedAuthorizationAuthorities: AUTHORITIES,
     trustedKeySets: [TEST_KEYSET],
     internalExecutorToken: TOKEN,
     timeoutMs: 10,

@@ -122,13 +122,21 @@ export function handleExecute(
       );
     }
 
-    // 4. Verify AuthorizationV1 (signature, issuer, audience, expiry, decision, structural)
+    // 4. Verify AuthorizationV1 — two independent questions, both required:
+    //      trustedKeySets                  -> which key is trusted for this claimed issuer?
+    //      trustedAuthorizationAuthorities -> is that issuer authorized for this policy_id?
+    //
+    //    A valid signature answers only the first. Without the second, any
+    //    issuer holding a trusted key could issue for any policy this PEP
+    //    enforces. Both lists come from deployment configuration established
+    //    before the request arrived; neither is read out of the artifact.
     const verification = verifyAuthorization(authorization, {
       now,
       mode: "strict",
       trustedKeySets,
       requireSignatureVerification: true,
       expectedAudience: config.expectedAudience,
+      trustedAuthorizationAuthorities: config.trustedAuthorizationAuthorities,
     });
 
     if (verification.status !== "ok") {

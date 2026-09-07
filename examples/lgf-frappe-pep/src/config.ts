@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import type { KeyObject } from "node:crypto";
+import type { AuthorizationAuthority } from "@oxdeai/core";
+import { POLICY_ID } from "./policy.js";
 
 export type PepMode = "enforce" | "observe";
 
@@ -27,6 +29,23 @@ export type PepConfig = {
   signingPublicKeyPem: string;
   signingKid: string;
   issuer: string;
+  /**
+   * (issuer, policyId) pairs this PEP will accept, as complete pairs.
+   *
+   * Both members come from trusted deployment configuration that exists before
+   * any request: `issuer` from the ISSUER env var, `policyId` from the hash of
+   * this deployment's policy descriptor. Neither is read out of the incoming
+   * authorization, and neither is derived from an agent identity.
+   *
+   * A valid Ed25519 signature under `trustedKeySets` proves that a trusted key
+   * for the claimed issuer signed the artifact. It does NOT prove that this
+   * issuer may issue for the claimed `policy_id`. This list proves that.
+   *
+   * Deliberately a pair list rather than two allow-lists: separate issuer and
+   * policy sets would authorize their Cartesian product, so adding a second
+   * issuer later would silently grant it every existing policy.
+   */
+  trustedAuthorizationAuthorities: readonly AuthorizationAuthority[];
   authorizationTtlSeconds: number;
 };
 
@@ -107,6 +126,7 @@ export function loadConfig(): PepConfig {
     signingPublicKeyPem,
     signingKid,
     issuer,
+    trustedAuthorizationAuthorities: [{ issuer, policyId: POLICY_ID }],
     authorizationTtlSeconds,
   };
 }
@@ -123,6 +143,9 @@ export function redactedConfigSummary(config: PepConfig): Record<string, unknown
     port: config.port,
     signingKid: config.signingKid,
     issuer: config.issuer,
+    trustedAuthorizationAuthorities: config.trustedAuthorizationAuthorities.map(
+      (a) => `${a.issuer}/${a.policyId}`
+    ),
     authorizationTtlSeconds: config.authorizationTtlSeconds,
   };
 }

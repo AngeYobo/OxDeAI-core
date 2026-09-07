@@ -2,7 +2,7 @@
 import { createServer, request as httpRequest } from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from "node:http";
 import { sha256HexFromJson, verifyAuthorization } from "@oxdeai/core";
-import type { AuthorizationV1, KeySet } from "@oxdeai/core";
+import type { AuthorizationAuthority, AuthorizationV1, KeySet } from "@oxdeai/core";
 import { createInMemoryReplayStore } from "./replayStore.js";
 import type { ReplayStore } from "./replayStore.js";
 
@@ -41,7 +41,33 @@ export type PepGatewayOptions = {
   trustedKeySets: KeySet | readonly KeySet[];
   internalExecutorToken: string;
   executeUpstream: UpstreamExecutor;
-  expectedIssuer?: string;
+  /**
+   * Deployer-configured (issuer, policyId) pairs authorized to issue
+   * authorizations accepted by this gateway. REQUIRED.
+   *
+   * The gateway is the highest-risk boundary in the system: the authorization
+   * arrives inside an untrusted request. A valid signature under
+   * {@link trustedKeySets} proves that a trusted key for the *claimed* issuer
+   * signed the artifact — it does not prove that this issuer may issue for the
+   * claimed `policy_id`. This list is the only thing that can prove the latter,
+   * and it must exist before the request arrives.
+   *
+   * ```text
+   * missing    -> createPepGatewayExecutor() throws at construction
+   * []         -> valid configuration authorizing no pair; every request denied
+   * ```
+   *
+   * There is no unconstrained mode. `undefined` is a configuration error, not
+   * "accept any issuer/policy".
+   *
+   * Authority is a complete pair, matched exactly on both members. Do not
+   * decompose it into separate issuer and policy allow-lists: given `A/P1` and
+   * `B/P2`, that would also authorize `A/P2` and `B/P1`.
+   *
+   * ⚠️ Supersedes the removed `expectedIssuer` option. To constrain the gateway
+   * to a single issuer, list only that issuer's pairs.
+   */
+  trustedAuthorizationAuthorities: readonly AuthorizationAuthority[];
   replayStore?: ReplayStore;
   now?: () => number;
   timeoutMs?: number;
@@ -132,6 +158,19 @@ export function createPepGatewayExecutor(options: PepGatewayOptions) {
   requireText(options.internalExecutorToken, "internalExecutorToken");
   const trustedKeySets = asKeySets(options.trustedKeySets);
   if (trustedKeySets.length === 0) throw new Error("trustedKeySets are required");
+  // Fail at construction, not at first request: a gateway that cannot decide
+  // policy authority must never come up in a state where it can serve traffic.
+  // An explicitly configured empty array is accepted here and denies every
+  // request at the authority check — a deliberate configuration, and distinct
+  // from having configured nothing at all.
+  const trustedAuthorizationAuthorities = options.trustedAuthorizationAuthorities;
+  if (!Array.isArray(trustedAuthorizationAuthorities)) {
+    throw new Error(
+      "trustedAuthorizationAuthorities is required: the gateway accepts authorizations from untrusted " +
+        "request input and cannot infer which issuer is authorized for which policy_id. " +
+        "An absent authority list is not an unconstrained mode."
+    );
+  }
   const replayStore = options.replayStore ?? createInMemoryReplayStore();
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
   const hashAction = options.hashAction ?? sha256HexFromJson;
@@ -161,8 +200,11 @@ export function createPepGatewayExecutor(options: PepGatewayOptions) {
       trustedKeySets,
       requireSignatureVerification: true,
       expectedAudience: options.expectedAudience,
-      expectedIssuer: options.expectedIssuer,
-      expectedPolicyId: authorization.policy_id,
+      // `expectedPolicyId: authorization.policy_id` was removed here (#301): it
+      // compared the artifact against itself and proved nothing. Policy
+      // authority now comes from deployer configuration that existed before the
+      // request, evaluated as a complete (issuer, policy_id) pair.
+      trustedAuthorizationAuthorities,
     });
 
     if (verification.status !== "ok") {

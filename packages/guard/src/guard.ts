@@ -11,6 +11,7 @@ import type { ProvenanceRecord } from "./provenance.js";
 import {
   OxDeAIDenyError,
   OxDeAIAuthorizationError,
+  OxDeAIAuthorityError,
   OxDeAIConflictError,
   OxDeAIDelegationError,
   OxDeAIGuardConfigurationError,
@@ -53,6 +54,16 @@ function validateConfig(config: OxDeAIGuardConfig): void {
   }
   if (!config.engine || typeof config.engine.evaluatePure !== "function") {
     throw new OxDeAIGuardConfigurationError("config.engine must be a PolicyEngine instance with an evaluatePure method.");
+  }
+  // #301: the direct path derives its expected policy_id from the engine's own
+  // trusted configuration. An engine that cannot state its policy identity
+  // cannot support that check, so it is rejected at construction rather than
+  // producing a TypeError mid-request.
+  if (typeof config.engine.computePolicyId !== "function") {
+    throw new OxDeAIGuardConfigurationError(
+      "config.engine must expose computePolicyId(): the guard derives the expected policy_id from trusted " +
+        "engine configuration rather than from the authorization artifact it is verifying."
+    );
   }
   if (typeof config.getState !== "function") {
     throw new OxDeAIGuardConfigurationError("config.getState must be a function.");
@@ -232,6 +243,28 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
         );
       }
 
+      // ── Required delegation-root authority configuration ─────────────────
+      //
+      // `parentAuth` is caller-supplied. Absence of an authority list is a
+      // MISSING CONFIGURATION condition, never "accept any issuer/policy". The
+      // guard cannot be construction-checked for this, because whether a call
+      // uses delegation is only known per call — so it fails closed here.
+      //
+      // An explicitly configured `[]` is a different, valid state: it reaches
+      // the authority check below and authorizes nothing. Do not collapse them.
+      const delegationAuthorities = config.trustedDelegationAuthorities;
+      if (delegationAuthorities === undefined) {
+        throw reject(
+          "DELEGATION",
+          "AUTHORIZATION_AUTHORITY_DENIED",
+          new OxDeAIGuardConfigurationError(
+            "config.trustedDelegationAuthorities is required for delegation calls and was not configured. " +
+              "A caller-supplied parent authorization cannot establish its own policy authority, and an " +
+              "absent authority list is not an unconstrained mode. Execution blocked."
+          )
+        );
+      }
+
       const now = Math.floor(Date.now() / 1000);
       const violationMessages: string[] = [];
 
@@ -261,17 +294,8 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       // consumed anything; the fallback above assumes success without a store.
       lifecycle.delegationConsumed = replayStore.consumeDelegationId !== undefined;
 
-      // Verify delegation chain:
-      //   - parent hash binding
-      //   - parent expiry
-      //   - delegator === parent.audience
-      //   - policy_id binding
-      //   - delegation expiry <= parent expiry
-      //   - delegation expiry
-      //   - delegation signature (if trustedKeySets provided)
-      //   - scope narrowing against parent (enforced via parentScope)
-      //
-      // Validate parentScope before chain verification. Fail closed on missing or malformed scope.
+      // Validate parentScope before anything trusts it. Fail closed on missing
+      // or malformed scope.
       const { parentScope } = opts.delegation;
       if (!isValidDelegationScope(parentScope)) {
         throw reject(
@@ -283,6 +307,111 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
         );
       }
 
+      // ── Parent authentication, then parent authorization ─────────────────
+      //
+      // ORDERING IS SECURITY-RELEVANT (#301). `verifyDelegationChain` consumes
+      // parent.audience, parent.policy_id and parent.expiry in DENY-affecting
+      // comparisons, so the parent must be BOTH authenticated and authorized
+      // before any of its fields may serve as the child's trust reference:
+      //
+      //   authenticate parent -> authorize parent -> only then trust parent fields
+      //
+      // Previously the chain was verified first, which let a caller-supplied
+      // parent shape the child's validation before its own signature had been
+      // checked at all.
+      //
+      // Consume the parentAuth auth_id first, so a replayed parent cannot be
+      // re-presented while its authority is being evaluated.
+      let parentAuthConsumed: boolean;
+      try {
+        parentAuthConsumed = await replayStore.consumeAuthId(
+          parentAuth.auth_id, { expiry: parentAuth.expiry }
+        );
+      } catch (err) {
+        throw reject(
+          "REPLAY",
+          "REPLAY_STORE_UNAVAILABLE",
+          new OxDeAIAuthorizationError(
+            `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+          )
+        );
+      }
+      if (!parentAuthConsumed) {
+        throw reject(
+          "REPLAY",
+          "AUTHORIZATION_REPLAY",
+          new OxDeAIAuthorizationError(
+            "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
+          )
+        );
+      }
+      lifecycle.authorizationConsumed = true;
+
+      // Authenticate the parent signature AND authorize its (issuer, policy_id)
+      // pair in one verification. `expectedIssuer` / `expectedPolicyId` are
+      // deliberately NOT passed: deriving them from `parentAuth` would compare
+      // the artifact against itself. Authority comes only from
+      // `config.trustedDelegationAuthorities`, configured before this request.
+      // `expectedAudience` remains an independent deployer-supplied scalar and
+      // is still enforced.
+      const parentAuthResult = strictVerifyAuthorization(parentAuth as AuthorizationV1, {
+        now,
+        mode: "strict",
+        trustedKeySets,
+        requireSignatureVerification: true,
+        expectedAudience: config.expectedAudience,
+        trustedAuthorizationAuthorities: delegationAuthorities,
+      });
+
+      if (parentAuthResult.status !== "ok") {
+        const codes = parentAuthResult.violations?.map((v) => v.code) ?? [];
+        const reasons = codes.join(", ") || parentAuthResult.status || "unknown reason";
+        // An authority rejection is reported distinctly from a generic
+        // verification failure: "this issuer may not issue for this policy" is a
+        // different operational fact from "this artifact did not verify", and an
+        // audit reader must be able to tell them apart.
+        //
+        // ⚠️ SOLE-DEFECT RULE. `verifyAuthorization` AGGREGATES violations, so a
+        // parent can be unauthorized for its pair AND forged, expired, or issued
+        // to another audience at the same time. `OxDeAIAuthorityError` documents
+        // an *authenticated* artifact that merely lacks policy authority, so
+        // emitting it for a mixed failure would state something false and would
+        // let an authority violation mask an authentication failure. It is
+        // therefore raised only when authority is the ONLY defect; every mixed
+        // result stays a generic verification failure, which is the stricter of
+        // the two classifications.
+        const uniqueCodes = new Set(codes);
+        const authorityIsSoleDefect =
+          uniqueCodes.size === 1 && uniqueCodes.has("AUTH_ISSUER_POLICY_NOT_AUTHORIZED");
+        if (authorityIsSoleDefect) {
+          throw reject(
+            "AUTHORIZATION_VERIFICATION",
+            "AUTHORIZATION_AUTHORITY_DENIED",
+            new OxDeAIAuthorityError(
+              "Parent authorization issuer is not authorized for its claimed policy_id. " +
+                "A valid signature does not establish policy authority. Execution blocked."
+            )
+          );
+        }
+        throw reject(
+          "AUTHORIZATION_VERIFICATION",
+          "AUTHORIZATION_VERIFICATION_FAILED",
+          new OxDeAIAuthorizationError(`Parent authorization verification failed: ${reasons}. Execution blocked.`)
+        );
+      }
+
+      // ── Parent is now authenticated AND authorized ───────────────────────
+      // Only past this line may parent fields act as the child's trust root.
+      //
+      // Verify delegation chain:
+      //   - parent hash binding
+      //   - parent expiry
+      //   - delegator === parent.audience
+      //   - policy_id binding
+      //   - delegation expiry <= parent expiry
+      //   - delegation expiry
+      //   - delegation signature (if trustedKeySets provided)
+      //   - scope narrowing against parent (enforced via parentScope)
       const chainResult = verifyDelegationChain(delegation, parentAuth, {
         now,
         trustedKeySets: config.trustedKeySets,
@@ -329,56 +458,6 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
           new OxDeAIDelegationError(violationMessages)
         );
       }
-
-      // Enforce strict verification on the parent Authorization as well.
-      // Atomically check-and-consume the parentAuth auth_id. Fail closed on store errors.
-      let parentAuthConsumed: boolean;
-      try {
-        parentAuthConsumed = await replayStore.consumeAuthId(
-          parentAuth.auth_id, { expiry: parentAuth.expiry }
-        );
-      } catch (err) {
-        throw reject(
-          "REPLAY",
-          "REPLAY_STORE_UNAVAILABLE",
-          new OxDeAIAuthorizationError(
-            `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
-          )
-        );
-      }
-      if (!parentAuthConsumed) {
-        throw reject(
-          "REPLAY",
-          "AUTHORIZATION_REPLAY",
-          new OxDeAIAuthorizationError(
-            "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
-          )
-        );
-      }
-      lifecycle.authorizationConsumed = true;
-
-      const parentAuthResult = strictVerifyAuthorization(parentAuth as AuthorizationV1, {
-        now,
-        mode: "strict",
-        trustedKeySets,
-        requireSignatureVerification: true,
-        expectedPolicyId: parentAuth.policy_id,
-        expectedAudience: config.expectedAudience,
-        expectedIssuer: parentAuth.issuer,
-      });
-
-      if (parentAuthResult.status !== "ok") {
-        const reasons =
-          parentAuthResult.violations?.map((v) => v.code).join(", ") ||
-          parentAuthResult.status ||
-          "unknown reason";
-        throw reject(
-          "AUTHORIZATION_VERIFICATION",
-          "AUTHORIZATION_VERIFICATION_FAILED",
-          new OxDeAIAuthorizationError(`Parent authorization verification failed: ${reasons}. Execution blocked.`)
-        );
-      }
-
       // parentAuth is AuthorizationV1; cast to Authorization for hook/audit
       // compatibility. Legacy fields will be absent — callers on the delegation
       // path should treat the value as AuthorizationV1 shape only.
@@ -518,9 +597,29 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       mode: "strict",
       trustedKeySets,
       requireSignatureVerification: true,
-      expectedPolicyId: authorization.policy_id,
+      // `expectedPolicyId` is derived from trusted engine construction BEFORE
+      // this artifact exists — never read back out of the artifact it
+      // constrains. The previous `expectedPolicyId: authorization.policy_id`
+      // compared the artifact against itself and could not fail (#301).
+      //
+      // `expectedIssuer` is deliberately NOT passed. Issuer is already bound
+      // cryptographically: findKeyInKeySets() selects the key set by
+      // `keyset.issuer === authorization.issuer`, so an artifact claiming an
+      // issuer only verifies if a DEPLOYER-CONFIGURED key set for that issuer
+      // holds the signing key. Re-asserting the issuer here would restate a
+      // property trustedKeySets already enforces, and sourcing it
+      // independently would mean widening PolicyEngine's public API for no
+      // security gain. The former `expectedIssuer: authorization.issuer` is
+      // removed rather than replaced.
+      //
+      // This path takes no (issuer, policy_id) authority list: the artifact is
+      // the untouched return value of config.engine.evaluatePure() in THIS call
+      // and never crossed an external boundary, so there is no external
+      // authority claim to check. See `trustedDelegationAuthorities` and
+      // `PepGatewayOptions.trustedAuthorizationAuthorities` for the paths where
+      // the artifact does arrive from outside.
+      expectedPolicyId: config.engine.computePolicyId(),
       expectedAudience: config.expectedAudience,
-      expectedIssuer: authorization.issuer,
     });
 
     if (authResult.status !== "ok") {

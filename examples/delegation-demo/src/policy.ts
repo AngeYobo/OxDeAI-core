@@ -18,7 +18,7 @@
 
 import { generateKeyPairSync } from "node:crypto";
 import { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } from "@oxdeai/core";
-import type { Intent, KeySet, State } from "@oxdeai/core";
+import type { Intent, KeySet, State, AuthorizationAuthority } from "@oxdeai/core";
 
 export const POLICY_ID =
   "demo-delegation-0000000000000000000000000000000000000000000000";
@@ -72,6 +72,22 @@ export const TRUSTED_KEYSETS: KeySet[] = [
     version: "1",
     keys: [{ kid: AGENT_A_KID, alg: "Ed25519", public_key: agentAKeys.publicKey.toString() }],
   },
+];
+
+/**
+ * Delegation-root authority: which issuer may issue for which policy (#301).
+ *
+ * The parent AuthorizationV1 is presented to the guard by the caller, so a
+ * valid signature under TRUSTED_KEYSETS proves only that a trusted key for the
+ * claimed issuer signed it — not that the issuer may issue for POLICY_ID.
+ * Both members here come from deployment constants, never from the artifact.
+ *
+ * Note this is a strict subset of TRUSTED_KEYSETS: AGENT_A holds a trusted
+ * signing key (it signs the DelegationV1) but is deliberately NOT a delegation
+ * root, so it cannot mint a parent authorization for this policy.
+ */
+export const TRUSTED_DELEGATION_AUTHORITIES: readonly AuthorizationAuthority[] = [
+  { issuer: AUTH_ISSUER, policyId: POLICY_ID },
 ];
 
 const DEFAULT_DEMO_SECRET = "test-secret-must-be-at-least-32-chars!!";

@@ -518,7 +518,11 @@ OxDeAI explicitly does **not**:
 - [ ] Ed25519 private keys stored in a secrets manager or HSM, not in code or config files
 - [ ] Public keys published to `trustedKeySets` as SPKI PEM
 - [ ] `kid` values are unique within each issuer's keyset
-- [ ] `expectedAudience` and `expectedIssuer` are set correctly in guard config
+- [ ] `expectedAudience` is set correctly in guard config
+- [ ] Issuer-policy authority is configured as complete `(issuer, policyId)` pairs at every
+      boundary accepting an externally supplied authorization — `trustedAuthorizationAuthorities`
+      on the PEP gateway, `trustedDelegationAuthorities` on the guard delegation path. Adding a
+      new signing key set does NOT grant that issuer authority over existing policies (#301)
 - [ ] `trustedKeySets` is loaded from a versioned, integrity-verified config artifact
 - [ ] Replay store is backend-backed (not in-memory) for multi-process deployments
 - [ ] Replay store TTL ≥ maximum authorization expiry window

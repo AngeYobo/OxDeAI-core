@@ -598,7 +598,12 @@ no partial acceptance, and no advisory-only path.
 ### Profile A: Core-native
 
 - Use `@oxdeai/core`'s `signAuthorizationEd25519` or equivalent
-- Configure `expectedAudience` and `expectedIssuer` at the guard
+- Configure `expectedAudience` at the guard
+- At boundaries that accept an externally supplied `AuthorizationV1` (PEP gateway,
+  delegation `parentAuth`), implementations **MUST** configure issuer-policy authority
+  as complete `(issuer, policyId)` pairs. A trusted signing key is not policy authority:
+  a valid signature only proves that a trusted key for the *claimed* issuer signed the
+  artifact (#301). Missing authority configuration **MUST** fail closed.
 - Use any replay store; in-memory for development, durable backend for production
 - No `computeStateHash` configuration needed
 

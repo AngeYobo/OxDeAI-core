@@ -756,6 +756,107 @@
       "maintainerDecisionRequired": false
     },
     {
+      "id": "AUTH-AUTHORITY-001",
+      "title": "Externally supplied authorizations require trusted issuer-policy authority",
+      "source": {
+        "path": "docs/spec/interoperability/external-provider-profile.md",
+        "section": "### Profile A: Core-native",
+        "quote": "implementations **MUST** configure issuer-policy authority",
+        "role": "normative"
+      },
+      "strength": "MUST",
+      "category": "TRUST",
+      "implementation": [
+        {
+          "path": "packages/core/src/verification/authorizationAuthority.ts",
+          "symbol": "isTrustedAuthorizationAuthority"
+        },
+        {
+          "path": "packages/core/src/verification/verifyAuthorization.ts",
+          "symbol": "verifyAuthorization"
+        },
+        {
+          "path": "packages/guard/src/gateway.ts",
+          "symbol": "createPepGatewayExecutor"
+        },
+        {
+          "path": "packages/guard/src/guard.ts",
+          "symbol": "OxDeAIGuard"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "packages/guard/src/test/gateway.authority.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "#301 gateway ANTI-CARTESIAN: trusted issuer A signing unauthorized policy P2 is rejected; upstream never called"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/gateway.authority.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "A valid signature from a trusted issuer does not authorize an unconfigured issuer-policy pair, and upstream execution remains blocked."
+        },
+        {
+          "path": "packages/guard/src/test/guard.delegation.authority.test.ts",
+          "selector": {
+            "type": "test",
+            "id": "#301 delegation ANTI-CARTESIAN: validly signed parent A/P2 is rejected; execute never called"
+          },
+          "kind": "integration",
+          "negative": true,
+          "portable": false,
+          "runner": {
+            "path": "packages/guard/package.json",
+            "contains": "dist/test/guard.delegation.authority.test.js",
+            "command": "pnpm -C packages/guard test",
+            "runtime": "TypeScript"
+          },
+          "supports": "An externally supplied delegation parent cannot establish a delegation root unless its exact issuer-policy pair is independently trusted."
+        }
+      ],
+      "requiredLevels": [
+        "TRACEABLE",
+        "TESTED",
+        "INTEGRATION_TESTED",
+        "ADVERSARIAL_TESTED"
+      ],
+      "securityCritical": true,
+      "negativeRequired": true,
+      "classification": "implementation-specific",
+      "portableRequired": false,
+      "notes": "Applies to implemented boundaries that accept externally supplied AuthorizationV1 artifacts. Trusted signing keys authenticate the claimed issuer but do not independently grant policy authority. Evidence does not establish arbitrary deployment non-bypassability.",
+      "recordType": "requirement",
+      "normativeState": "specified",
+      "evidenceState": "mapped",
+      "scopeDisposition": "in-scope",
+      "appliesWhen": [],
+      "dependsOn": [],
+      "inferenceGuard": [
+        {
+          "from": "STRUCTURAL_PASS",
+          "to": "SEMANTIC_PROOF",
+          "reason": "Reference consistency does not prove the claimed semantics."
+        },
+        {
+          "from": "TESTED",
+          "to": "WHOLE_PROTOCOL_CONFORMANCE",
+          "reason": "Selected executable cases do not establish whole-protocol conformance."
+        },
+        {
+          "from": "SIGNATURE_VALID",
+          "to": "ISSUER_POLICY_AUTHORIZED",
+          "reason": "A valid signature authenticates the claimed issuer key but does not establish authority to issue for the claimed policy."
+        }
+      ],
+      "maintainerDecisionRequired": false
+    },
+    {
       "id": "AUTH-REPLAY-001",
       "title": "Reused auth_id cannot execute",
       "source": {

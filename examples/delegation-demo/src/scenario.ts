@@ -43,8 +43,7 @@ import {
   CHILD_ACTION_2_AMOUNT,
   CHILD_ACTION_1_UNITS,
   CHILD_ACTION_2_UNITS,
-  PARENT_AMOUNT,
-} from "./policy.js";
+  PARENT_AMOUNT, TRUSTED_DELEGATION_AUTHORITIES } from "./policy.js";
 
 // ── Step types ─────────────────────────────────────────────────────────────────
 
@@ -120,6 +119,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
     trustedKeySets: TRUSTED_KEYSETS,
+    trustedDelegationAuthorities: TRUSTED_DELEGATION_AUTHORITIES,
     mapActionToIntent: () => parentIntent,
     beforeExecute(_action, authorization) {
       parentDecision = "ALLOW";
@@ -233,6 +233,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
     trustedKeySets: TRUSTED_KEYSETS,
+    trustedDelegationAuthorities: TRUSTED_DELEGATION_AUTHORITIES,
     mapActionToIntent: () => childIntent1,
     beforeExecute() {
       child1Decision = "ALLOW";
@@ -298,6 +299,7 @@ export async function runScenario(): Promise<ScenarioStep[]> {
     setState: (s) => { state = s; return true; },
     expectedAudience: AGENT_A,
     trustedKeySets: TRUSTED_KEYSETS,
+    trustedDelegationAuthorities: TRUSTED_DELEGATION_AUTHORITIES,
     mapActionToIntent: () => childIntent2,
     beforeExecute() {
       child2Decision = "ALLOW"; // should not be reached

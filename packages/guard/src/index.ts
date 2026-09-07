@@ -41,6 +41,7 @@ export type { RedisClient, RedisReplayStoreConfig } from "./replayStore.redis.js
 export {
   OxDeAIDenyError,
   OxDeAIAuthorizationError,
+  OxDeAIAuthorityError,
   OxDeAIConflictError,
   OxDeAIDelegationError,
   OxDeAIGuardConfigurationError,
