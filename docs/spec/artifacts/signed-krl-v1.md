@@ -1,6 +1,7 @@
 # SignedKRLV1 Specification
 
-**Version:** v1.0 (Patch A — artifact definition and pure verifier only)  
+**Version:** v1.0
+**Patch:** Patch A - artifact definition and pure verifier only
 **Status:** Draft  
 **Depends on:** `canonicalization-v1.md`, `authorization-v1.md §17` (clock model)
 
@@ -10,36 +11,50 @@
 
 `SignedKRLV1` is a provider-neutral OxDeAI Key Revocation List artifact.
 
-It allows a KRL publisher to cryptographically commit to a set of revoked key IDs
-and expiry semantics, such that any verifier with the correct trusted KRL signing
-public key can verify the list independently — without network trust, without
-transport-layer assumptions, and without shared secrets.
+It allows a KRL publisher to cryptographically commit to a set of revoked key IDs and expiry semantics, such that any verifier with the appropriate trusted KRL signing public key can verify the list independently, without network trust, transport-layer integrity assumptions, or shared secrets.
 
-> **Protocol invariant being enforced:**
->
-> ```
-> revoked provider key
-> → must not be accepted
-> → no AuthorizationV1 bridge
-> → no execution path
-> ```
+### Protocol objective
 
-`SignedKRLV1` closes the gap where an unsigned KRL depends on transport security
-(HTTPS) for its integrity. A compromised transport path can suppress revocations;
-a signed KRL cannot.
+The complete SignedKRL integration is intended to enforce the following end-to-end invariant:
+
+```text
+revoked provider key
+-> must not be accepted
+-> no AuthorizationV1 bridge
+-> no execution path
+```
+
+Patch A does **not** by itself establish this end-to-end execution invariant.
+
+Patch A defines:
+
+- the `SignedKRLV1` artifact
+- its signing construction
+- its trusted-time semantics
+- its pure verification rules
+- portable conformance evidence
+
+Enforcement of a successful KRL verification result inside a provider keystore or execution path is deferred to Patch B.
+
+`SignedKRLV1` closes the integrity gap of an unsigned KRL whose authenticity depends entirely on transport security. A signed KRL can be authenticated independently after delivery.
 
 ---
 
 ## 2. Provider-neutral scope
 
-`SignedKRLV1` is a standalone OxDeAI protocol artifact. It is independent of:
+`SignedKRLV1` is a standalone OxDeAI protocol artifact.
 
-- Any specific provider (Sift, OpenAI, etc.)
-- The `AuthorizationV1` signing key
-- The `DelegationV1` signing key
+It is independent of:
 
-The KRL signing key is a **distinct trust domain**. Verifiers are configured with
-a static trusted KRL signing key set that is separate from authorization key sets.
+- any specific provider, including Sift or OpenAI
+- the `AuthorizationV1` signing key
+- the `DelegationV1` signing key
+
+The KRL signing key is a **distinct trust domain**.
+
+Verifiers MUST be configured with a trusted KRL signing key set that is separate from authorization and delegation signing key sets.
+
+The trust anchor used to verify a KRL MUST NOT depend on a live network fetch during verification.
 
 ---
 
@@ -62,26 +77,30 @@ a static trusted KRL signing key set that is separate from authorization key set
 }
 ```
 
-### Field reference
+### 3.1 Field reference
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+|---|---|---:|---|
 | `version` | `"SignedKRLV1"` | Yes | Artifact type discriminator. |
 | `issuer` | non-empty string | Yes | Identity of the KRL publisher. |
-| `krl_version` | non-negative integer | Yes | Monotonically increasing version counter. See §6. |
-| `issued_at` | integer (unix seconds) | Yes | Informational only in v1. Not enforced as a lower bound. See §7. |
-| `not_after` | integer (unix seconds) | Yes | Strict zero-tolerance expiry. See §5. |
-| `revoked_kids` | array of strings | Yes | Revoked key IDs. Must be deduplicated. See §8. |
-| `nonce` | string | No | Optional replay-prevention nonce. Included in signing payload when present. |
+| `krl_version` | non-negative safe integer | Yes | Per-issuer publication version. See §8. |
+| `issued_at` | integer Unix seconds | Yes | Informational only in v1. See §7. |
+| `not_after` | integer Unix seconds | Yes | Strict zero-tolerance expiry. See §6. |
+| `revoked_kids` | array of strings | Yes | Revoked key IDs. MUST be deduplicated. See §9. |
+| `nonce` | string | No | Optional signed nonce. Patch A defines no consumed-nonce replay state. See §8.2. |
 | `signature.alg` | `"Ed25519"` | Yes | Only Ed25519 is accepted in v1. |
-| `signature.kid` | non-empty string | Yes | Identifies the KRL signing key in the trusted key set. |
-| `signature.sig` | non-empty string | Yes | Base64-encoded Ed25519 signature over the signing payload. |
+| `signature.kid` | non-empty string | Yes | Identifies the KRL signing key in the trusted KRL signing key set. |
+| `signature.sig` | non-empty string | Yes | Base64-encoded Ed25519 signature over the signing input. |
+
+Unknown or structurally invalid fields MUST cause verification failure as `KRL_MALFORMED`.
 
 ---
 
 ## 4. Canonical signing payload
 
-The signing payload **includes all normative fields except `signature.sig`**:
+The signing payload MUST include all normative artifact fields except `signature.sig`.
+
+Example:
 
 ```json
 {
@@ -98,195 +117,537 @@ The signing payload **includes all normative fields except `signature.sig`**:
 }
 ```
 
-The `nonce` field is included when present; it is absent from the payload when the
-artifact does not carry a nonce.
+The optional `nonce` field MUST be included in the signing payload when present.
 
-### Field inclusion / exclusion summary
+When the artifact does not contain `nonce`, the key MUST be omitted entirely from the signing payload.
+
+### 4.1 Field inclusion summary
 
 | Field | In signing payload? |
-|-------|-------------------|
+|---|---:|
 | `version` | Yes |
 | `issuer` | Yes |
 | `krl_version` | Yes |
 | `issued_at` | Yes |
 | `not_after` | Yes |
 | `revoked_kids` | Yes |
-| `nonce` | Yes (when present) |
+| `nonce` | Yes, when present |
 | `signature.alg` | Yes |
 | `signature.kid` | Yes |
-| `signature.sig` | **No** — excluded |
+| `signature.sig` | No |
+
+This construction is specific to `SignedKRLV1`.
+
+Implementations MUST NOT infer the signing-payload rules of `SignedKRLV1` from `AuthorizationV1` or `DelegationV1`.
 
 ---
 
-## 5. KRL domain prefix
+## 5. Signing domain and signature construction
 
-The Ed25519 signature is computed over:
+The Ed25519 signing input is:
 
-```
+```text
 OXDEAI_KRL_V1\n + canonicalJson(signedKrlSigningPayload(envelope))
 ```
 
-Using `signatureInput(SIGNING_DOMAINS.KRL_V1, signedKrlSigningPayload(envelope))`
-from the OxDeAI core cryptographic library.
+Equivalent reference-library construction:
 
-This domain prefix is the **provider contract for SignedKRLV1**. Any implementation
-signing or verifying a `SignedKRLV1` artifact must use:
+```text
+signatureInput(
+  SIGNING_DOMAINS.KRL_V1,
+  signedKrlSigningPayload(envelope)
+)
+```
 
-1. OxDeAI canonicalization-v1 (not Sift canonicalization or any other encoding)
-2. The `OXDEAI_KRL_V1\n` domain prefix
-3. Ed25519 raw signing (no hash wrapper — Ed25519 operates directly on the preimage)
+A conforming implementation MUST use:
+
+1. OxDeAI `canonicalization-v1`
+2. the exact domain prefix `OXDEAI_KRL_V1\n`
+3. Ed25519
+4. direct Ed25519 signing over the resulting preimage
+
+Implementations MUST NOT:
+
+- use another canonicalization scheme
+- omit or alter the domain prefix
+- pre-hash the signing input with SHA-256 or another hash before Ed25519 signing
+- encode the signature as base64url instead of the required base64 representation
+
+`signature.sig` MUST contain the base64 encoding of the resulting Ed25519 signature bytes.
 
 ---
 
 ## 6. Strict zero-tolerance expiry semantics
 
-Validity window: `now < not_after`
+`SignedKRLV1` uses the same zero-tolerance upper validity boundary as `AuthorizationV1`.
 
+The validity condition is:
+
+```text
+now < not_after
 ```
-now < not_after   → valid
-now >= not_after  → KRL_EXPIRED (no grace period)
+
+Therefore:
+
+```text
+now < not_after   -> temporally valid
+now >= not_after  -> KRL_EXPIRED
 ```
 
-Exactly parallel to `AuthorizationV1` expiry semantics (see `authorization-v1.md §17`).
-NTP synchronization is required at the verifier.
+At the exact boundary:
 
-Issuers should build delivery latency into the `not_after` window.
+```text
+now == not_after
+```
+
+the artifact MUST be rejected as:
+
+```text
+KRL_EXPIRED
+```
+
+No grace period or clock-skew extension is applied by the SignedKRL verifier.
+
+This is exactly parallel to the `AuthorizationV1` expiry model defined in `authorization-v1.md §17`.
+
+Verifier deployments SHOULD maintain sufficiently synchronized trusted clocks.
+
+Issuers SHOULD account for expected publication and delivery latency when choosing `not_after`.
 
 ---
 
-## 7. `issued_at` — informational only in v1
+## 7. `issued_at` is informational in v1
 
-`issued_at` is required to be an integer unix timestamp, but the verifier does
-**not** enforce a lower bound (`now >= issued_at` is not checked). An artifact
-with `issued_at` in the future is accepted if it passes all other checks.
+`issued_at` MUST be a valid integer Unix timestamp.
 
-This matches the `issued_at` semantics of `AuthorizationV1` (see §17.2 of that spec).
+The verifier MUST NOT enforce `issued_at` as a lower validity boundary in SignedKRLV1 v1.
+
+In particular, this check is not performed:
+
+```text
+now >= issued_at
+```
+
+An artifact with an `issued_at` value in the future MUST NOT be rejected solely for that reason.
+
+It MAY be accepted if every other verification requirement succeeds.
+
+This matches the `issued_at` semantics of `AuthorizationV1 §17.2`.
 
 ---
 
-## 8. Per-issuer `krl_version` regression
+## 8. Per-issuer `krl_version`
 
-`krl_version` must be a non-negative safe integer. Producers must monotonically
-increase `krl_version` across successive KRL publications for the same issuer.
+### 8.1 Version requirements
 
-Verifiers enforce this via an injected `previousKrlVersionByIssuer` map:
+`krl_version` MUST be a non-negative safe integer.
 
+For successive KRL publications belonging to the same issuer, producers MUST assign strictly increasing `krl_version` values.
+
+For example:
+
+```text
+issuer A: 40 -> 41 -> 42
 ```
+
+is conformant producer behavior.
+
+This is a per-issuer sequence. Versions from different issuers are independent:
+
+```text
+issuer A -> version 3
+issuer B -> version 1
+```
+
+is valid.
+
+### 8.2 Verifier regression rule
+
+The verifier receives an optional per-issuer high-watermark through:
+
+```text
+previousKrlVersionByIssuer
+```
+
+When a previous version exists, the verifier MUST apply:
+
+```text
 if krl_version < previousKrlVersionByIssuer[issuer]:
-  → KRL_VERSION_REGRESSION
+    -> KRL_VERSION_REGRESSION
 ```
 
-This check is **per-issuer, not global**. A version-3 KRL from issuer A and a
-version-1 KRL from issuer B are independent.
+Equality does **not** constitute a version regression in v1:
 
-**Patch A limitation:** `previousKrlVersionByIssuer` is injected state only. There
-is no persistent high-watermark storage in v1. The caller (e.g., `SiftHttpKeyStore`
-in Patch B) is responsible for maintaining the per-issuer high-watermark and
-injecting it into verification calls.
+```text
+krl_version == previousKrlVersionByIssuer[issuer]
+```
+
+MUST NOT produce `KRL_VERSION_REGRESSION`.
+
+This permits idempotent re-verification or re-delivery of a KRL carrying the same version.
+
+A producer MUST nevertheless use a strictly higher version when publishing a new KRL for the same issuer.
+
+Patch A does not attempt to determine whether two same-version artifacts contain identical content. Deployment logic MUST NOT treat same-version acceptance as authorization to replace an already trusted high-watermark artifact with conflicting content without an explicit state-management policy.
+
+### 8.3 Optional nonce
+
+`nonce` is an optional signed field.
+
+When present, it is cryptographically bound to the artifact because it is included in the signing payload.
+
+Patch A does **not** define:
+
+- consumed-nonce storage
+- nonce uniqueness requirements
+- nonce replay rejection
+- a replay-window lifecycle for KRL artifacts
+
+Therefore, implementations MUST NOT claim Patch A nonce replay enforcement solely because the artifact contains a `nonce`.
+
+Replay-state semantics, if required by a deployment, belong to the stateful integration layer.
+
+### 8.4 Patch A high-watermark limitation
+
+`previousKrlVersionByIssuer` is injected verifier state.
+
+Patch A defines no persistent high-watermark storage.
+
+The caller is responsible for:
+
+- maintaining the per-issuer high-watermark
+- supplying it to verification
+- updating persistent state only according to the deployment's state-management rules
+
+Persistent high-watermark enforcement is deferred to Patch B.
 
 ---
 
 ## 9. `revoked_kids` deduplication
 
-Producers MUST emit a deduplicated `revoked_kids` list. Verifiers MUST reject
-duplicate entries as `KRL_MALFORMED`. Silent deduplication is not permitted — the
-artifact must be corrected at the producer.
+Producers MUST emit a deduplicated `revoked_kids` array.
+
+Verifiers MUST reject any artifact containing duplicate entries.
+
+Example invalid input:
+
+```json
+{
+  "revoked_kids": ["key-1", "key-1"]
+}
+```
+
+The verifier MUST return:
+
+```text
+KRL_MALFORMED
+```
+
+Silent deduplication is NOT permitted.
+
+The producer must correct the artifact instead.
 
 ---
 
-## 10. Reason codes
+## 10. Verification procedure
+
+To provide deterministic fail-closed behavior and stable reason-code semantics, a SignedKRLV1 verifier MUST apply the following logical verification sequence.
+
+A verifier MAY organize its internal implementation differently only if it produces exactly the same externally observable verdict and reason code for every conforming test vector and every overlapping failure covered by this specification.
+
+### Step 1 - Structural validation
+
+Validate:
+
+- artifact shape
+- required fields
+- field types
+- `version == "SignedKRLV1"`
+- non-empty `issuer`
+- non-negative safe-integer `krl_version`
+- integer `issued_at`
+- integer `not_after`
+- `revoked_kids` is an array of strings
+- no duplicate `revoked_kids`
+- signature object shape
+
+Failure:
+
+```text
+KRL_MALFORMED
+```
+
+### Step 2 - Signature algorithm
+
+Require:
+
+```text
+signature.alg == "Ed25519"
+```
+
+Otherwise:
+
+```text
+KRL_UNSUPPORTED_ALG
+```
+
+This check occurs before cryptographic signature verification.
+
+### Step 3 - Trusted signing key resolution
+
+Resolve `signature.kid` only from the configured trusted KRL signing key set.
+
+If the key is absent:
+
+```text
+KRL_UNKNOWN_SIGNING_KID
+```
+
+If no trusted KRL signing key set was supplied:
+
+```text
+KRL_UNKNOWN_SIGNING_KID
+```
+
+The verifier MUST NOT fetch an unknown KRL signing key from the network.
+
+### Step 4 - Signing key lifecycle
+
+Evaluate the resolved key using the standard key lifecycle rules at trusted time `now`.
+
+If the key exists but is inactive:
+
+```text
+KRL_SIGNING_KEY_INACTIVE
+```
+
+### Step 5 - Signature verification
+
+Construct the signing input exactly as defined in §§4-5 and verify the Ed25519 signature.
+
+If verification fails:
+
+```text
+KRL_SIG_INVALID
+```
+
+### Step 6 - Artifact expiry
+
+Apply:
+
+```text
+now < not_after
+```
+
+If:
+
+```text
+now >= not_after
+```
+
+return:
+
+```text
+KRL_EXPIRED
+```
+
+No `issued_at` lower-bound check is performed.
+
+### Step 7 - Per-issuer version regression
+
+When a prior per-issuer high-watermark exists:
+
+```text
+if krl_version < previousKrlVersionByIssuer[issuer]:
+    -> KRL_VERSION_REGRESSION
+```
+
+Equality is not a regression.
+
+### Step 8 - Success
+
+If all required checks pass:
+
+```text
+status = ok
+```
+
+The pure verifier returns a successful verification result.
+
+Patch A does not itself apply the resulting revocation set to a provider keystore or execution path.
+
+---
+
+## 11. Reason codes
+
+The following reason codes are normative for SignedKRLV1 verification.
 
 | Code | Trigger |
-|------|---------|
-| `KRL_MALFORMED` | Missing required field, wrong type, `revoked_kids` not an array of strings, or duplicate entries in `revoked_kids`. |
-| `KRL_UNSUPPORTED_ALG` | `signature.alg` is present but is not `"Ed25519"`. |
-| `KRL_UNKNOWN_SIGNING_KID` | `signature.kid` not found in the trusted KRL signing key set (or no trusted key set was provided). |
-| `KRL_SIGNING_KEY_INACTIVE` | The KRL signing key was found in the trusted key set, but `keyIsActiveAt()` returned false (revoked, retired past window, or `not_before`/`not_after` constraint). |
-| `KRL_SIG_INVALID` | Ed25519 signature verification failed. |
+|---|---|
+| `KRL_MALFORMED` | Missing required field, wrong type, invalid structural value, malformed `revoked_kids`, or duplicate revoked key IDs. |
+| `KRL_UNSUPPORTED_ALG` | `signature.alg` is present but is not exactly `"Ed25519"`. |
+| `KRL_UNKNOWN_SIGNING_KID` | `signature.kid` is absent from the trusted KRL signing key set, or no trusted KRL signing key set was supplied. |
+| `KRL_SIGNING_KEY_INACTIVE` | The signing key exists but is inactive according to key lifecycle rules at `now`. |
+| `KRL_SIG_INVALID` | Ed25519 signature verification fails. |
 | `KRL_EXPIRED` | `now >= not_after`. |
 | `KRL_VERSION_REGRESSION` | `krl_version < previousKrlVersionByIssuer[issuer]`. |
 
-### `KRL_UNKNOWN_SIGNING_KID` vs `KRL_SIGNING_KEY_INACTIVE`
+### 11.1 Unknown signing key vs inactive signing key
 
-Mirrors the existing `AUTH_KID_UNKNOWN` vs `AUTH_KEY_INACTIVE` distinction:
+These conditions MUST remain distinct.
 
 | Code | Condition |
-|------|-----------|
-| `KRL_UNKNOWN_SIGNING_KID` | `kid` is not present in the trusted key set at all. |
-| `KRL_SIGNING_KEY_INACTIVE` | `kid` is present but `keyIsActiveAt(key, now)` returns `false`. |
+|---|---|
+| `KRL_UNKNOWN_SIGNING_KID` | `kid` is not present in the trusted KRL signing key set. |
+| `KRL_SIGNING_KEY_INACTIVE` | `kid` exists, but `keyIsActiveAt(key, now)` returns false. |
+
+This distinction mirrors `AUTH_KID_UNKNOWN` and `AUTH_KEY_INACTIVE` in AuthorizationV1 verification.
 
 ---
 
-## 11. Static trusted KRL signing key model
+## 12. Static trusted KRL signing key model
 
-KRL signing keys are configured **statically** at the verifier — they are not
-fetched over the network. This is an explicit design choice: the trust anchor for
-KRL integrity must not itself depend on a network fetch that could be suppressed.
+KRL signing keys MUST be configured statically at the verifier.
 
-The trusted KRL signing key set is a standard `KeySet` (as defined in `keyset.ts`),
-using `KeySetKey` entries with `alg: "Ed25519"`. Key lifecycle rules (`status`,
-`not_before`, `not_after`) apply to KRL signing keys exactly as they do to
-authorization signing keys.
+They MUST NOT be discovered through a live network fetch during KRL verification.
+
+This is a deliberate trust-boundary rule: the authenticity anchor for a revocation artifact must not depend on a transport path that could itself suppress or replace the trust material used to verify that artifact.
+
+The trusted KRL signing key set uses the standard OxDeAI `KeySet` / `KeySetKey` model.
+
+KRL signing keys use:
+
+```text
+alg = "Ed25519"
+```
+
+Standard key lifecycle fields apply, including:
+
+- `status`
+- `not_before`
+- `not_after`
+
+`keyIsActiveAt(key, now)` MUST be applied consistently with authorization signing keys.
 
 ---
 
-## 12. Patch A limitations
+## 13. Patch A limitations
 
-The following are explicitly out of scope for Patch A and will be addressed in subsequent patches:
+Patch A includes:
+
+| Capability | Patch A status |
+|---|---|
+| SignedKRLV1 artifact definition | Included |
+| Canonical signing payload | Included |
+| Ed25519 verification | Included |
+| Strict expiry semantics | Included |
+| Per-issuer version regression check | Included |
+| Pure verifier | Included |
+| Portable conformance vectors | Included |
+
+The following are explicitly outside Patch A:
 
 | Limitation | Deferred to |
-|-----------|------------|
+|---|---|
 | Integration into `SiftHttpKeyStore` | Patch B |
 | `krl_mode` configuration (`signed_required`, `signed_preferred`, `unsigned_legacy`) | Patch B |
-| `now` injection into `SiftHttpKeyStore.refresh()` | Patch B |
+| Trusted `now` injection into `SiftHttpKeyStore.refresh()` | Patch B |
 | Persistent per-issuer `krl_version` high-watermark storage | Patch B |
 | Last-known-good KRL cache | Patch B |
-| Cross-language conformance vectors — Go | #119 Go PR (merged) |
-| Cross-language conformance vectors — Python | #119 Python PR (merged) |
-| Cross-language conformance vectors — Rust | Future |
-| KRL signing key rotation automation | Future |
 | `krlStatus` / `getKrlStatus()` surface | Patch B |
+| Rust cross-language vectors | Future |
+| KRL signing-key rotation automation | Future |
+
+Repository merge or issue status is implementation metadata and is not part of the protocol semantics defined by this specification.
 
 ---
 
-## 13. Conformance coverage
+## 14. Conformance coverage
 
-Conformance vectors: `packages/conformance/vectors/signed-krl-verification.json`
+The normative portable SignedKRLV1 vector source is:
 
-Runner: `pnpm -C packages/conformance validate`
+```text
+docs/spec/test-vectors/signed-krl-v1.json
+```
+
+The TypeScript conformance mirror is:
+
+```text
+packages/conformance/vectors/signed-krl-verification.json
+```
+
+The TypeScript runner is:
+
+```text
+pnpm -C packages/conformance validate
+```
+
+### 14.1 Named vectors
 
 | Vector | Mode | Expected outcome |
-|--------|------|-----------------|
-| `krl-001` | `valid` | `ok` — signature verifies, not expired |
-| `krl-002` | `invalid-signature` | `KRL_SIG_INVALID` — tampered signature |
-| `krl-003` | `expired` | `KRL_EXPIRED` — `now >= not_after` |
-| `krl-004` | `malformed-revoked-kids` | `KRL_MALFORMED` — `revoked_kids` is a string |
-| `krl-005` | `duplicate-revoked-kids` | `KRL_MALFORMED` — duplicate entries |
-| `krl-006` | `unknown-signing-kid` | `KRL_UNKNOWN_SIGNING_KID` — kid not in trusted set |
-| `krl-007` | `signing-key-inactive` | `KRL_SIGNING_KEY_INACTIVE` — key revoked |
-| `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` — `alg != "Ed25519"` |
-| `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` — version went backwards |
+|---|---|---|
+| `krl-001` | `valid` | `ok` |
+| `krl-002` | `invalid-signature` | `KRL_SIG_INVALID` |
+| `krl-003` | `expired` | `KRL_EXPIRED` |
+| `krl-004` | `malformed-revoked-kids` | `KRL_MALFORMED` |
+| `krl-005` | `duplicate-revoked-kids` | `KRL_MALFORMED` |
+| `krl-006` | `unknown-signing-kid` | `KRL_UNKNOWN_SIGNING_KID` |
+| `krl-007` | `signing-key-inactive` | `KRL_SIGNING_KEY_INACTIVE` |
+| `krl-008` | `unsupported-alg` | `KRL_UNSUPPORTED_ALG` |
+| `krl-009` | `version-regression` | `KRL_VERSION_REGRESSION` |
 
-**Coverage scope:** Two runners:
+The observable results of these normative vectors MUST remain stable unless this specification and the vector corpus are versioned together.
 
-| Runner | Command | Coverage |
-|--------|---------|---------|
-| TypeScript (`@oxdeai/core`) | `pnpm -C packages/conformance validate` | 9 mode-based vectors (dynamic artifact construction) |
-| **Go harness** | `pnpm test:vectors:go` | **9 portable vectors with committed artifacts — independent Ed25519 verification** |
-| **Python harness** | `pnpm test:vectors:py` | **9 portable vectors with committed artifacts — independent Ed25519 verification via ctypes + libcrypto** |
+### 14.2 Vector relationship
 
-**Vector relationship.** `docs/spec/test-vectors/signed-krl-v1.json` is the normative
-portable cross-language vector source for SignedKRLV1. It contains committed
-`SignedKRLV1` artifacts with pre-computed Ed25519 signatures that Go and Python
-reproduce independently using only canonicalization-v1 and standard Ed25519 libraries.
-`packages/conformance/vectors/signed-krl-verification.json` is the TypeScript
-conformance mirror (mode-driven, no committed artifacts). Future changes must keep
-both files aligned or document divergence explicitly.
+`docs/spec/test-vectors/signed-krl-v1.json` is the normative portable cross-language vector source.
 
-**Independent verification model.** The Go and Python harnesses do not consume
-TypeScript-generated intermediate artifacts (canonical bytes, signing preimages). Each
-independently reconstructs the signing preimage from committed vector inputs using its
-own canonicalization-v1 implementation and verifies the Ed25519 signature using its
-own crypto library (`crypto/ed25519` for Go; `ctypes + libcrypto` for Python). The
-duplicate-kids signature (`+mwEd2QP5+...`) serves as the cross-language byte-equivalence
-proof point.
+It contains committed `SignedKRLV1` artifacts and precomputed Ed25519 signatures suitable for independent verification.
+
+`packages/conformance/vectors/signed-krl-verification.json` is the TypeScript conformance mirror.
+
+Changes MUST keep the two representations semantically aligned or explicitly document an intentional divergence.
+
+### 14.3 Independent verification model
+
+Cross-language harnesses SHOULD reconstruct the SignedKRL signing preimage independently from committed vector inputs.
+
+They SHOULD NOT depend on TypeScript-generated intermediate values such as:
+
+- canonical bytes
+- signing preimages
+- generated signatures
+
+Independent implementations SHOULD use their own:
+
+- canonicalization-v1 implementation
+- Ed25519 implementation
+- language-native or independently linked cryptographic library
+
+This independence provides evidence of cross-language byte equivalence rather than merely testing multiple wrappers around the same implementation.
+
+Current repository implementation status for individual language harnesses is evidence metadata, not a normative protocol requirement.
+
+---
+
+## 15. Security properties and non-claims
+
+A conforming Patch A implementation provides evidence that:
+
+- the KRL artifact was signed by a configured trusted KRL signing key
+- the signing key was active at trusted verification time
+- the artifact has not expired
+- its version has not regressed below the supplied per-issuer watermark
+- its revoked key list is structurally valid and deduplicated
+- its signed fields have not been modified without invalidating the signature
+
+Patch A does **not** by itself prove that:
+
+- a provider keystore actually applied the KRL
+- a revoked provider key was removed from all execution paths
+- persistent high-watermark state survived restart
+- stale but still unexpired KRLs were replaced by fresher ones
+- a nonce was consumed or replay-protected
+- the verifier received the newest KRL available from the publisher
+
+Those properties require additional stateful enforcement and deployment behavior outside the Patch A pure-verifier boundary.
