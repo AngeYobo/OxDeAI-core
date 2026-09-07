@@ -40,7 +40,9 @@
     "test:vectors:pep": "node scripts/verify-pep-vectors.mjs",
     "test:vectors:delegation": "node scripts/verify-delegation-vectors.mjs",
     "test:vectors:trusted-time": "pnpm -C packages/conformance validate:trusted-time",
-    "test:vectors:all": "pnpm test:vectors:ts && pnpm test:vectors:auth && pnpm test:vectors:pep && pnpm test:vectors:delegation && pnpm test:vectors:trusted-time && pnpm test:vectors:go && pnpm test:vectors:py"
+    "test:vectors:all": "pnpm test:vectors:ts && pnpm test:vectors:auth && pnpm test:vectors:pep && pnpm test:vectors:delegation && pnpm test:vectors:trusted-time && pnpm test:vectors:go && pnpm test:vectors:py",
+    "verify:spec-claims": "node scripts/spec-claims/verify.mjs",
+    "test:spec-claims": "node --test scripts/spec-claims/verify.test.mjs"
   },
   "devDependencies": {
     "@oxdeai/core": "workspace:*",
