@@ -4,356 +4,697 @@
 
 This specification defines the conformance requirements for Execution-Time Authorization (ETA) implementations.
 
-Conformance ensures that independent implementations:
-- behave deterministically
-- enforce fail-closed authorization
-- produce verifiable and reproducible outcomes
-- cannot be bypassed at execution time
+ETA conformance is intended to establish that independent implementations:
+
+- behave deterministically within the conformance surfaces they implement
+- apply OxDeAI canonicalization rules consistently
+- fail closed on invalid, unverifiable, or ambiguous authorization inputs
+- produce verifiable and reproducible authorization artifacts and outcomes
+- enforce the authorization boundary so that execution cannot proceed without valid authorization
+- produce compatible results across independent implementations that claim the same conformance surface
+
+Conformance is evaluated against the normative specifications and official conformance vectors identified by this document.
 
 ---
 
 ## 2. Conformance Definition
 
-An implementation is ETA-conformant if and only if it satisfies ALL of the following:
+An implementation is ETA-conformant for a declared conformance surface if and only if it satisfies every mandatory requirement applicable to that surface.
 
-1. Deterministic evaluation
-2. Canonicalization compliance
-3. Fail-closed behavior
-4. Non-bypassable enforcement
-5. Artifact correctness and verification
-6. Cross-implementation consistency
+The core conformance categories are:
 
-Failure in any category results in non-conformance.
+1. deterministic evaluation
+2. canonicalization compliance
+3. fail-closed behavior
+4. non-bypassable enforcement
+5. artifact correctness and verification
+6. cross-implementation consistency
+
+Failure of any mandatory requirement applicable to the declared surface results in non-conformance for that surface.
+
+An implementation MUST NOT claim support for a category, profile, artifact, or runtime surface that it does not actually implement.
+
+Unsupported categories MUST be reported as unsupported, not emulated solely to claim parity.
 
 ---
 
-## 3. Test Categories
+## 3. Conformance Test Categories
 
 ### 3.1 Determinism Tests
 
-Goal: identical inputs → identical outputs
+**Goal:** identical trusted inputs produce identical observable authorization results.
 
 Test:
-- Run authorization N times with identical `(intent, state, policy)`
 
-Requirement:
-- decision MUST be identical
-- produced artifacts MUST be byte-identical
+Run authorization repeatedly with identical:
 
-Failure conditions:
+```text
+(intent, authoritative state, policy, trusted evaluation inputs)
+```
+
+as applicable to the tested surface.
+
+Requirements:
+
+- the decision MUST be identical
+- deterministic reason-code output MUST be identical
+- when an artifact is deterministically produced from identical inputs, its canonical representation MUST be byte-identical
+- hashes over identical canonical representations MUST be identical
+
+Failure conditions include:
+
 - decision drift
+- reason-code drift where ordering is normative
+- canonical-byte mismatch
 - hash mismatch
-- artifact mismatch
+- deterministic artifact mismatch
+
+Determinism requirements do not authorize an implementation to re-read mutable ambient state or clocks when the underlying specification requires those values to be explicit evaluation inputs.
 
 ---
 
 ### 3.2 Canonicalization Tests
 
-Goal: ensure stable canonical representation
+**Goal:** ensure stable canonical representation across conforming implementations.
 
-Test cases:
+Required test classes include:
+
 - object key reordering
 - nested structures
-- unicode normalization (NFC)
+- Unicode NFC normalization
 - integer boundary handling
-- float rejection
-- duplicate key rejection
+- floating-number rejection
+- duplicate-key rejection
 
-Requirement:
-- canonical bytes MUST be identical across equivalent inputs
-- invalid inputs MUST fail
+Requirements:
 
-Conformance vector source of truth:
-- `docs/spec/test-vectors/canonicalization-v1.json`
-  - canonical JSON and SHA-256 hex MUST match exactly
-  - expected error codes MUST match exactly
+- equivalent valid inputs MUST produce identical canonical bytes
+- canonical JSON MUST match the normative expected value
+- SHA-256 output MUST match where defined by the vector
+- invalid canonicalization inputs MUST fail closed
+- expected canonicalization error codes MUST match where the vector makes the code normative
+
+The normative portable canonicalization vector source is:
+
+```text
+docs/spec/test-vectors/canonicalization-v1.json
+```
 
 ---
 
 ### 3.3 Fail-Closed Tests
 
-Goal: ensure system never allows ambiguous execution
+**Goal:** ensure that invalid, unverifiable, ambiguous, or unsupported conditions cannot result in authorized execution.
 
-Inject failures:
-- missing policy
-- malformed input
+Representative injected failures include:
+
+- missing required policy or trusted configuration
+- malformed protocol input
 - canonicalization failure
-- verification failure
-- unknown key / issuer
+- artifact verification failure
+- unknown signing key
+- inactive signing key
+- unresolved issuer or trust configuration
+- ambiguous key resolution
+- invalid trusted state
+- invalid required configuration
 
 Requirement:
-- decision MUST be DENY
+
+```text
+failure or ambiguity
+-> no valid authorization outcome
+-> no execution
+```
+
+Where the governing specification defines a protocol `DENY`, the implementation MUST return `DENY`.
+
+Where the governing specification requires refusal before policy evaluation, such as invalid mandatory configuration, the implementation MUST refuse evaluation rather than coercing the condition into an `ALLOW` or fabricating a policy `DENY`.
+
+No fail-closed condition may result in execution.
+
+---
 
 ### 3.4 PEP Gateway Boundary Tests
 
-Goal: no execution path without authorization.
+**Goal:** prove that execution cannot bypass the authorization boundary.
 
-Tests:
-- Direct call to upstream without internal token MUST be 403.
-- Gateway must return structured ALLOW/DENY per `pep-gateway-v1` §6.
-- Replay of `auth_id` MUST be denied.
+Required tests include:
 
-### 3.5 Authorization Verification
+- direct access to a protected upstream execution path without the required internal authorization context MUST be rejected
+- the gateway MUST expose the structured authorization behavior defined by `pep-gateway-v1`
+- an authorization artifact that fails required verification MUST NOT reach the protected upstream
+- replay of a consumed `auth_id` MUST be denied where the profile requires authorization replay protection
 
-Requirement: signature, audience, expiry, intent_hash match, and trust config MUST be verified; any failure → DENY.
+For the reference PEP gateway surface, direct unauthorized upstream access MUST return the gateway-defined rejection response, including HTTP `403` where specified by `pep-gateway-v1`.
 
-### 3.6 Delegation (if implemented)
+Passing artifact-verification tests alone is insufficient to establish PEP non-bypassability.
 
-Requirement: DelegationV1 chain MUST be strictly narrowing, single-hop, signed, and parent AuthorizationV1 valid; otherwise DENY.
-
----
-
-## 4. Conformance Artifacts and Execution
-
-Normative vector files:
-- `docs/spec/test-vectors/canonicalization-v1.json`
-- `docs/spec/test-vectors/authorization-v1.json`
-- `docs/spec/test-vectors/pep-vectors-v1.json`
-
-Implementations SHOULD provide runnable harnesses that consume the same vectors and exit non-zero on any mismatch (e.g., TS/Go/Python verifiers).
-
-### 4.1 Minimal runnable checks (current repository)
-
-From repo root:
-- TypeScript reference: `pnpm test:vectors:ts`
-- Go verifier: `pnpm test:vectors:go`
-- Python verifier: `pnpm test:vectors:py`
-- Authorization vectors: `pnpm test:vectors:auth`
-- PEP vectors: `pnpm test:vectors:pep`
-- Trusted-time vectors: `pnpm test:vectors:trusted-time`
-- Aggregate: `pnpm test:vectors:all`
-
-Pass/Fail rule: any mismatch in canonical JSON, SHA-256, or expected error code MUST exit non-zero and is non-conformant.
-
-### 4.2 Trusted-time vector schema
-
-`packages/conformance/vectors/trusted-time.json` uses strict schema version
-`1.0.0` and one category-discriminated `vectors` collection. Every vector has
-an ID unique across the file, an explicit `active` or `pending` status, a
-description, category-specific `input`, and category-specific `expected`
-behavior. Pending vectors additionally require a non-empty `blocked_by` and are
-reported separately; they never count as passing.
-
-The schema names clock domains explicitly (`intent_timestamp`,
-`evaluation_time`, `authorization_issued_at`, `authorization_expiry`,
-`nonce_first_seen_time`, `velocity_window_start`, `tool_window_start`, and
-`verifier_time`). Generic or overloaded timestamp fields are forbidden.
-
-The TypeScript reference runner rejects duplicate IDs, unknown categories or
-fields, malformed status, unsupported public reason codes, and malformed or
-unsafe protocol-second values before executing any vector. Active vectors run
-through Core reference surfaces and are release-blocking through both
-`pnpm -C packages/conformance validate` and `pnpm test:vectors:all`.
-
-The active `tool_window` category executes stateful tool-call sequences through
-`PolicyEngine.evaluatePure`. It verifies trusted window creation,
-caller-timestamp noninterference, denial without quota consumption,
-exact-boundary expiry, backward-time and malformed-state failure, exact state
-propagation, and deterministic repeated execution.
-
-TypeScript executes every active trusted-time category. The current Go and
-Python harnesses claim canonicalization, Profile C verification, and SignedKRL
-verification only; they do not expose PolicyEngine freshness, issuance,
-stateful replay, velocity, or the standalone trusted-time authorization
-verification surface. Those categories are explicitly unsupported in those
-runtimes and MUST NOT be emulated in a harness merely to claim parity. All
-languages enforce the JavaScript safe-integer bound for protocol numeric data
-in the categories they implement.
-
-### 4.3 Pending vectors
-
-Locked vectors exist for canonicalization, authorization, and PEP gateway behavior as listed above. Delegation conformance is presently validated via code-level harnesses; additional locked vectors MAY be added in future versions.
-
-Failure condition:
-- any ALLOW under invalid conditions
+The execution boundary itself MUST be exercised.
 
 ---
 
-### 3.4 Authorization Binding Tests
+### 3.5 Authorization Verification Tests
 
-Goal: ensure authorization is bound to intent/state/policy
+**Goal:** ensure that `AuthorizationV1` artifacts are accepted only after all applicable verification requirements succeed.
 
-Test:
-- reuse authorization with modified intent
-- reuse with modified state
-- reuse under different policy
+Applicable checks include:
 
-Requirement:
-- MUST be rejected
+- artifact structure
+- signature
+- signing-key resolution and lifecycle
+- audience binding
+- expiry
+- `intent_hash`
+- policy binding
+- required trust configuration
+- other profile-specific verification requirements
 
----
+Any verification failure MUST invalidate the authorization.
 
-### 3.5 Replay Protection Tests
-
-Goal: prevent reuse of authorization
-
-Test:
-- reuse same authorization artifact twice
-
-Requirement:
-- second execution MUST be rejected
+An invalid authorization MUST NOT authorize execution.
 
 ---
 
-### 3.6 Artifact Verification Tests
+### 3.6 Authorization Binding Tests
 
-Goal: ensure artifacts are independently verifiable
+**Goal:** prove that an authorization cannot be reused outside the exact authority it represents.
 
-Test:
-- verify signature correctness
-- verify hash binding
-- verify issuer / key resolution
-- tamper with payload
+Required tests include attempts to reuse an authorization with:
 
-Requirement:
-- tampered artifact MUST fail verification
-- valid artifact MUST verify successfully
+- modified intent
+- incompatible execution context
+- a different policy where policy binding applies
+- a different audience where audience binding applies
+- other values that are cryptographically or normatively bound by the artifact
+
+Requirements:
+
+- a changed bound value MUST invalidate verification
+- a valid authorization MUST NOT be transferable to an incompatible execution request
+
+A state-binding claim MUST only be made where the relevant specification actually commits the authorization to that state or to a normative state-derived value.
+
+Conformance MUST NOT infer bindings that the artifact does not encode.
 
 ---
 
-### 3.7 Cross-Implementation Tests
+### 3.7 Replay Protection Tests
 
-Goal: ensure cross-language consistency
+**Goal:** verify replay resistance where replay protection is normative for the tested artifact or execution profile.
 
-Implementations:
-- TypeScript (reference)
+For authorization execution:
+
+```text
+first valid consumption
+-> may execute
+
+subsequent prohibited reuse
+-> MUST NOT execute
+```
+
+Replay tests MUST use the replay identifier and replay scope defined by the relevant artifact or profile.
+
+Replay semantics MUST NOT be generalized across artifacts.
+
+For example, the presence of an optional nonce in an artifact does not establish replay protection unless its specification defines the required replay-state behavior.
+
+---
+
+### 3.8 Artifact Verification Tests
+
+**Goal:** ensure that artifacts can be independently authenticated and validated.
+
+Applicable tests include:
+
+- signature verification
+- canonical signing-input reconstruction
+- cryptographic hash binding
+- issuer and signing-key resolution
+- key lifecycle validation
+- mutation of signed payload fields
+- malformed artifact input
+
+Requirements:
+
+- tampered artifacts MUST fail verification
+- correctly formed and validly signed artifacts MUST verify successfully when all other applicable conditions hold
+- implementations MUST reproduce artifact-specific signing and encoding rules exactly
+
+Signing rules from one artifact family MUST NOT be assumed to apply to another artifact family.
+
+---
+
+### 3.9 Delegation Tests
+
+This category applies only to implementations that claim `DelegationV1` support.
+
+**Goal:** ensure delegated authority never exceeds its valid parent authority.
+
+Applicable requirements include:
+
+- the delegation MUST be signed and verifiable
+- the parent `AuthorizationV1` MUST be valid
+- delegated scope MUST be strictly narrowing according to `delegation-v1`
+- parent binding MUST succeed
+- policy binding MUST succeed
+- the single-hop invariant MUST be enforced
+- applicable expiry rules MUST be enforced
+- any verification or narrowing failure MUST prevent execution
+
+An implementation that does not implement DelegationV1 MUST report the category as unsupported rather than passing it through a stub or emulation.
+
+---
+
+### 3.10 Cross-Implementation Tests
+
+**Goal:** establish portable behavior across independent implementations.
+
+Current implementation families may include:
+
+- TypeScript
 - Go
 - Python
+- other independent implementations added later
 
-Test:
-- same inputs → same canonical bytes
-- same hash
-- same decision
+For every conformance surface jointly claimed by two or more implementations, applicable portable vectors MUST produce the same normative outputs.
 
-Requirement:
-- byte-for-byte equality
+Depending on the vector category, this can include:
+
+- identical canonical bytes
+- identical expected hash
+- identical verification result
+- identical normative reason code
+- identical deterministic artifact representation
+
+Cross-language equality is required only for semantics defined as portable by the corresponding specification.
+
+Implementations MUST NOT fabricate support for unavailable runtime surfaces merely to report cross-language parity.
 
 ---
 
-### 3.8 Non-Bypassability Tests (Critical)
+### 3.11 Non-Bypassability Tests
 
-Goal: ensure execution cannot bypass authorization
+**Goal:** establish that no protected execution path exists without valid authorization.
 
-Test scenarios:
-- direct tool execution without authorization
+This is a critical conformance category.
+
+Required adversarial scenarios include:
+
+- direct execution without authorization
 - skipped authorization step
-- partial verification
+- partial artifact verification
+- invalid authorization presented to the executor
+- replay where replay rejection is required
+- failure between authorization verification and execution-boundary admission
 
 Requirement:
-- execution MUST NOT occur
 
-Failure condition:
-- any execution without valid authorization
+```text
+no valid authorization
+-> no protected execution
+```
+
+Any protected execution that occurs without satisfying the required authorization boundary is a conformance failure.
 
 ---
 
-## 4. Conformance Vectors
+## 4. Official Conformance Vector Sources
 
-A conformant implementation MUST pass all official test vectors.
+A conformant implementation MUST pass all active official vectors applicable to the conformance surfaces it claims.
 
-Vectors MUST include:
+Normative or profile-defined vector sources currently include:
+
+```text
+docs/spec/test-vectors/canonicalization-v1.json
+docs/spec/test-vectors/authorization-v1.json
+docs/spec/test-vectors/pep-vectors-v1.json
+docs/spec/test-vectors/signed-krl-v1.json
+packages/conformance/vectors/trusted-time.json
+```
+
+Artifact-specific specifications MAY designate an additional normative portable source and implementation-specific mirrors.
+
+Where another normative specification designates a vector file as the source of truth for that artifact, that designation is incorporated into ETA conformance for implementations claiming that artifact.
+
+### 4.1 Vector requirements
+
+Official vector suites MUST include the cases required by their governing specification, including applicable:
+
 - valid cases
 - invalid cases
-- edge cases
+- boundary cases
+- malformed cases
+- adversarial cases
 
-Vectors MUST define:
+A vector MUST define enough information to determine its normative expected behavior.
+
+Depending on category, this may include:
+
 - input
 - canonical output
 - expected hash
 - expected decision
+- expected reason code
 - expected verification result
+- expected state transition
+
+Fields that do not apply to a particular vector category are not required merely for schema uniformity.
 
 ---
 
-## 5. Verification Ordering
+## 5. Runnable Conformance Harnesses
 
-Verification steps MUST be deterministic.
+Implementations SHOULD provide runnable harnesses that consume the applicable official vectors and exit non-zero on any active-vector mismatch.
 
-Violation ordering MUST be consistent.
+Current repository entry points include:
+
+```text
+pnpm test:vectors:ts
+pnpm test:vectors:go
+pnpm test:vectors:py
+pnpm test:vectors:auth
+pnpm test:vectors:pep
+pnpm test:vectors:trusted-time
+pnpm test:vectors:all
+```
+
+Repository commands are implementation metadata rather than portable protocol semantics.
+
+For a harness that claims conformance over a vector category:
+
+- every applicable active vector MUST execute
+- every mismatch against a normative expected result MUST cause a non-zero result
+- malformed vector data MUST NOT silently count as passing
+- skipped required vectors MUST NOT count as passing
+
+---
+
+## 6. Trusted-Time Vector Schema
+
+The trusted-time corpus:
+
+```text
+packages/conformance/vectors/trusted-time.json
+```
+
+uses strict schema version:
+
+```text
+1.0.0
+```
+
+and a category-discriminated `vectors` collection.
+
+Each vector MUST contain:
+
+- an ID unique within the corpus
+- an explicit `active` or `pending` status
+- a description
+- category-specific input
+- category-specific expected behavior
+
+A pending vector MUST contain a non-empty:
+
+```text
+blocked_by
+```
+
+Pending vectors MUST be reported separately.
+
+Pending vectors MUST NOT count as passing.
+
+### 6.1 Explicit clock domains
+
+Trusted-time vectors MUST use explicit clock-domain names where applicable, including:
+
+- `intent_timestamp`
+- `evaluation_time`
+- `authorization_issued_at`
+- `authorization_expiry`
+- `nonce_first_seen_time`
+- `velocity_window_start`
+- `tool_window_start`
+- `verifier_time`
+
+Generic or overloaded timestamp fields are forbidden by the trusted-time vector schema.
+
+This prevents vector schemas from erasing distinctions between untrusted intent time and trusted evaluation or verification time.
+
+### 6.2 Trusted-time corpus validation
+
+Before executing trusted-time vectors, the TypeScript reference runner rejects:
+
+- duplicate vector IDs
+- unknown categories
+- unknown fields
+- malformed status values
+- unsupported public reason codes
+- malformed protocol-second values
+- unsafe protocol-second integers
+
+Active vectors execute against the applicable Core reference surfaces.
+
+Active trusted-time vectors are release-blocking through the repository validation paths that include them.
+
+### 6.3 Stateful tool-window coverage
+
+The active `tool_window` category exercises stateful tool-call sequences through the Core policy evaluation surface.
+
+Coverage includes:
+
+- trusted window creation
+- caller timestamp non-interference
+- denial without quota consumption
+- exact-boundary expiry
+- backward trusted-time handling
+- malformed persisted state
+- exact state propagation
+- deterministic repeated execution
+
+---
+
+## 7. Language and Runtime Coverage
+
+Conformance coverage MUST be reported by actual implementation surface.
+
+The current TypeScript reference implementation executes all active trusted-time categories defined by its conformance runner.
+
+Current Go and Python harnesses claim only the surfaces they actually implement, including applicable:
+
+- canonicalization
+- supported authorization verification profiles
+- SignedKRL verification
+
+They do not expose the TypeScript `PolicyEngine` runtime surfaces required for:
+
+- policy freshness evaluation
+- authorization issuance
+- stateful replay evaluation
+- velocity evaluation
+- tool-window evaluation
+- standalone trusted-time authorization surfaces not implemented in those runtimes
+
+Unsupported runtime categories MUST NOT be emulated solely to claim parity.
+
+All implementations MUST enforce the protocol numeric domain, including the JavaScript safe-integer bound, in every category they claim.
+
+---
+
+## 8. Pending and Incomplete Conformance Coverage
+
+Locked portable vectors currently exist for the surfaces designated by their governing specifications.
+
+DelegationV1 is currently validated through code-level harnesses rather than a complete locked portable vector corpus.
+
+Additional locked delegation vectors MAY be introduced in a future conformance version.
+
+The absence of a portable vector suite MUST be reported as an evidence limitation.
+
+It MUST NOT be converted into a claim that cross-language conformance has been established.
+
+Pending vectors and unsupported categories never count as successful conformance evidence.
+
+---
+
+## 9. Verification Ordering
+
+Verification behavior MUST be deterministic.
+
+Where a governing specification defines a normative verification order, implementations MUST preserve its observable semantics.
+
+Where official vectors define the expected reason code for an overlapping-failure case, a conforming implementation MUST produce that expected result.
 
 Implementations MUST NOT:
-- short-circuit inconsistently
-- produce non-deterministic error sets
+
+- short-circuit inconsistently across identical inputs
+- produce non-deterministic reason sets
+- reorder checks in a way that changes a normative externally observable result
+
+This specification does not invent a verification order for artifacts whose governing specification leaves the order unspecified.
 
 ---
 
-## 6. Failure Semantics
+## 10. Failure Semantics
 
-Any ambiguity MUST result in:
+Any unresolved protocol ambiguity at a security boundary MUST fail closed.
 
-DENY
+Examples include:
 
-Ambiguity includes:
 - parsing uncertainty
+- canonicalization failure
 - key resolution failure
-- multiple matching keys
-- undefined behavior
+- multiple conflicting key matches
+- undefined required behavior
+- invalid trusted state
+- invalid mandatory trust configuration
+
+Fail-closed means:
+
+```text
+the condition cannot authorize execution
+```
+
+The exact failure representation is determined by the governing specification.
+
+It may be:
+
+- a protocol `DENY`
+- an artifact-verification failure
+- a gateway rejection
+- refusal to evaluate because required configuration is invalid
+
+An implementation MUST NOT fabricate an `ALLOW`, silently normalize an invalid security-critical condition, or execute through an unresolved ambiguity.
 
 ---
 
-## 7. Reference Implementation
+## 11. Reference and Independent Implementations
 
-A conformant ecosystem MUST provide:
+A conformant ETA ecosystem MUST provide:
 
-- one reference implementation (source of truth)
-- independent verifiers in at least two languages
-- reproducible test harness
+- at least one maintained reference implementation
+- independently implemented verification coverage in at least two implementation languages for portable surfaces claimed as cross-language
+- reproducible conformance harnesses
+- official portable vectors for the claims represented as cross-language conformance
 
----
+The reference implementation is not permitted to override the normative specifications or normative vectors.
 
-## 8. Conformance Output
+Where reference code, prose specification, and normative vector evidence disagree, the disagreement MUST be reported and resolved rather than silently treating implementation behavior as the protocol definition.
 
-A conformance run MUST produce:
-
-- pass/fail per test category
-- deterministic logs
-- reproducible outputs
-
-Optional:
-- hash of conformance run
-- CI integration output
+Independent harnesses SHOULD reconstruct portable cryptographic inputs independently rather than consuming intermediate values generated by the reference implementation.
 
 ---
 
-## 9. Minimal Conformance Criteria
+## 12. Conformance Output
 
-An implementation is ETA-conformant if:
+A conformance run MUST report:
 
-- 100% of required test vectors pass
-- no non-determinism is observed
-- no bypass is possible
-- all failure modes result in DENY
+- pass/fail by applicable test category
+- failed vector identifiers
+- unsupported categories
+- pending vectors
+- reproducible result data sufficient to investigate mismatches
 
----
+Where logs are produced for deterministic conformance results, their normative result content MUST be reproducible.
 
-## 10. Security Guarantees
+Non-semantic runtime metadata such as wall-clock duration, process IDs, or filesystem paths need not be byte-identical.
 
-Conformance ensures:
+Optional output MAY include:
 
-- deterministic authorization behavior
-- non-forgeable decision verification
-- replay resistance
-- enforcement integrity
-
-Conformance does NOT guarantee:
-
-- correctness of policy logic
-- absence of in-scope misuse
-- runtime security outside the authorization boundary
+- hash of a normalized conformance result
+- CI integration metadata
+- implementation version
+- source revision
+- conformance profile identifier
 
 ---
 
-## 11. Invariant Summary
+## 13. Minimal Conformance Criteria
 
-Conformance enforces:
+An implementation MAY claim ETA conformance only when:
 
-canonicalization → stable bytes 
-→ stable hash 
-→ deterministic decision 
-→ verifiable artifact 
-→ enforced execution 
+- 100% of required active vectors applicable to its declared surface pass
+- no required active vector is silently skipped
+- no unresolved deterministic mismatch exists
+- no protected execution bypass exists for the claimed enforcement surface
+- every applicable invalid or ambiguous condition fails closed
+- unsupported categories are declared honestly
+- pending vectors are not represented as passing evidence
 
-Any violation:
+A successful conformance run for one surface MUST NOT be generalized into conformance for unsupported surfaces.
 
-→ DENY 
-→ NO EXECUTION
+Examples:
+
+```text
+canonicalization conformance
+!= PEP enforcement conformance
+```
+
+and:
+
+```text
+artifact verification conformance
+!= non-bypassability proof
+```
+
+---
+
+## 14. Security Guarantees and Non-Guarantees
+
+Successful conformance provides evidence, within the tested and declared surface, of:
+
+- deterministic protocol behavior
+- canonical byte stability where applicable
+- artifact integrity verification
+- required cryptographic binding
+- fail-closed handling
+- replay resistance where replay protection is normative and tested
+- enforcement integrity where the execution boundary is actually exercised
+- cross-implementation compatibility for jointly supported portable surfaces
+
+Conformance does NOT by itself guarantee:
+
+- correctness of application policy logic
+- correctness or truth of external authoritative state
+- absence of misuse that remains valid under the configured policy
+- operating-system or runtime security outside the authorization boundary
+- security properties belonging to an unsupported profile
+- availability or freshness properties not defined by the relevant artifact
+- non-bypassability when only a pure verifier has been tested
+
+Conformance evidence MUST NOT be used to claim properties outside the tested normative surface.
+
+---
+
+## 15. Invariant Summary
+
+ETA conformance links the following properties:
+
+```text
+normative input
+-> canonical representation
+-> stable bytes
+-> stable cryptographic binding
+-> deterministic authorization / verification result
+-> valid artifact where applicable
+-> enforcement at the execution boundary
+```
+
+For every protected execution path:
+
+```text
+valid required authorization
+-> execution MAY proceed
+
+missing, invalid, unverifiable, or ambiguous required authorization
+-> NO EXECUTION
+```
+
+The top-level enforcement invariant is:
+
+```text
+No valid authorization
+-> no protected execution path
+```
+
+Conformance evidence for an earlier stage of the chain MUST NOT be interpreted as proof that later stages are enforced unless those stages are themselves exercised by the applicable conformance surface.
