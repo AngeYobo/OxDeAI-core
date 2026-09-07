@@ -32,9 +32,6 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Spec-to-code claim traceability
-        run: pnpm verify:spec-claims && pnpm test:spec-claims
-
       - name: Typecheck
         run: pnpm typecheck
 
@@ -82,6 +79,34 @@ jobs:
 
       - name: Vectors (Python canonicalization)
         run: pnpm test:vectors:py
+
+  spec-claims:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify spec claims
+        run: pnpm verify:spec-claims
+
+      - name: Test spec-claims checker
+        run: pnpm test:spec-claims
 
   adapter-validation:
     runs-on: ubuntu-latest
