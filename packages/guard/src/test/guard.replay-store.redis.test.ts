@@ -145,7 +145,6 @@ function makeFakeEngine(auth: AuthorizationV1) {
       };
     },
     computeStateHash: (state: State) => stateSnapshotHash(state),
-    computePolicyId: () => auth.policy_id,
   };
 }
 
@@ -323,7 +322,7 @@ test("RS-R7 Redis error in consumeDelegationId: throws OxDeAIAuthorizationError 
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],

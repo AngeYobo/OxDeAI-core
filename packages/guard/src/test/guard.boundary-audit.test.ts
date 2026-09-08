@@ -47,7 +47,7 @@ import {
 } from "@oxdeai/core";
 import type { AuthorizationV1, DelegationScope, DelegationV1, Intent, State } from "@oxdeai/core";
 import { buildState } from "@oxdeai/sdk";
-import { TEST_KEYSET, TEST_KEYPAIR, signAuth, DELEGATION_AUTHORITIES, FIXTURE_POLICY_ID } from "./helpers/fixtures.js";
+import { TEST_KEYSET, TEST_KEYPAIR, signAuth, DELEGATION_AUTHORITIES } from "./helpers/fixtures.js";
 
 import { OxDeAIGuard } from "../guard.js";
 import { createSecureGuard } from "../secureGuard.js";
@@ -138,7 +138,7 @@ function mockEngine(
   evaluatePure: (intent: Intent, state: State, at: number) => unknown,
   computeStateHash: (state: State) => string = () => "0".repeat(64)
 ): PolicyEngine {
-  return { evaluatePure, computeStateHash, computePolicyId: () => FIXTURE_POLICY_ID } as unknown as PolicyEngine;
+  return { evaluatePure, computeStateHash } as unknown as PolicyEngine;
 }
 
 // ── delegation fixtures (mirrors guard.delegation.test.ts) ────────────────────

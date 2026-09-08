@@ -5,7 +5,7 @@
  * Verifies that OxDeAIGuard enforces strict AuthorizationV1 verification
  * on the standard (non-delegation) path.
  *
- * Test IDs: A-1 through A-6.
+ * Test IDs: A-1 through A-6, plus A-8/A-9 (#316 same-producer provenance).
  *
  *   A-1  Tampered signature → OxDeAIAuthorizationError, execute blocked
  *   A-2  Unknown issuer     → OxDeAIAuthorizationError, execute blocked
@@ -13,6 +13,8 @@
  *   A-4  Expired auth       → OxDeAIAuthorizationError, execute blocked
  *   A-5  Missing trustedKeySets → OxDeAIGuardConfigurationError at construction
  *   A-6  Valid auth         → execute runs, result returned
+ *   A-8  Same-producer construction: artifact policy_id == engine.computePolicyId()
+ *   A-9  validateConfig requires only what the execution path consumes
  */
 
 import test from "node:test";
@@ -23,7 +25,7 @@ import type { Authorization, AuthorizationV1, Intent, State } from "@oxdeai/core
 
 import { OxDeAIGuard } from "../guard.js";
 import { OxDeAIAuthorizationError, OxDeAIGuardConfigurationError } from "../errors.js";
-import { TEST_KEYSET, signAuth } from "./helpers/fixtures.js";
+import { TEST_KEYSET, TEST_KEYPAIR, signAuth } from "./helpers/fixtures.js";
 import { defaultNormalizeAction } from "../normalizeAction.js";
 import type { OxDeAIGuardConfig, ProposedAction } from "../types.js";
 
@@ -49,15 +51,7 @@ function makeBaseState(): State {
   };
 }
 
-/**
- * @param enginePolicyId Policy identity this engine's trusted configuration
- *   establishes. Defaults to the artifact's own `policy_id` so existing cases
- *   keep their meaning, but it is a SEPARATE input on purpose: the guard
- *   verifies `authorization.policy_id` against `engine.computePolicyId()`
- *   (#301), and a helper that always returned the artifact's own value could
- *   never exercise that comparison.
- */
-function makeFakeEngine(auth: AuthorizationV1, enginePolicyId: string = auth.policy_id) {
+function makeFakeEngine(auth: AuthorizationV1) {
   return {
     evaluatePure(_intent: Intent, state: State) {
       return {
@@ -68,19 +62,14 @@ function makeFakeEngine(auth: AuthorizationV1, enginePolicyId: string = auth.pol
       };
     },
     computeStateHash: (state: State) => stateSnapshotHash(state),
-    computePolicyId: () => enginePolicyId,
   };
 }
 
-function makeGuardConfig(
-  auth: AuthorizationV1,
-  overrides?: Partial<OxDeAIGuardConfig>,
-  enginePolicyId?: string
-): OxDeAIGuardConfig {
+function makeGuardConfig(auth: AuthorizationV1, overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardConfig {
   let storedState = makeBaseState();
   let storedVersion = 0;
   return {
-    engine: makeFakeEngine(auth, enginePolicyId) as any,
+    engine: makeFakeEngine(auth) as any,
     getState: async () => ({ state: storedState, version: storedVersion }),
     setState: async (s, v) => { if (v !== storedVersion) return false; storedState = s; storedVersion++; return true; },
     trustedKeySets: [TEST_KEYSET],
@@ -238,66 +227,6 @@ test("A-5 missing trustedKeySets: OxDeAIGuardConfigurationError thrown at constr
 // A-6: Valid auth → execute runs, result returned
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// A-7: policy_id is checked against TRUSTED ENGINE CONFIGURATION (#301)
-// ---------------------------------------------------------------------------
-
-test("A-7 policy_id mismatch against engine.computePolicyId(): execute blocked", async () => {
-  // Everything else about this artifact is valid: correctly signed, correct
-  // audience, correct intent and state binding, unexpired. The ONLY defect is
-  // that its policy_id is not the policy this engine is configured for.
-  //
-  // Before #301 the guard passed `expectedPolicyId: authorization.policy_id`,
-  // comparing the artifact with itself, so this case could not fail. It now
-  // compares against `engine.computePolicyId()`, established from trusted
-  // engine configuration before the artifact exists.
-  const ARTIFACT_POLICY = "P2-artifact-policy";
-  const ENGINE_POLICY = "P1-engine-policy";
-  assert.notEqual(ARTIFACT_POLICY, ENGINE_POLICY);
-
-  const auth = signAuth({
-    auth_id: "a7-policy-mismatch",
-    audience: "aud-test",
-    state_hash: stateSnapshotHash(makeBaseState()),
-    intent_hash: FIXED_INTENT_HASH,
-    policy_id: ARTIFACT_POLICY,
-  });
-  const guard = OxDeAIGuard(makeGuardConfig(auth, undefined, ENGINE_POLICY));
-
-  let executed = false;
-  await assert.rejects(
-    () => guard(ACTION, async () => { executed = true; return "ok"; }),
-    (err: unknown) => {
-      assert.ok(err instanceof OxDeAIAuthorizationError, `expected OxDeAIAuthorizationError, got ${String(err)}`);
-      assert.match(
-        String((err as Error).message),
-        /AUTH_POLICY_ID_MISMATCH/,
-        "must fail specifically on the policy-id binding"
-      );
-      return true;
-    }
-  );
-  assert.equal(executed, false, "execute must never run for a foreign policy_id");
-});
-
-test("A-7b matching engine policy id still executes (a real check, not blanket denial)", async () => {
-  const POLICY = "P1-engine-policy";
-  const auth = signAuth({
-    auth_id: "a7b-policy-match",
-    audience: "aud-test",
-    state_hash: stateSnapshotHash(makeBaseState()),
-    intent_hash: FIXED_INTENT_HASH,
-    policy_id: POLICY,
-  });
-  const guard = OxDeAIGuard(makeGuardConfig(auth, undefined, POLICY));
-
-  let executed = false;
-  const result = await guard(ACTION, async () => { executed = true; return "ok"; });
-
-  assert.ok(executed, "an artifact matching the engine's configured policy must execute");
-  assert.equal(result, "ok");
-});
-
 test("A-6 valid auth: execute runs and result is returned", async () => {
   const auth = signAuth({ auth_id: "a6-auth", audience: "aud-test", state_hash: stateSnapshotHash(makeBaseState()), intent_hash: FIXED_INTENT_HASH });
   const guard = OxDeAIGuard(makeGuardConfig(auth));
@@ -307,4 +236,75 @@ test("A-6 valid auth: execute runs and result is returned", async () => {
 
   assert.ok(executed, "execute must be called for a valid authorization");
   assert.equal(result, "ok");
+});
+
+// ---------------------------------------------------------------------------
+// A-8 / A-9: same-producer provenance (#316)
+// ---------------------------------------------------------------------------
+
+test("A-8 same-producer construction: evaluatePure().authorization.policy_id equals engine.computePolicyId()", async () => {
+  // Pins WHY recomputing an expectation from `config.engine` was not an
+  // independent check. A real PolicyEngine derives `authorization.policy_id`
+  // from the same policy configuration that `computePolicyId()` reads, so both
+  // values come from one producer and one derivation.
+  //
+  // Verifying an artifact against a value recomputed from its own producer
+  // restates that producer's derivation; it establishes no constraint that an
+  // independent authority would impose. That is the defect #316 removes, and
+  // it is why the expectation was deleted rather than re-sourced.
+  const { PolicyEngine, RECOMMENDED_TRUSTED_TIME_PROFILE } = await import("@oxdeai/core");
+  const engine = new PolicyEngine({
+    // must match makeBaseState().policy_version, or the engine DENYs on version.
+    policy_version: "policy-auth",
+    engine_secret: "test-secret-must-be-at-least-32-chars!!",
+    authorization_signing_alg: "Ed25519",
+    authorization_signing_kid: "k1",
+    authorization_issuer: TEST_KEYSET.issuer,
+    authorization_audience: "agent-auth",
+    authorization_ttl_seconds: 600,
+    authorization_private_key_pem: TEST_KEYPAIR.privateKey.toString(),
+    ...RECOMMENDED_TRUSTED_TIME_PROFILE,
+  });
+
+  const state = makeBaseState();
+  const intent = defaultNormalizeAction(ACTION);
+  const out = engine.evaluatePure(intent, state, T_NOW);
+
+  assert.equal(out.decision, "ALLOW", `expected ALLOW, got ${out.decision}: ${JSON.stringify(out.reasons)}`);
+  assert.ok(out.authorization, "engine must emit an authorization on ALLOW");
+  assert.equal(
+    out.authorization!.policy_id,
+    engine.computePolicyId(),
+    "the artifact's policy_id and the engine's recomputed policy id are the SAME producer's value; " +
+      "comparing them cannot establish independent policy authority"
+  );
+});
+
+test("A-9 validateConfig requires only what the execution path consumes: an engine without computePolicyId is accepted", () => {
+  // Scoped claim: validateConfig no longer demands a capability solely to
+  // support the removed comparison. It is NOT a compatibility promise that
+  // arbitrary custom or duck-typed engines are a supported public extension
+  // surface — `OxDeAIGuardConfig.engine` remains typed as `PolicyEngine`.
+  const auth = signAuth({
+    auth_id: "a9-auth",
+    audience: "aud-test",
+    state_hash: stateSnapshotHash(makeBaseState()),
+    intent_hash: FIXED_INTENT_HASH,
+  });
+
+  const engineWithoutComputePolicyId = {
+    evaluatePure(_intent: Intent, state: State) {
+      return { decision: "ALLOW" as const, reasons: [], authorization: auth as Authorization, nextState: state };
+    },
+    computeStateHash: (state: State) => stateSnapshotHash(state),
+  };
+  assert.equal(
+    (engineWithoutComputePolicyId as { computePolicyId?: unknown }).computePolicyId,
+    undefined,
+    "fixture must genuinely lack the method for this test to mean anything"
+  );
+
+  assert.doesNotThrow(() =>
+    OxDeAIGuard(makeGuardConfig(auth, { engine: engineWithoutComputePolicyId as never }))
+  );
 });
