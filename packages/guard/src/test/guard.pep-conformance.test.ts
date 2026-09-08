@@ -117,7 +117,6 @@ function makeFakeEngine(auth: AuthorizationV1): PolicyEngine {
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
-    computePolicyId: () => auth.policy_id,
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }
@@ -383,7 +382,6 @@ test("GPC-9 missing auth artifact: ALLOW without authorization blocks execute", 
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
-    computePolicyId: () => "",
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 

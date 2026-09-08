@@ -311,7 +311,6 @@ test("guard: DENY fires onDecision hook with DENY decision", async () => {
 
 function makeMalformedDenyEngine(reasons: unknown): PolicyEngine {
   return {
-    computePolicyId: () => "p".repeat(64),
     evaluatePure: () => ({ decision: "DENY" as const, reasons }),
   } as unknown as PolicyEngine;
 }
@@ -403,7 +402,6 @@ test("guard: ALLOW without authorization artifact throws OxDeAIAuthorizationErro
   let currentVersion = 0;
 
   const mockEngine = {
-    computePolicyId: () => "p".repeat(64),
     evaluatePure: () => ({
       decision: "ALLOW" as const,
       reasons: [] as [],
@@ -441,7 +439,6 @@ test("guard: ALLOW without nextState throws OxDeAIAuthorizationError", async () 
   let currentVersion = 0;
 
   const mockEngine = {
-    computePolicyId: () => "p".repeat(64),
     evaluatePure: () => ({
       decision: "ALLOW" as const,
       reasons: [] as [],
@@ -483,7 +480,6 @@ test("guard: failed verifyAuthorization throws OxDeAIAuthorizationError", async 
   const expiredAuth = signAuth({ auth_id: "stub-expired", issued_at: 1_000, expiry: 2_000 });
 
   const mockEngine = {
-    computePolicyId: () => "p".repeat(64),
     evaluatePure: () => ({
       decision: "ALLOW" as const,
       reasons: [] as [],

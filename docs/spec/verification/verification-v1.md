@@ -38,6 +38,26 @@ Verifiers **MUST** operate on explicit, injected inputs:
 - `replayStore` (for `auth_id` / `delegation_id`) when replay protection is enforced.
 - Optional `expectedDelegatee`/`expectedPolicyId` when required by integration.
 
+### 4.1 Provenance of `expected*` Values
+
+An `expected*` verification value **MUST** originate from trusted configuration
+established independently of the artifact being verified and independently of the
+component that produced that artifact for the current operation. It **MUST NOT**
+be derived from the artifact being verified, from an artifact carried by it, or
+from the producer that created the artifact in the same call.
+
+This rule constrains **provenance only**. It does **NOT** make `expectedPolicyId`,
+`expectedIssuer`, `expectedDelegatee`, or any other optional expectation
+mandatory. Every such value remains optional and configured per integration; the
+rule defines only what qualifies as a valid trust source when one *is* configured.
+
+A value that fails this provenance test **MUST NOT** be configured at all, rather
+than being configured from a non-independent source. Recomputing an expectation
+from the same producer that emitted the artifact restates that producer's own
+derivation and establishes no independent constraint, so it does not satisfy this
+rule even though the two values are compared.
+
+
 ## 5. AuthorizationV1 Verification (Required Ordering)
 
 1. Structural validation (required fields, types).

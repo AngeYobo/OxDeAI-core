@@ -216,9 +216,6 @@ test("auth_id replay is denied on second use", async () => {
     computeStateHash(state: State) {
       return stateSnapshotHash(state);
     }
-    computePolicyId() {
-      return auth.policy_id;
-    }
     verifyAuthorization() {
       return { valid: true };
     }
@@ -619,9 +616,6 @@ test("missing required auth fields is denied before execution", async () => {
   class FakeEngineBadAuth {
     evaluatePure(_intent: Intent, state: State) {
       return { decision: "ALLOW" as const, reasons: [], authorization: badAuth as Authorization, nextState: state };
-    }
-    computePolicyId() {
-      return badAuth.policy_id;
     }
     verifyAuthorization() {
       return { valid: true };

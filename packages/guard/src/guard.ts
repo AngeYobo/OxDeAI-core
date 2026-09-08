@@ -55,16 +55,6 @@ function validateConfig(config: OxDeAIGuardConfig): void {
   if (!config.engine || typeof config.engine.evaluatePure !== "function") {
     throw new OxDeAIGuardConfigurationError("config.engine must be a PolicyEngine instance with an evaluatePure method.");
   }
-  // #301: the direct path derives its expected policy_id from the engine's own
-  // trusted configuration. An engine that cannot state its policy identity
-  // cannot support that check, so it is rejected at construction rather than
-  // producing a TypeError mid-request.
-  if (typeof config.engine.computePolicyId !== "function") {
-    throw new OxDeAIGuardConfigurationError(
-      "config.engine must expose computePolicyId(): the guard derives the expected policy_id from trusted " +
-        "engine configuration rather than from the authorization artifact it is verifying."
-    );
-  }
   if (typeof config.getState !== "function") {
     throw new OxDeAIGuardConfigurationError("config.getState must be a function.");
   }
@@ -597,10 +587,15 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       mode: "strict",
       trustedKeySets,
       requireSignatureVerification: true,
-      // `expectedPolicyId` is derived from trusted engine construction BEFORE
-      // this artifact exists — never read back out of the artifact it
-      // constrains. The previous `expectedPolicyId: authorization.policy_id`
-      // compared the artifact against itself and could not fail (#301).
+      // No `expectedPolicyId` is passed on this path (#316). Any value the
+      // guard could supply here would come from `config.engine` — the same
+      // producer whose `evaluatePure()` populated `authorization.policy_id` in
+      // this very call, by the same policy derivation. Comparing the two would
+      // restate the producer's own derivation rather than check it against an
+      // independent authority, so the expectation is removed rather than
+      // re-sourced. An earlier form read the value straight off the artifact
+      // (`expectedPolicyId: authorization.policy_id`), which was the same
+      // defect stated more obviously.
       //
       // `expectedIssuer` is deliberately NOT passed. Issuer is already bound
       // cryptographically: findKeyInKeySets() selects the key set by
@@ -618,7 +613,6 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       // authority claim to check. See `trustedDelegationAuthorities` and
       // `PepGatewayOptions.trustedAuthorizationAuthorities` for the paths where
       // the artifact does arrive from outside.
-      expectedPolicyId: config.engine.computePolicyId(),
       expectedAudience: config.expectedAudience,
     });
 
