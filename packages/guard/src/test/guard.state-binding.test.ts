@@ -78,6 +78,7 @@ function makeFakeEngine(auth: ReturnType<typeof signAuth>, _state: State) {
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
+    computePolicyId: () => auth.policy_id,
   };
 }
 
@@ -321,6 +322,7 @@ test("SB-7 null execution state: computeStateHash throws and execution is blocke
       }
       return stateSnapshotHash(s as State);
     },
+    computePolicyId: () => auth.policy_id,
   };
 
   const config: OxDeAIGuardConfig = {

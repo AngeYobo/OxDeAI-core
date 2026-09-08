@@ -9,6 +9,8 @@ import type {
   VerificationViolation
 } from "./types.js";
 import { canonicalJson } from "../crypto/hashes.js";
+import { isTrustedAuthorizationAuthority } from "./authorizationAuthority.js";
+import type { AuthorizationAuthority } from "./authorizationAuthority.js";
 import {
   SIGNING_DOMAINS,
   findKeyInKeySets,
@@ -39,6 +41,25 @@ export type VerifyAuthorizationOptions = {
   expectedIssuer?: string;
   expectedAudience?: string;
   expectedPolicyId?: string;
+  /**
+   * Deployer-configured (issuer, policyId) pairs authorized to issue
+   * authorizations for this boundary.
+   *
+   * When supplied, the artifact's `(issuer, policy_id)` pair must appear as a
+   * complete pair or verification fails with
+   * `AUTH_ISSUER_POLICY_NOT_AUTHORIZED`. This is distinct from
+   * `expectedIssuer` / `expectedPolicyId`, which compare one scalar each and
+   * cannot express that a given issuer is authorized for one policy but not
+   * another.
+   *
+   * ⚠️ Omitting this option performs no authority check. That is acceptable for
+   * a library verifier, whose caller may legitimately be verifying an artifact
+   * it does not enforce. It is NOT acceptable at an enforcement boundary that
+   * accepts externally supplied authorizations: such a boundary MUST require
+   * the configuration itself and MUST NOT treat `undefined` as "accept any
+   * issuer/policy". See `PepGatewayOptions.trustedAuthorizationAuthorities`.
+   */
+  trustedAuthorizationAuthorities?: readonly AuthorizationAuthority[];
   consumedAuthIds?: readonly string[];
   trustedKeySets?: KeySet | readonly KeySet[];
   requireSignatureVerification?: boolean;
@@ -336,6 +357,19 @@ export function verifyAuthorization(
   }
   if (opts?.expectedPolicyId !== undefined && auth.policy_id !== opts.expectedPolicyId) {
     violations.push({ code: "AUTH_POLICY_ID_MISMATCH", message: "policy_id does not match expectedPolicyId" });
+  }
+  // Independent issuer-policy authority. Deliberately a distinct code from the
+  // scalar mismatches above: those mean "a supplied expectation did not match",
+  // whereas this means "this authenticated issuer is not authorized for this
+  // policy at all". Reusing AUTH_ISSUER_MISMATCH here would misreport an
+  // authority rejection as a configuration mismatch.
+  if (opts?.trustedAuthorizationAuthorities !== undefined) {
+    if (!isTrustedAuthorizationAuthority(opts.trustedAuthorizationAuthorities, auth.issuer, auth.policy_id)) {
+      violations.push({
+        code: "AUTH_ISSUER_POLICY_NOT_AUTHORIZED",
+        message: "issuer is not authorized for this policy_id",
+      });
+    }
   }
   if (hasText(auth.auth_id) && consumed.has(auth.auth_id)) {
     violations.push({ code: "AUTH_REPLAY", message: "auth_id has already been consumed" });

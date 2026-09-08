@@ -102,6 +102,32 @@ export class OxDeAIProvenanceConflictError extends OxDeAIAuthorizationError {
  *   DELEGATION_AUDIENCE_MISMATCH  — delegatee does not match expectedDelegatee
  *   DELEGATION_MULTIHOP_DENIED    — parent is itself a DelegationV1
  */
+/**
+ * An authenticated authorization whose (issuer, policy_id) pair is not
+ * authorized by deployer configuration.
+ *
+ * Distinct from a generic {@link OxDeAIAuthorizationError} on purpose: the
+ * signature was valid and the artifact was well-formed. What failed is
+ * authority — this issuer may not issue for this policy. Collapsing the two
+ * would report a policy-authority rejection as a verification failure and hide
+ * a misconfigured or over-reaching issuer.
+ *
+ * ⚠️ SOLE-DEFECT CONTRACT. This error is raised only when lack of authority is
+ * the ONLY verification defect. Verification aggregates violations, so an
+ * artifact can be unauthorized for its pair *and* forged, expired or
+ * wrong-audience simultaneously; in that case the boundary raises the generic
+ * {@link OxDeAIAuthorizationError} instead. Receiving this error therefore
+ * carries a positive claim — the artifact authenticated correctly — and an
+ * authority violation can never mask an authentication failure.
+ *
+ * The message never contains the artifact or any key material.
+ *
+ * @public
+ */
+export class OxDeAIAuthorityError extends OxDeAIAuthorizationError {
+  override readonly name = "OxDeAIAuthorityError";
+}
+
 export class OxDeAIDelegationError extends OxDeAIAuthorizationError {
   readonly violations: readonly string[];
 

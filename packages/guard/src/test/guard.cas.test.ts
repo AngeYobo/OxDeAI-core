@@ -82,6 +82,7 @@ function makeFakeEngine(auth: ReturnType<typeof signAuth>) {
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
+    computePolicyId: () => auth.policy_id,
   };
 }
 
@@ -240,6 +241,7 @@ test("CAS-3 concurrent double-execution: second guard call is denied when versio
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
+    computePolicyId: () => auth1.policy_id,
   };
 
   const config: OxDeAIGuardConfig = {
@@ -363,6 +365,7 @@ test("CAS-5 CAS failure: engine's nextState not committed, beforeExecute and exe
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
+    computePolicyId: () => auth.policy_id,
   };
 
   const config: OxDeAIGuardConfig = {

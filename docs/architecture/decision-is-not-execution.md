@@ -354,8 +354,11 @@ The full guard execution sequence (standard path) is:
 6b. strictVerifyAuthorization              [fail closed on any violation]
     (mode:strict, trustedKeySets,
      requireSignatureVerification:true,
-     expectedAudience, expectedIssuer,
-     expectedPolicyId)
+     expectedAudience,
+     expectedPolicyId = engine.computePolicyId())
+    [#301: the expected policy id comes from trusted engine configuration,
+     never from the artifact being verified. No expectedIssuer is asserted
+     here — key resolution is already issuer-scoped via trustedKeySets.]
 6c. intent_hash recompute + compare        [fail closed on mismatch or canonicalization error]
 6d. state_hash recompute + compare         [fail closed on mismatch]
 7.  CAS setState(nextState, version)       [fail closed if CAS fails]

@@ -101,6 +101,7 @@ describe("Platform adapter boundary", () => {
       signingPublicKeyPem: publicKeyPem,
       signingKid: "test-key-1",
       issuer: "oxdeai.lgf-frappe-pep",
+      trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
 

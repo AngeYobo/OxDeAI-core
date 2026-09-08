@@ -27,6 +27,8 @@ export { verifySnapshot } from "./verification/verifySnapshot.js";
 export { verifyAuditEvents } from "./verification/verifyAuditEvents.js";
 export { verifyEnvelope } from "./verification/verifyEnvelope.js";
 export { verifyAuthorization, signAuthorizationEd25519, authorizationSigningPayload, toPublicAuthorizationV1, DEFAULT_MAX_FUTURE_ISSUED_AT_SKEW_SECONDS } from "./verification/verifyAuthorization.js";
+export { isTrustedAuthorizationAuthority } from "./verification/authorizationAuthority.js";
+export type { AuthorizationAuthority } from "./verification/authorizationAuthority.js";
 export { createVerifier } from "./verification/createVerifier.js";
 export type { VerifierConfig, BoundVerifier } from "./verification/createVerifier.js";
 export {

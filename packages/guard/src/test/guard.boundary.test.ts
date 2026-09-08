@@ -33,6 +33,9 @@ const TRUSTED_KEYSET: KeySet = {
   ],
 };
 
+/** #301 delegation-root authority: one explicit pair, never issuers x policies. */
+const BOUNDARY_AUTHORITIES = [{ issuer: TRUSTED_KEYSET.issuer, policyId: "p".repeat(64) }] as const;
+
 function makeState(policyVersion = "policy-test"): State {
   return {
     policy_version: policyVersion,
@@ -123,6 +126,7 @@ test("expired authorization is denied (execute not called)", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -159,6 +163,7 @@ test("audience tampering is denied by strict verifier", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -211,6 +216,9 @@ test("auth_id replay is denied on second use", async () => {
     computeStateHash(state: State) {
       return stateSnapshotHash(state);
     }
+    computePolicyId() {
+      return auth.policy_id;
+    }
     verifyAuthorization() {
       return { valid: true };
     }
@@ -222,6 +230,7 @@ test("auth_id replay is denied on second use", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   let executions = 0;
@@ -275,6 +284,7 @@ test("delegation tool widening is denied", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -326,6 +336,7 @@ test("delegation amount widening is denied", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -377,6 +388,7 @@ test("delegation narrowing is allowed", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -427,6 +439,7 @@ test("delegation replay is denied", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -486,6 +499,7 @@ test("unsigned delegation is denied", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -537,6 +551,7 @@ test("tampered delegation signature is denied", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "child",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -571,6 +586,7 @@ test("verifier failure (throws) blocks execution", async () => {
     ...store,
     trustedKeySets: [evilKeyset],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();
@@ -604,6 +620,9 @@ test("missing required auth fields is denied before execution", async () => {
     evaluatePure(_intent: Intent, state: State) {
       return { decision: "ALLOW" as const, reasons: [], authorization: badAuth as Authorization, nextState: state };
     }
+    computePolicyId() {
+      return badAuth.policy_id;
+    }
     verifyAuthorization() {
       return { valid: true };
     }
@@ -616,6 +635,7 @@ test("missing required auth fields is denied before execution", async () => {
     ...store,
     trustedKeySets: [TRUSTED_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: BOUNDARY_AUTHORITIES,
   });
 
   const action = makeAction();

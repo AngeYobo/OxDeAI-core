@@ -13,6 +13,15 @@ const UPSTREAM_TOKEN = process.env.UPSTREAM_EXECUTOR_TOKEN;
 const UPSTREAM_PORT = Number(process.env.UPSTREAM_PORT || 8788);
 const UPSTREAM_TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 1000);
 
+// Issuer-policy authority, as complete pairs. The gateway accepts the
+// authorization from untrusted request input, so a valid signature under
+// DEMO_KEYSET proves only who signed — never that that issuer may issue for the
+// claimed policy_id. This list is the independent answer to the second question
+// and must exist before any request arrives.
+const TRUSTED_AUTHORIZATION_AUTHORITIES = [
+  { issuer: DEMO_KEYSET.issuer, policyId: "demo-policy-v1" },
+];
+
 if (!UPSTREAM_TOKEN) {
   console.error("[pep-gateway] missing required env UPSTREAM_EXECUTOR_TOKEN");
   process.exit(1);
@@ -20,7 +29,7 @@ if (!UPSTREAM_TOKEN) {
 
 const server = createPepGatewayHttpServer({
   expectedAudience: AUDIENCE,
-  expectedIssuer: DEMO_KEYSET.issuer,
+  trustedAuthorizationAuthorities: TRUSTED_AUTHORIZATION_AUTHORITIES,
   trustedKeySets: [DEMO_KEYSET],
   internalExecutorToken: UPSTREAM_TOKEN,
   timeoutMs: UPSTREAM_TIMEOUT_MS,
@@ -33,5 +42,8 @@ const server = createPepGatewayHttpServer({
 server.listen(PORT, () => {
   console.log(`[pep-gateway] listening on :${PORT}`);
   console.log(`[pep-gateway] expects audience=${AUDIENCE}`);
+  console.log(
+    `[pep-gateway] authorized issuer/policy pairs: ${TRUSTED_AUTHORIZATION_AUTHORITIES.map((a) => `${a.issuer}/${a.policyId}`).join(", ")}`
+  );
   console.log("[pep-gateway] using reusable @oxdeai/guard gateway enforcement");
 });

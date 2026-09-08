@@ -26,7 +26,7 @@ import { defaultNormalizeAction } from "../normalizeAction.js";
 import { OxDeAIGuard, createInMemoryReplayStore } from "../index.js";
 import type { ReplayStore, OxDeAIGuardConfig, ProposedAction } from "../index.js";
 import { OxDeAIAuthorizationError } from "../errors.js";
-import { TEST_KEYSET, TEST_KEYPAIR, signAuth, makeParentAuthWithScope, makeDelegationWithScope } from "./helpers/fixtures.js";
+import { TEST_KEYSET, TEST_KEYPAIR, signAuth, makeParentAuthWithScope, makeDelegationWithScope, DELEGATION_AUTHORITIES } from "./helpers/fixtures.js";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -72,6 +72,7 @@ function makeFakeEngine(auth: AuthorizationV1) {
       };
     },
     computeStateHash: (state: State) => stateSnapshotHash(state),
+    computePolicyId: () => auth.policy_id,
   };
 }
 
@@ -87,6 +88,7 @@ function makeGuardConfig(
     setState: async (s, v) => { if (v !== storedVersion) return false; storedState = s; storedVersion++; return true; },
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "aud-test",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     ...overrides,
   };
 }
@@ -125,11 +127,12 @@ test("RS-2 default store: delegation_id replay blocked on second call to same gu
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine on delegation path"); } } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine on delegation path"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-rs",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
   });
   const action = makeAction();
 
@@ -189,11 +192,12 @@ test("RS-4 shared store: delegation_id replay blocked across two distinct guard 
 
   function makeDelGuard() {
     return OxDeAIGuard({
-      engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
+      engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
       getState: async () => ({ state: makeBaseState(), version: 0 }),
       setState: async () => true,
       trustedKeySets: [TEST_KEYSET],
       expectedAudience: "agent-rs",
+      trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
       replayStore: sharedStore,
     });
   }
@@ -265,11 +269,12 @@ test("RS-6 failing consumeDelegationId: execution blocked when store throws on d
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-rs",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: failingStore,
   });
 
@@ -308,11 +313,12 @@ test("RS-7 store without consumeDelegationId: delegation executes; parentAuth re
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-rs",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: authOnlyStore,
   });
   const action = makeAction();
@@ -378,11 +384,12 @@ test("RS-9 store unavailable for parentAuth auth_id: execution blocked on delega
   const delegation = makeDelegationWithScope(parentAuth, { tools: ["pay"], max_amount: 1_000_000n });
 
   const guard = OxDeAIGuard({
-    engine: { evaluatePure: () => { throw new Error("should not reach engine"); } } as any,
+    engine: { evaluatePure: () => { throw new Error("should not reach engine"); }, computePolicyId: () => "unused-on-delegation-path" } as any,
     getState: async () => ({ state: makeBaseState(), version: 0 }),
     setState: async () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-rs",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     replayStore: partialFailStore,
   });
 

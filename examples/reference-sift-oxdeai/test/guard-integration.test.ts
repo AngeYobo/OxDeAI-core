@@ -47,6 +47,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createPublicKey } from "node:crypto";
+import { TRUSTED_AUTHORIZATION_AUTHORITIES } from "../packages/policy/index.js";
 import {
   createPepGatewayExecutor,
   createInMemoryReplayStore,
@@ -91,7 +92,7 @@ before(async () => {
 
   executeThroughPep = createPepGatewayExecutor({
     expectedAudience: "pep-payments",
-    expectedIssuer: "adapter-issuer",
+    trustedAuthorizationAuthorities: TRUSTED_AUTHORIZATION_AUTHORITIES,
     trustedKeySets,
     internalExecutorToken: "test-token-unused",
     replayStore: createInMemoryReplayStore(),
@@ -200,7 +201,7 @@ test("GUARD/REPLAY: same authorization is rejected on second use (AUTH_REPLAY)",
   // is isolated from the shared store in the suite-level executor.
   const freshExecutor = createPepGatewayExecutor({
     expectedAudience: "pep-payments",
-    expectedIssuer: "adapter-issuer",
+    trustedAuthorizationAuthorities: TRUSTED_AUTHORIZATION_AUTHORITIES,
     trustedKeySets,
     internalExecutorToken: "test-token-unused",
     replayStore: createInMemoryReplayStore(),

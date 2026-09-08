@@ -112,6 +112,7 @@ async function startHarness(modeOverride?: "enforce" | "observe"): Promise<TestH
     signingPublicKeyPem: publicKeyPem,
     signingKid: "test-key-1",
     issuer: "oxdeai.lgf-frappe-pep",
+    trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
     authorizationTtlSeconds: 60,
   };
 
@@ -565,6 +566,7 @@ describe("LGF Frappe PEP upstream error handling", () => {
       signingPublicKeyPem: publicKeyPem,
       signingKid: "test-key-1",
       issuer: "oxdeai.lgf-frappe-pep",
+      trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
 
@@ -952,6 +954,7 @@ describe("Redis unavailable PEP integration", () => {
       signingPublicKeyPem: publicKeyPem,
       signingKid: "test-key-1",
       issuer: "oxdeai.lgf-frappe-pep",
+      trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
 
@@ -1038,6 +1041,7 @@ describe("Redis runtime wiring", () => {
       signingPublicKeyPem: keyPair.publicKey.export({ type: "spki", format: "pem" }) as string,
       signingKid: "k1",
       issuer: "i",
+      trustedAuthorizationAuthorities: [{ issuer: "i", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
     const summary = redactedConfigSummary(config);
@@ -1061,6 +1065,7 @@ describe("Redis runtime wiring", () => {
       signingPublicKeyPem: keyPair.publicKey.export({ type: "spki", format: "pem" }) as string,
       signingKid: "k1",
       issuer: "i",
+      trustedAuthorizationAuthorities: [{ issuer: "i", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
     const summary = redactedConfigSummary(config);
@@ -1093,6 +1098,7 @@ describe("Redis runtime wiring", () => {
       signingPublicKeyPem: publicKeyPem,
       signingKid: "test-key-1",
       issuer: "oxdeai.lgf-frappe-pep",
+      trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
       authorizationTtlSeconds: 60,
     };
 

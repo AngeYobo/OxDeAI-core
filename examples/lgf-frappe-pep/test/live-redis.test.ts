@@ -140,6 +140,7 @@ async function startHarness(replayKeyPrefix: string, redisUrl = LIVE_REDIS_URL):
     signingPublicKeyPem: publicKeyPem,
     signingKid: "redis-live-test-key-1",
     issuer: "oxdeai.lgf-frappe-pep",
+    trustedAuthorizationAuthorities: [{ issuer: "oxdeai.lgf-frappe-pep", policyId: POLICY_ID }],
     authorizationTtlSeconds: AUTH_TTL_SECONDS,
   };
 

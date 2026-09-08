@@ -23,7 +23,7 @@ import {
   OxDeAIDelegationError,
 } from "../errors.js";
 import type { ProposedAction, OxDeAIGuardConfig } from "../types.js";
-import { TEST_KEYSET, TEST_KEYPAIR } from "./helpers/fixtures.js";
+import { TEST_KEYSET, TEST_KEYPAIR, DELEGATION_AUTHORITIES } from "./helpers/fixtures.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +94,7 @@ function makeGuardConfig(overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardCon
     setState: () => true,
     trustedKeySets: [TEST_KEYSET],
     expectedAudience: "agent-A",
+    trustedDelegationAuthorities: DELEGATION_AUTHORITIES,
     ...overrides,
   };
 }
@@ -260,7 +261,10 @@ test("delegation: blocks expired delegation", async () => {
 
 test("delegation: blocks when parent hash mismatches", async () => {
   const parentAuth = makeParentAuth();
-  const otherAuth = makeParentAuth({ audience: "agent-X" });
+  // #301: differ by expiry, not audience. Under the corrected ordering an
+  // audience mismatch fails parent authentication before verifyDelegationChain
+  // runs, so it would no longer isolate the parent-hash binding this test covers.
+  const otherAuth = makeParentAuth({ expiry: T_NOW + 800 });
   const delegation = makeDelegation(parentAuth); // bound to parentAuth
 
   const config = makeGuardConfig();

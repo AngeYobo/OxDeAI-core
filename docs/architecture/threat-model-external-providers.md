@@ -197,7 +197,8 @@ These hold as long as the Ed25519 private key of the issuer is not compromised:
 | **Expiry enforcement** | Effective expiry extracted from `expiry` or `expires_at`; past expiry → `AUTH_EXPIRED` |
 | **Algorithm exclusivity** | Only `"Ed25519"` and `"ed25519"` accepted; any other alg string → `AUTH_ALG_UNSUPPORTED` |
 | **Audience binding** | `audience` must exactly match `expectedAudience`; mismatch → `AUTH_AUDIENCE_MISMATCH` |
-| **Issuer binding** | `issuer` must appear in `trustedKeySets`; unknown issuer → `AUTH_ISSUER_MISMATCH` |
+| **Issuer key trust** | `issuer` must have a key set in `trustedKeySets`; key resolution is issuer-scoped, so an unknown issuer cannot resolve a signing key |
+| **Issuer-policy authority** | Distinct from key trust (#301). A trusted signing key does NOT imply the issuer may issue for the claimed `policy_id`. Externally supplied authorizations must match a deployer-configured `(issuer, policyId)` pair; otherwise → `AUTH_ISSUER_POLICY_NOT_AUTHORIZED` |
 
 ### 4.2 Semantic Guarantees (require correct deployment configuration)
 

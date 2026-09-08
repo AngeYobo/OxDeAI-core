@@ -49,7 +49,15 @@ function makeBaseState(): State {
   };
 }
 
-function makeFakeEngine(auth: AuthorizationV1) {
+/**
+ * @param enginePolicyId Policy identity this engine's trusted configuration
+ *   establishes. Defaults to the artifact's own `policy_id` so existing cases
+ *   keep their meaning, but it is a SEPARATE input on purpose: the guard
+ *   verifies `authorization.policy_id` against `engine.computePolicyId()`
+ *   (#301), and a helper that always returned the artifact's own value could
+ *   never exercise that comparison.
+ */
+function makeFakeEngine(auth: AuthorizationV1, enginePolicyId: string = auth.policy_id) {
   return {
     evaluatePure(_intent: Intent, state: State) {
       return {
@@ -60,14 +68,19 @@ function makeFakeEngine(auth: AuthorizationV1) {
       };
     },
     computeStateHash: (state: State) => stateSnapshotHash(state),
+    computePolicyId: () => enginePolicyId,
   };
 }
 
-function makeGuardConfig(auth: AuthorizationV1, overrides?: Partial<OxDeAIGuardConfig>): OxDeAIGuardConfig {
+function makeGuardConfig(
+  auth: AuthorizationV1,
+  overrides?: Partial<OxDeAIGuardConfig>,
+  enginePolicyId?: string
+): OxDeAIGuardConfig {
   let storedState = makeBaseState();
   let storedVersion = 0;
   return {
-    engine: makeFakeEngine(auth) as any,
+    engine: makeFakeEngine(auth, enginePolicyId) as any,
     getState: async () => ({ state: storedState, version: storedVersion }),
     setState: async (s, v) => { if (v !== storedVersion) return false; storedState = s; storedVersion++; return true; },
     trustedKeySets: [TEST_KEYSET],
@@ -224,6 +237,66 @@ test("A-5 missing trustedKeySets: OxDeAIGuardConfigurationError thrown at constr
 // ---------------------------------------------------------------------------
 // A-6: Valid auth → execute runs, result returned
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// A-7: policy_id is checked against TRUSTED ENGINE CONFIGURATION (#301)
+// ---------------------------------------------------------------------------
+
+test("A-7 policy_id mismatch against engine.computePolicyId(): execute blocked", async () => {
+  // Everything else about this artifact is valid: correctly signed, correct
+  // audience, correct intent and state binding, unexpired. The ONLY defect is
+  // that its policy_id is not the policy this engine is configured for.
+  //
+  // Before #301 the guard passed `expectedPolicyId: authorization.policy_id`,
+  // comparing the artifact with itself, so this case could not fail. It now
+  // compares against `engine.computePolicyId()`, established from trusted
+  // engine configuration before the artifact exists.
+  const ARTIFACT_POLICY = "P2-artifact-policy";
+  const ENGINE_POLICY = "P1-engine-policy";
+  assert.notEqual(ARTIFACT_POLICY, ENGINE_POLICY);
+
+  const auth = signAuth({
+    auth_id: "a7-policy-mismatch",
+    audience: "aud-test",
+    state_hash: stateSnapshotHash(makeBaseState()),
+    intent_hash: FIXED_INTENT_HASH,
+    policy_id: ARTIFACT_POLICY,
+  });
+  const guard = OxDeAIGuard(makeGuardConfig(auth, undefined, ENGINE_POLICY));
+
+  let executed = false;
+  await assert.rejects(
+    () => guard(ACTION, async () => { executed = true; return "ok"; }),
+    (err: unknown) => {
+      assert.ok(err instanceof OxDeAIAuthorizationError, `expected OxDeAIAuthorizationError, got ${String(err)}`);
+      assert.match(
+        String((err as Error).message),
+        /AUTH_POLICY_ID_MISMATCH/,
+        "must fail specifically on the policy-id binding"
+      );
+      return true;
+    }
+  );
+  assert.equal(executed, false, "execute must never run for a foreign policy_id");
+});
+
+test("A-7b matching engine policy id still executes (a real check, not blanket denial)", async () => {
+  const POLICY = "P1-engine-policy";
+  const auth = signAuth({
+    auth_id: "a7b-policy-match",
+    audience: "aud-test",
+    state_hash: stateSnapshotHash(makeBaseState()),
+    intent_hash: FIXED_INTENT_HASH,
+    policy_id: POLICY,
+  });
+  const guard = OxDeAIGuard(makeGuardConfig(auth, undefined, POLICY));
+
+  let executed = false;
+  const result = await guard(ACTION, async () => { executed = true; return "ok"; });
+
+  assert.ok(executed, "an artifact matching the engine's configured policy must execute");
+  assert.equal(result, "ok");
+});
 
 test("A-6 valid auth: execute runs and result is returned", async () => {
   const auth = signAuth({ auth_id: "a6-auth", audience: "aud-test", state_hash: stateSnapshotHash(makeBaseState()), intent_hash: FIXED_INTENT_HASH });

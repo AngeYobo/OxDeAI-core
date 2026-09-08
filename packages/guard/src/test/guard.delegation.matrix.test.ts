@@ -48,6 +48,9 @@ const KEYSET: KeySet = {
   keys: [{ kid: "k1", alg: "Ed25519", public_key: KEYS.publicKey.toString() }],
 };
 
+/** #301 delegation-root authority: one explicit pair, never issuers x policies. */
+const MATRIX_AUTHORITIES = [{ issuer: KEYSET.issuer, policyId: "policy-1" }] as const;
+
 // ── Trusted timestamps (relative to wall clock) ──────────────────────────────
 const T_NOW     = Math.floor(Date.now() / 1000);
 const T_ISSUED  = T_NOW - 60;
@@ -91,6 +94,7 @@ function makeGuard(overrides?: Partial<OxDeAIGuardConfig>) {
     setState: () => true,
     trustedKeySets: [KEYSET],
     expectedAudience: "agent-A",
+    trustedDelegationAuthorities: MATRIX_AUTHORITIES,
     ...overrides,
   });
 }
@@ -272,7 +276,12 @@ test("CASE-8c: action not in scope.tools → OxDeAIDelegationError, execute bloc
 
 test("CASE-8d: parent hash mismatch → OxDeAIDelegationError, execute blocked", async () => {
   const parent = makeParent();
-  const otherParent = makeParent({ audience: "agent-OTHER" });
+  // #301: the wrong parent must differ WITHOUT tripping an earlier check. A
+  // different audience would now fail parent authentication (AUTH_AUDIENCE_MISMATCH)
+  // before the chain is reached, since the parent is authenticated and authorized
+  // before any of its fields may act as the child's trust root. Differing only in
+  // expiry keeps the parent independently valid and still changes its parent hash.
+  const otherParent = makeParent({ expiry: T_PAR_EXP - 100 });
   const delegation = createDelegation(
     parent,
     { delegatee: "agent-B", issuer: KEYSET.issuer, scope: { tools: ["provision_gpu"] }, expiry: T_DEL_EXP, kid: "k1" },

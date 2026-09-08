@@ -175,6 +175,7 @@ const EXPIRED_STUB_AUTH = signAuth({ auth_id: "stub-expired", issued_at: 1_000, 
 function makeDenyEngine(): PolicyEngine {
   return {
     evaluatePure: () => ({ decision: "DENY" as const, reasons: ["KILL_SWITCH_GLOBAL"] }),
+    computePolicyId: () => "p".repeat(64),
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }
@@ -195,6 +196,7 @@ function makeAllowEngine(state: State, nextState?: State): PolicyEngine {
       };
     },
     computeStateHash: (s: State) => stateSnapshotHash(s),
+    computePolicyId: () => "p".repeat(64),
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }
@@ -207,6 +209,7 @@ function makeAllowEngineNoAuth(nextState: State): PolicyEngine {
       authorization: undefined as unknown as Authorization,
       nextState,
     }),
+    computePolicyId: () => "p".repeat(64),
     verifyAuthorization: () => ({ valid: true }),
   } as unknown as PolicyEngine;
 }
@@ -219,6 +222,7 @@ function makeAuthFailEngine(nextState: State): PolicyEngine {
       authorization: EXPIRED_STUB_AUTH,
       nextState,
     }),
+    computePolicyId: () => EXPIRED_STUB_AUTH.policy_id,
   } as unknown as PolicyEngine;
 }
 
@@ -724,11 +728,11 @@ function genValidReasons(rng: () => number): string[] {
 }
 
 function makeMalformedDenyEngine(reasons: unknown): PolicyEngine {
-  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }) } as unknown as PolicyEngine;
+  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }), computePolicyId: () => "p".repeat(64) } as unknown as PolicyEngine;
 }
 
 function makeReasonsDenyEngine(reasons: string[]): PolicyEngine {
-  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }) } as unknown as PolicyEngine;
+  return { evaluatePure: () => ({ decision: "DENY" as const, reasons }), computePolicyId: () => "p".repeat(64) } as unknown as PolicyEngine;
 }
 
 // ── G8: malformed DENY reasons always fail closed as an engine-contract violation (#247) ──
