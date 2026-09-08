@@ -1534,7 +1534,7 @@
       "negativeRequired": true,
       "classification": "portable",
       "portableRequired": true,
-      "notes": "Portable evidence covers hash comparison only. Guard integration covers callback blocking separately. Neither establishes current or honest state.",
+      "notes": "Portable evidence covers hash comparison only. Guard integration covers callback blocking separately. Neither establishes current or honest state. The docs Profile-C corpus is authoritative; its package representation is a deterministic projection of the same cases, not independent corpus evidence. Authority and actual consumer mappings are recorded in docs/conformance/corpus-authority.json.",
       "recordType": "requirement",
       "normativeState": "specified",
       "evidenceState": "mapped",
@@ -1562,6 +1562,11 @@
           "from": "STATE_HASH_MATCH",
           "to": "STATE_SOURCE_TRUSTED",
           "reason": "Honest, current, authoritative state is a deployment premise."
+        },
+        {
+          "from": "PROFILE_C_PROJECTION_MATCH",
+          "to": "INDEPENDENT_CORPUS_EVIDENCE",
+          "reason": "Generated package vectors represent the same docs-authoritative cases; structural equality does not add evidence or prove semantic conformance."
         }
       ],
       "maintainerDecisionRequired": false
@@ -1923,7 +1928,7 @@
       "negativeRequired": false,
       "classification": "documentation-only",
       "portableRequired": false,
-      "notes": "CANON-ESC-001 was requested for registration by the maintainer; no existing repository definition of this identifier was found. This source is context only. Exact escaping/corpus-lock meaning and disposition require a maintainer decision; no new serialization rule is asserted.",
+      "notes": "CANON-ESC-001 was requested for registration by the maintainer; no existing repository definition of this identifier was found. This source is context only. Exact escaping/corpus-lock meaning and disposition require a maintainer decision; no new serialization rule is asserted. Issue #290 preserves all current Profile-C state and signed-payload values, which use plain printable ASCII without disputed escaping; PEM formatting is outside signing payloads. Projection therefore does not require resolving this lock for the current eight cases. It remains unresolved/deferred; future escape-sensitive inputs require separate review.",
       "recordType": "corpus-lock",
       "normativeState": "unresolved",
       "evidenceState": "unassessed",

@@ -203,11 +203,13 @@ verification's unfinished dedicated spec is not treated as a completed contract.
 | `packages/conformance/vectors/**` | Package runner exercises Core APIs plus fixture logic. Richer verifier/state/delegation/key-lifecycle/clock/trusted-time surfaces; not interchangeable with the docs corpus |
 
 Package SignedKRL uses `krl-001` etc.; docs SignedKRL uses `KRL_SIGNED_VALID`
-etc. Some Profile-C IDs coincide, but that does not make their consumers or
-claims equivalent. The package runner also has its own canonicalization helper;
+etc. All eight Profile-C IDs belong to one docs-authoritative logical corpus; the
+package representation is now generated and checked under #290. Its consumers
+remain distinct runtime implementations, not independent corpus authorities. The package runner also has its own canonicalization helper;
 its mere use cannot demonstrate all `canonicalization-v1` parsing rules.
 The separate `packages/conformance/go-harness` adapter surface is not what root
-`pnpm test:vectors:go` executes. No corpus was moved, regenerated or unified.
+`pnpm test:vectors:go` executes. No distinct corpora were unified. Only the secondary Profile-C representation
+is deterministically regenerated; see [corpus authority](../../conformance/corpus-authority.md).
 
 ## Initial inventory and manual audit
 
@@ -256,14 +258,17 @@ Additional inspection findings are advisory, not silently invented claims:
   general property families are not automatically normative claims. The advisory
   command lists statically named tests without registry mappings; an unmapped
   test may still implement a real requirement. It is not necessarily orphaned.
-- `gateway.enforcement.test.ts` and `gateway.vectors.test.ts` are absent from the
-  guard package's explicit default test list. Root `test:vectors:pep` runs a
+- `gateway.vectors.test.ts` is absent from the guard package's explicit default
+  test list; `gateway.enforcement.test.ts` is now included. Root `test:vectors:pep` runs a
   standalone harness. Do not claim those gateway tests execute in the existing
   default suite just because their files exist.
 
 ## Public claims for maintainer review
 
-No public documentation was rewritten.
+The findings below were recorded during initial review. #290 corrects the
+SPEC.md coverage summary and conformance guides; see the current corpus-authority
+map for authoritative consumer scope. Historical findings do not assert those
+statements remain uncorrected.
 
 - `SPEC.md:3` says locked canonicalization, authorization, PEP and delegation
   vectors pass across TypeScript, Go and Python CI harnesses. Root Go/Python

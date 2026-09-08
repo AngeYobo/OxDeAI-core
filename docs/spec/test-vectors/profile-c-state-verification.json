@@ -2,7 +2,7 @@
   "version": "1.1.0",
   "profile": "C",
   "portable": true,
-  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Modes 001–005 require only canonicalization-v1 and SHA-256. Modes 006–008 additionally require AuthorizationV1 Encoding B signature verification (alg='ed25519', expires_at, base64url signature, no domain prefix). See packages/conformance/vectors/profile-c-state-verification.json for the full TypeScript set.",
+  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Modes 001–005 require only canonicalization-v1 and SHA-256. Modes 006–008 additionally require AuthorizationV1 Encoding B signature verification (alg='ed25519', expires_at, base64url signature, no domain prefix). The authoritative source for this corpus is docs/spec/test-vectors/profile-c-state-verification.json; packages/conformance/vectors/profile-c-state-verification.json is its generated secondary projection for package consumers.",
   "hash_strategies": {
     "core": "SHA-256(canonicalJson(state)) — standard OxDeAI state hash",
     "provider": "SHA-256('PROVIDER:' + canonicalJson(state)) — simulates external provider algorithm",

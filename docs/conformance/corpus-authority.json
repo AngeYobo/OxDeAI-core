@@ -1,0 +1,1000 @@
+{
+  "version": 1,
+  "corpora": [
+    {
+      "id": "docs-canonicalization-v1",
+      "authority": "docs/spec/test-vectors/canonicalization-v1.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/canonicalization-v1.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "Canonical bytes, SHA-256 and selected invalid inputs.",
+      "spec": "docs/spec/core/canonicalization-v1.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/canonicalization-v1.json",
+          "path": "scripts/verify-canonicalization-vectors.ts",
+          "binding": "canonicalization-v1.json",
+          "command": "pnpm test:vectors:ts",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/canonicalization-v1.json",
+          "path": "go-harness/canonicalization_verify.go",
+          "binding": "canonicalization-v1.json",
+          "command": "pnpm test:vectors:go",
+          "runtime": "Go",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/canonicalization-v1.json",
+          "path": "python-harness/verify_canonicalization_vectors.py",
+          "binding": "canonicalization-v1.json",
+          "command": "pnpm test:vectors:py",
+          "runtime": "Python",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/canonicalization-v1.json",
+          "path": "packages/guard/src/test/gateway.vectors.test.ts",
+          "binding": "canonicalization-v1.json",
+          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "runtime": "TypeScript",
+          "execution": "manual",
+          "role": "verifier",
+          "notes": "Manual consumer absent from default guard test list; its canonicalization subtest passed during #290."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "docs-authorization-v1",
+      "authority": "docs/spec/test-vectors/authorization-v1.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/authorization-v1.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "Locked AuthorizationV1 standalone verification cases; distinct from package verifier corpora.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/authorization-v1.json",
+          "path": "scripts/verify-authorization-vectors.mjs",
+          "binding": "authorization-v1.json",
+          "command": "pnpm test:vectors:auth",
+          "runtime": "JavaScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/authorization-v1.json",
+          "path": "packages/guard/src/test/gateway.vectors.test.ts",
+          "binding": "authorization-v1.json",
+          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "runtime": "TypeScript",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage."
+        },
+        {
+          "representation": "docs/spec/test-vectors/authorization-v1.json",
+          "path": "scripts/verify-pep-vectors.mjs",
+          "binding": "authorization-v1.json",
+          "command": "pnpm test:vectors:pep",
+          "runtime": "JavaScript",
+          "execution": "default-ci",
+          "role": "input-fixture",
+          "notes": "Loads referenced authorization fixtures to evaluate PEP cases."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "docs-pep-vectors-v1",
+      "authority": "docs/spec/test-vectors/pep-vectors-v1.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/pep-vectors-v1.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "Standalone gateway decisions and upstream behavior; not all guard integration semantics.",
+      "spec": "docs/spec/enforcement/pep-gateway-v1.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/pep-vectors-v1.json",
+          "path": "scripts/verify-pep-vectors.mjs",
+          "binding": "pep-vectors-v1.json",
+          "command": "pnpm test:vectors:pep",
+          "runtime": "JavaScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/pep-vectors-v1.json",
+          "path": "packages/guard/src/test/gateway.vectors.test.ts",
+          "binding": "pep-vectors-v1.json",
+          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "runtime": "TypeScript",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "docs-delegation-vectors-v1",
+      "authority": "docs/spec/test-vectors/delegation-vectors-v1.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/delegation-vectors-v1.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Existing delegation harness cases; conformance spec \u00a78 still describes complete locked portable delegation corpus as pending.",
+      "spec": "docs/spec/artifacts/delegation-v1.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/delegation-vectors-v1.json",
+          "path": "scripts/verify-delegation-vectors.mjs",
+          "binding": "delegation-vectors-v1.json",
+          "command": "pnpm test:vectors:delegation",
+          "runtime": "JavaScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "profile-c",
+      "authority": "docs/spec/test-vectors/profile-c-state-verification.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/profile-c-state-verification.json",
+          "format": "vectors",
+          "generated": false
+        },
+        {
+          "path": "packages/conformance/vectors/profile-c-state-verification.json",
+          "format": "vectors",
+          "generated": true
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "State hash comparison, strategy mismatch, compute error and selected Encoding B signatures; not provider honesty or full PEP behavior.",
+      "spec": "docs/spec/interoperability/external-provider-profile.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/profile-c-state-verification.json",
+          "path": "go-harness/profile_c_verify.go",
+          "binding": "profile-c-state-verification.json",
+          "command": "pnpm test:vectors:go",
+          "runtime": "Go",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/profile-c-state-verification.json",
+          "path": "python-harness/verify_profile_c_vectors.py",
+          "binding": "profile-c-state-verification.json",
+          "command": "pnpm test:vectors:py",
+          "runtime": "Python",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/profile-c-state-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "profile-c-state-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Consumes the generated representation of the SAME eight cases; not independent corpus evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "docs-signed-krl-v1",
+      "authority": "docs/spec/test-vectors/signed-krl-v1.json",
+      "representations": [
+        {
+          "path": "docs/spec/test-vectors/signed-krl-v1.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "Portable committed SignedKRL verification artifacts; distinct IDs and fixtures from package KRL corpus.",
+      "spec": "docs/spec/artifacts/signed-krl-v1.md",
+      "consumers": [
+        {
+          "representation": "docs/spec/test-vectors/signed-krl-v1.json",
+          "path": "go-harness/signed_krl_verify.go",
+          "binding": "signed-krl-v1.json",
+          "command": "pnpm test:vectors:go",
+          "runtime": "Go",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "docs/spec/test-vectors/signed-krl-v1.json",
+          "path": "python-harness/verify_signed_krl_vectors.py",
+          "binding": "signed-krl-v1.json",
+          "command": "pnpm test:vectors:py",
+          "runtime": "Python",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-audit-chain",
+      "authority": "packages/conformance/vectors/audit-chain.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/audit-chain.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Audit chain hashing and mutation examples.",
+      "spec": "docs/spec/verification/verification-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/audit-chain.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "audit-chain.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/audit-chain.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "audit-chain.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-audit-verification",
+      "authority": "packages/conformance/vectors/audit-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/audit-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Audit verifier status/violation cases; not PEP delegation audit event compliance.",
+      "spec": "docs/spec/verification/verification-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/audit-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "audit-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/audit-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "audit-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/audit-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "audit-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-authorization-payload",
+      "authority": "packages/conformance/vectors/authorization-payload.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/authorization-payload.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "implementation-specific",
+      "semanticScope": "Reference engine authorization payload fixtures, not all portable AuthorizationV1 wire requirements.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/authorization-payload.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "authorization-payload.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/authorization-payload.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "authorization-payload.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/authorization-payload.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "authorization-payload.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-authorization-signature-verification",
+      "authority": "packages/conformance/vectors/authorization-signature-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/authorization-signature-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core verifier Encoding A/B Ed25519 paths and rejection cases.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/authorization-signature-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "authorization-signature-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/authorization-signature-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "authorization-signature-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/authorization-signature-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "authorization-signature-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-authorization-verification",
+      "authority": "packages/conformance/vectors/authorization-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/authorization-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core structural verifier checks and expected comparisons, selected signature-free cases.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/authorization-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "authorization-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/authorization-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "authorization-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-clock-semantics-verification",
+      "authority": "packages/conformance/vectors/clock-semantics-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/clock-semantics-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Verifier expiry and issued_at selected clock cases.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/clock-semantics-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "clock-semantics-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-delegation-chain-verification",
+      "authority": "packages/conformance/vectors/delegation-chain-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/delegation-chain-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core chain binding, parent, expiry and policy checks.",
+      "spec": "docs/spec/artifacts/delegation-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/delegation-chain-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "delegation-chain-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-chain-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "delegation-chain-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-chain-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "delegation-chain-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-chain-verification.json",
+          "path": "packages/conformance/scripts/extract-vectors.ts",
+          "binding": "delegation-chain-verification.json",
+          "command": "pnpm -C packages/conformance extract",
+          "runtime": "TypeScript",
+          "execution": "manual",
+          "role": "maintenance",
+          "notes": "Reads then rewrites these frozen baselines for deliberate version changes; not executed for #290 and never establishes a second authority."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-delegation-parent-hash",
+      "authority": "packages/conformance/vectors/delegation-parent-hash.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/delegation-parent-hash.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "SHA-256 of canonical parent and insertion-order invariance.",
+      "spec": "docs/spec/artifacts/delegation-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/delegation-parent-hash.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "delegation-parent-hash.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-parent-hash.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "delegation-parent-hash.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-delegation-signature-verification",
+      "authority": "packages/conformance/vectors/delegation-signature-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/delegation-signature-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core delegation signature verification cases.",
+      "spec": "docs/spec/artifacts/delegation-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/delegation-signature-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "delegation-signature-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-signature-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "delegation-signature-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-signature-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "delegation-signature-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-signature-verification.json",
+          "path": "packages/conformance/scripts/extract-vectors.ts",
+          "binding": "delegation-signature-verification.json",
+          "command": "pnpm -C packages/conformance extract",
+          "runtime": "TypeScript",
+          "execution": "manual",
+          "role": "maintenance",
+          "notes": "Reads then rewrites these frozen baselines for deliberate version changes; not executed for #290 and never establishes a second authority."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-delegation-verification",
+      "authority": "packages/conformance/vectors/delegation-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/delegation-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core delegation structural/scope/replay checks; supplied parentScope is a premise.",
+      "spec": "docs/spec/artifacts/delegation-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/delegation-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "delegation-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/delegation-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "delegation-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-envelope-signature-verification",
+      "authority": "packages/conformance/vectors/envelope-signature-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/envelope-signature-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Supplemental envelope signatures; dedicated complete envelope specification pending.",
+      "spec": "docs/spec/verification/verification-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/envelope-signature-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "envelope-signature-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/envelope-signature-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "envelope-signature-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/envelope-signature-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "envelope-signature-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-envelope-verification",
+      "authority": "packages/conformance/vectors/envelope-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/envelope-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Supplemental envelope statuses; not execution authorization.",
+      "spec": "docs/spec/verification/verification-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/envelope-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "envelope-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/envelope-verification.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "envelope-verification.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/envelope-verification.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "envelope-verification.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-intent-hash",
+      "authority": "packages/conformance/vectors/intent-hash.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/intent-hash.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core intent binding-field projection and hash cases.",
+      "spec": "docs/spec/core/canonicalization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/intent-hash.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "intent-hash.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/intent-hash.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "intent-hash.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-key-lifecycle-verification",
+      "authority": "packages/conformance/vectors/key-lifecycle-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/key-lifecycle-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core key activity, revocation and kid resolution cases.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/key-lifecycle-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "key-lifecycle-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-signed-krl-verification",
+      "authority": "packages/conformance/vectors/signed-krl-verification.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/signed-krl-verification.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core SignedKRL verifier fixtures; distinct from docs SignedKRL artifact corpus.",
+      "spec": "docs/spec/artifacts/signed-krl-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/signed-krl-verification.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "signed-krl-verification.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-snapshot-hash",
+      "authority": "packages/conformance/vectors/snapshot-hash.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/snapshot-hash.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Core canonical state codec/hash fixtures; supplemental snapshot evidence.",
+      "spec": "docs/spec/verification/verification-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/snapshot-hash.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "snapshot-hash.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/snapshot-hash.json",
+          "path": "packages/conformance/go-harness/main.go",
+          "binding": "snapshot-hash.json",
+          "command": "cd packages/conformance/go-harness && go run ./main.go --adapter-bin python3 --adapter-arg ./adapter_python.py --vectors ../vectors",
+          "runtime": "Go",
+          "execution": "blocked",
+          "role": "driver",
+          "notes": "Manual generic adapter driver, absent from root vector CI; Python adapter import fails (#306). Not independent Go verification evidence."
+        },
+        {
+          "representation": "packages/conformance/vectors/snapshot-hash.json",
+          "path": "packages/conformance/go-harness/adapter_python.py",
+          "binding": "snapshot-hash.json",
+          "command": "python3 packages/conformance/go-harness/adapter_python.py",
+          "runtime": "Python",
+          "execution": "blocked",
+          "role": "verifier",
+          "notes": "Import fails at authorization-payload input.intent_id (#306); later loads unreachable. Some operations are frozen lookups, not independent verification."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "package-trusted-time",
+      "authority": "packages/conformance/vectors/trusted-time.json",
+      "representations": [
+        {
+          "path": "packages/conformance/vectors/trusted-time.json",
+          "format": "vectors",
+          "generated": false
+        }
+      ],
+      "status": "normative",
+      "semanticScope": "Active trusted-time issuance/freshness/replay/velocity/tool-window plus TypeScript-domain validation cases; no Go/Python engine parity. Official source designated by docs/spec/conformance/conformance-v1.md \u00a74; TypeScript-specific input-domain cases do not confer cross-runtime support.",
+      "spec": "docs/spec/core/trusted-time-v1.md",
+      "consumers": [
+        {
+          "representation": "packages/conformance/vectors/trusted-time.json",
+          "path": "packages/conformance/src/validate.ts",
+          "binding": "trusted-time.json",
+          "command": "pnpm -C packages/conformance validate",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        },
+        {
+          "representation": "packages/conformance/vectors/trusted-time.json",
+          "path": "packages/conformance/src/validate-trusted-time.ts",
+          "binding": "trusted-time.json",
+          "command": "pnpm test:vectors:trusted-time",
+          "runtime": "TypeScript",
+          "execution": "manual",
+          "role": "verifier",
+          "notes": "Dedicated root script; default CI covers the same trusted-time corpus through validate.ts and package tests."
+        },
+        {
+          "representation": "packages/conformance/vectors/trusted-time.json",
+          "path": "packages/conformance/src/trustedTimeConformance.test.ts",
+          "binding": "trusted-time.json",
+          "command": "pnpm -C packages/conformance test",
+          "runtime": "TypeScript",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": []
+    },
+    {
+      "id": "rust-authorization-example",
+      "authority": "examples/rust-verifier/auth_case.json",
+      "representations": [
+        {
+          "path": "examples/rust-verifier/auth_case.json",
+          "format": "fixture",
+          "generated": false
+        }
+      ],
+      "status": "supplemental",
+      "semanticScope": "Bundled single authorization fixture and four verifier tests; consumes neither vector tree.",
+      "spec": "docs/spec/artifacts/authorization-v1.md",
+      "consumers": [
+        {
+          "representation": "examples/rust-verifier/auth_case.json",
+          "path": "examples/rust-verifier/tests/verify_authorization.rs",
+          "binding": "auth_case.json",
+          "command": "pnpm test:rust",
+          "runtime": "Rust",
+          "execution": "default-ci",
+          "role": "verifier",
+          "notes": "Selected corpus cases only; existence is not execution proof."
+        }
+      ],
+      "supportFiles": [
+        "examples/rust-verifier/keyset.json"
+      ]
+    }
+  ]
+}

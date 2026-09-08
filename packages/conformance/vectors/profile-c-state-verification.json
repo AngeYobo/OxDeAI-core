@@ -1,97 +1,217 @@
 {
-  "version": "1.0.0",
+  "description": "Portable Profile C state-hash semantics vectors for cross-language conformance (Go, Python). Modes 001–005 require only canonicalization-v1 and SHA-256. Modes 006–008 additionally require AuthorizationV1 Encoding B signature verification (alg='ed25519', expires_at, base64url signature, no domain prefix). The authoritative source for this corpus is docs/spec/test-vectors/profile-c-state-verification.json; packages/conformance/vectors/profile-c-state-verification.json is its generated secondary projection for package consumers.",
+  "encoding_b_notes": {
+    "alg": "ed25519 (lowercase — Sift-compatible Encoding B)",
+    "expiry_field": "expires_at (not expiry — Encoding B wire format)",
+    "signature_encoding": "base64url (RFC 4648 §5, no padding)",
+    "signing_payload": "All auth fields except signature.sig. signature becomes { alg, kid } with sig excluded.",
+    "signing_preimage": "canonicalJson(signingPayload) — NO domain prefix. Different from SignedKRLV1 which uses 'OXDEAI_KRL_V1\\n' prefix."
+  },
+  "hash_strategies": {
+    "core": "SHA-256(canonicalJson(state)) — standard OxDeAI state hash",
+    "provider": "SHA-256('PROVIDER:' + canonicalJson(state)) — simulates external provider algorithm",
+    "throws": "Simulates a computeStateHash failure; harness must return outcome 'compute-error' without computing any hash"
+  },
+  "outcomes": {
+    "compute-error": "computeStateHash threw — execution blocked fail-closed",
+    "ok": "Committed hash equals live-state hash — Profile C step 10 passes",
+    "state-hash-mismatch": "Committed hash does not equal live-state hash — Profile C step 10 blocks execution"
+  },
+  "portable": true,
   "profile": "C",
-  "description": "Profile C semantic state verification vectors. Tests computeStateHash comparison at guard step 10. Two hash strategies are modelled: 'core' (sha256HexFromJson — standard OxDeAI) and 'provider' (SHA-256 of 'PROVIDER:' + canonicalJson — simulates siftCanonicalJsonHash or equivalent external provider algorithm). Encoding B vectors additionally exercise Sift-compatible wire format (alg='ed25519', expires_at, base64url signature) combined with live-state semantic verification.",
   "vectors": [
     {
+      "description": "Core strategy: same state at signing and verification — hashes are identical, outcome ok.",
+      "expected": {
+        "status": "ok"
+      },
+      "hash_strategy": "core",
       "id": "profile-c-001",
-      "description": "Core-native strategy: same state at signing and verification produces matching state_hash. Profile C step 10 passes.",
       "mode": "live-state-match",
-      "state_input": { "period": "p1", "spent": 0 },
-      "hash_strategy": "core",
-      "expected": {
-        "status": "ok"
+      "state_input": {
+        "period": "p1",
+        "spent": 0
       }
     },
     {
+      "description": "Core strategy: live state has advanced since signing — hashes differ, outcome state-hash-mismatch.",
+      "expected": {
+        "reason": "computeStateHash(liveState) does not equal authorization.state_hash",
+        "status": "state-hash-mismatch"
+      },
+      "hash_strategy": "core",
       "id": "profile-c-002",
-      "description": "Core-native strategy: state advanced between signing and execution. Live state produces a different hash than committed state_hash. Profile C step 10 fails with state-hash-mismatch.",
+      "live_state_input": {
+        "period": "p1",
+        "spent": 500000
+      },
       "mode": "live-state-mismatch",
-      "state_input": { "period": "p1", "spent": 0 },
-      "live_state_input": { "period": "p1", "spent": 500000 },
-      "hash_strategy": "core",
-      "expected": {
-        "status": "state-hash-mismatch",
-        "reason": "computeStateHash(liveState) does not equal authorization.state_hash"
+      "state_input": {
+        "period": "p1",
+        "spent": 0
       }
     },
     {
+      "description": "Provider hash committed at signing; core hash used at verification. Even with the same state, hashes differ — outcome state-hash-mismatch. Models a missing or wrong computeStateHash configuration.",
+      "expected": {
+        "reason": "provider hash committed; Core strategy used at verification produces a different hash",
+        "status": "state-hash-mismatch"
+      },
       "id": "profile-c-003",
-      "description": "Hash-strategy mismatch: provider algorithm committed at signing, Core algorithm used at verification. Even with the same state, hashes differ. Profile C step 10 fails. This is the 'missing computeStateHash configuration' failure mode.",
       "mode": "hash-strategy-mismatch",
-      "state_input": { "period": "p1", "spent": 0 },
       "signing_strategy": "provider",
-      "verify_strategy": "core",
-      "expected": {
-        "status": "state-hash-mismatch",
-        "reason": "provider hash committed; Core strategy used at verification produces a different hash"
-      }
+      "state_input": {
+        "period": "p1",
+        "spent": 0
+      },
+      "verify_strategy": "core"
     },
     {
-      "id": "profile-c-004",
-      "description": "computeStateHash throws: the configured hash function raises an exception. The guard must catch this and block execution — fail-closed. No state comparison is possible.",
-      "mode": "compute-throws",
+      "description": "computeStateHash throws — execution blocked fail-closed. Harness must return compute-error without computing any hash.",
+      "expected": {
+        "reason": "computeStateHash threw; execution blocked fail-closed",
+        "status": "compute-error"
+      },
       "hash_strategy": "throws",
-      "expected": {
-        "status": "compute-error",
-        "reason": "computeStateHash threw; execution blocked fail-closed"
-      }
+      "id": "profile-c-004",
+      "mode": "compute-throws"
     },
     {
-      "id": "profile-c-005",
-      "description": "TOCTOU / stale state: authorization issued against an earlier state; live state has since advanced significantly. Core hash of live state does not match committed hash. Profile C step 10 detects the staleness.",
-      "mode": "toctou-stale-state",
-      "state_input": { "period": "p1", "spent": 0 },
-      "live_state_input": { "period": "p2", "spent": 5000000 },
+      "description": "TOCTOU / stale state: authorization issued against an earlier state; live state has advanced to a different period and higher spend. Core hash of live state does not match committed hash — outcome state-hash-mismatch.",
+      "expected": {
+        "reason": "TOCTOU: live state has advanced since authorization was issued",
+        "status": "state-hash-mismatch"
+      },
       "hash_strategy": "core",
-      "expected": {
-        "status": "state-hash-mismatch",
-        "reason": "TOCTOU: live state has advanced since authorization was issued"
+      "id": "profile-c-005",
+      "live_state_input": {
+        "period": "p2",
+        "spent": 5000000
+      },
+      "mode": "toctou-stale-state",
+      "state_input": {
+        "period": "p1",
+        "spent": 0
       }
     },
     {
-      "id": "profile-c-006",
-      "description": "Encoding B (Sift-compatible wire format: alg='ed25519', expires_at, base64url sig) + provider hash strategy, matching state. Full Profile C: signature verified via Encoding B path, then live-state hash verified with provider strategy. Both pass.",
-      "mode": "encoding-b-live-state-match",
-      "state_input": { "period": "p1", "spent": 0 },
-      "hash_strategy": "provider",
+      "auth": {
+        "audience": "merchant-gateway",
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "expires_at": 1730000060,
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "issued_at": 1730000000,
+        "issuer": "oxdeai.policy-engine",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        },
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7"
+      },
+      "description": "Encoding B AuthorizationV1 (alg='ed25519', expires_at, base64url sig) + provider hash strategy, matching state. Harness: (1) verify Encoding B signature independently, (2) compute committedHash=providerHash(state_input), cross-check with auth.state_hash, (3) liveHash=providerHash(state_input) — same, outcome ok.",
       "expected": {
         "status": "ok"
-      }
-    },
-    {
-      "id": "profile-c-007",
-      "description": "Encoding B (Sift-compatible) + provider hash strategy, stale state. Signature valid (Encoding B path passes), but live state has advanced. Provider hash of live state does not match committed provider hash. Profile C step 10 fails.",
-      "mode": "encoding-b-live-state-mismatch",
-      "state_input": { "period": "p1", "spent": 0 },
-      "live_state_input": { "period": "p1", "spent": 250000 },
+      },
       "hash_strategy": "provider",
-      "expected": {
-        "status": "state-hash-mismatch",
-        "reason": "Encoding B auth: live state mismatch detected at Profile C step 10"
+      "id": "profile-c-006",
+      "mode": "encoding-b-live-state-match",
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "alg": "Ed25519",
+          "kid": "2026-01",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
+      "state_input": {
+        "period": "p1",
+        "spent": 0
       }
     },
     {
-      "id": "profile-c-008",
-      "description": "Encoding B + hash-strategy mismatch: provider algorithm committed at signing, Core algorithm used at verification. Signature verifies correctly (Encoding B path), but state_hash computed with Core strategy differs from committed provider hash. Profile C step 10 fails — ambiguous config is rejected fail-closed.",
-      "mode": "encoding-b-hash-strategy-mismatch",
-      "state_input": { "period": "p1", "spent": 0 },
-      "signing_strategy": "provider",
-      "verify_strategy": "core",
+      "auth": {
+        "audience": "merchant-gateway",
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "expires_at": 1730000060,
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "issued_at": 1730000000,
+        "issuer": "oxdeai.policy-engine",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        },
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7"
+      },
+      "description": "Encoding B AuthorizationV1 + provider hash strategy, stale state. Signature verifies. committedHash=providerHash({period:p1,spent:0}), liveHash=providerHash({period:p1,spent:250000}) — mismatch, outcome state-hash-mismatch.",
       "expected": {
-        "status": "state-hash-mismatch",
-        "reason": "Encoding B auth: computeStateHash strategy mismatch produces different hash"
+        "reason": "Encoding B auth: live state mismatch detected at Profile C step 10",
+        "status": "state-hash-mismatch"
+      },
+      "hash_strategy": "provider",
+      "id": "profile-c-007",
+      "live_state_input": {
+        "period": "p1",
+        "spent": 250000
+      },
+      "mode": "encoding-b-live-state-mismatch",
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "alg": "Ed25519",
+          "kid": "2026-01",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
+      "state_input": {
+        "period": "p1",
+        "spent": 0
       }
+    },
+    {
+      "auth": {
+        "audience": "merchant-gateway",
+        "auth_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "decision": "ALLOW",
+        "expires_at": 1730000060,
+        "intent_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "issued_at": 1730000000,
+        "issuer": "oxdeai.policy-engine",
+        "policy_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "signature": {
+          "alg": "ed25519",
+          "kid": "2026-01",
+          "sig": "jMyip7h-GMgl2nV_q8Cz-MuqbD4vgba6vseRejY13e-w8WZeW7UU7ft58JHJFJR0fyZ3NGXvjJBGeKSSJLThCA"
+        },
+        "state_hash": "6a3b184144ed303c66357aa212d7432be648b5a2b3b0d56974bc91ca7a6732c7"
+      },
+      "description": "Encoding B AuthorizationV1 + hash strategy mismatch: provider committed, core used for live verification. Signature verifies. committedHash=providerHash(state_input), liveHash=coreHash(state_input) — different algorithms, mismatch, outcome state-hash-mismatch.",
+      "expected": {
+        "reason": "Encoding B auth: computeStateHash strategy mismatch produces different hash",
+        "status": "state-hash-mismatch"
+      },
+      "id": "profile-c-008",
+      "mode": "encoding-b-hash-strategy-mismatch",
+      "opts": {
+        "now": 1730000010,
+        "trustedKey": {
+          "alg": "Ed25519",
+          "kid": "2026-01",
+          "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWiMMGTYK7zzHwZXLzDpCshxAH6Lgx8gVsJaixePuY7g=\n-----END PUBLIC KEY-----"
+        }
+      },
+      "signing_strategy": "provider",
+      "state_input": {
+        "period": "p1",
+        "spent": 0
+      },
+      "verify_strategy": "core"
     }
-  ]
+  ],
+  "version": "1.1.0"
 }

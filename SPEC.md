@@ -1,6 +1,6 @@
 # OxDeAI Specification (v1.3.0)
 
- See: docs/spec/core/eta-core-v1.md for the minimal Execution-Time Authorization profile. Locked conformance vectors are published for canonicalization, authorization, PEP, and delegation, and pass across TypeScript, Go, and Python verification harnesses executed in CI. AuthorizationV1, PEP Gateway, and DelegationV1 are specified as Stable normative artifacts. SPEC overall remains v1.3.0.
+ See: docs/spec/core/eta-core-v1.md for the minimal Execution-Time Authorization profile. Canonicalization, authorization, PEP and delegation have distinct checked-in vector/harness surfaces. Root Go and Python CI validators consume canonicalization, Profile-C and SignedKRL; authorization/PEP/delegation corpus coverage is TypeScript/JavaScript-only. Profile-C has one docs authority and a generated package representation; see docs/conformance/corpus-authority.md. AuthorizationV1, PEP Gateway, and DelegationV1 are specified as Stable normative artifacts. SPEC overall remains v1.3.0.
  
 
 > **Status of this document:** This root `SPEC.md` is a versioned index and overview of the
@@ -68,7 +68,7 @@ No valid authorization
 
 Normative protocol text uses RFC 2119 terms: MUST, MUST NOT, SHOULD, SHOULD NOT, MAY.
 
-Note: locked conformance vectors are currently published only for canonicalization; PEP/Authorization/Delegation are validated via harnesses until vectors are added.
+Note: current corpus authorities, publication status and actual consumers are listed in docs/conformance/corpus-authority.md. Existing delegation harness vectors are not a claim of a complete portable delegation corpus.
 
 ## 1. Scope
 
