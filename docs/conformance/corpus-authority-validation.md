@@ -1,5 +1,14 @@
 # #290 implementation and validation report
 
+> Historical #290/#314 validation record. The gateway failures below were
+> independently reproduced on clean main at `e33468c`, before #314. Implemented
+> #290 acceptance criteria remain PASS; these were pre-existing conformance-consumer
+> defects, not failures owned or fixed by #290. Their separate repair and current
+> validation are recorded in [gateway parity validation](gateway-vector-parity-validation.md).
+> S_freeze remains DEFERRED pending review and remaining baseline evidence;
+> this historical report does not establish a fully green repository baseline.
+
+
 ## Scope and authority
 
 24 logical corpora are declared in [corpus-authority.json](corpus-authority.json):
@@ -105,8 +114,8 @@ It was explicitly executed to avoid counting file presence as passing evidence:
  docs/spec/test-vectors/pep-vectors-v1.json` returned zero: those consumer sources
 and fixtures are unchanged by #290. This is an existing consumer/corpus mismatch,
 not a Profile-C projection divergence. The standalone authorization/PEP harnesses
-pass, but that does not make the manual Core/gateway consumer pass. The manifest
-marks these failing consumers blocked. No signatures, protocol behavior or
+pass, but that does not make the manual Core/gateway consumer pass. At that validation point, the manifest
+marked these failing consumers blocked. No signatures, protocol behavior or
 expected results were altered to hide the mismatch.
 
 ## Spec claims and CANON-ESC-001

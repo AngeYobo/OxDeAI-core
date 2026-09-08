@@ -49,11 +49,11 @@
           "representation": "docs/spec/test-vectors/canonicalization-v1.json",
           "path": "packages/guard/src/test/gateway.vectors.test.ts",
           "binding": "canonicalization-v1.json",
-          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "command": "pnpm --filter @oxdeai/guard test",
           "runtime": "TypeScript",
-          "execution": "manual",
+          "execution": "default-ci",
           "role": "verifier",
-          "notes": "Manual consumer absent from default guard test list; its canonicalization subtest passed during #290."
+          "notes": "Default guard test consumer; verifies all 11 canonicalization vectors."
         }
       ],
       "supportFiles": []
@@ -86,11 +86,11 @@
           "representation": "docs/spec/test-vectors/authorization-v1.json",
           "path": "packages/guard/src/test/gateway.vectors.test.ts",
           "binding": "authorization-v1.json",
-          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "command": "pnpm --filter @oxdeai/guard test",
           "runtime": "TypeScript",
-          "execution": "blocked",
+          "execution": "default-ci",
           "role": "verifier",
-          "notes": "Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage."
+          "notes": "Default guard test consumer; 12 authorization corpus cases combine strict Core verification with fixture action/state-context checks. Static fixture comparisons are not live-state gateway verification or Profile C evidence."
         },
         {
           "representation": "docs/spec/test-vectors/authorization-v1.json",
@@ -127,17 +127,17 @@
           "runtime": "JavaScript",
           "execution": "default-ci",
           "role": "verifier",
-          "notes": "Selected corpus cases only; existence is not execution proof."
+          "notes": "Standalone fixture evaluator exercises all 9 cases, including static snapshot comparisons. This does not establish live-state verification by createPepGatewayExecutor or Profile C conformance."
         },
         {
           "representation": "docs/spec/test-vectors/pep-vectors-v1.json",
           "path": "packages/guard/src/test/gateway.vectors.test.ts",
           "binding": "pep-vectors-v1.json",
-          "command": "pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js",
+          "command": "pnpm --filter @oxdeai/guard test",
           "runtime": "TypeScript",
-          "execution": "blocked",
+          "execution": "default-ci",
           "role": "verifier",
-          "notes": "Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage."
+          "notes": "Default guard test consumer; 7 of 9 PEP cases exercise the common A/B gateway surface. pep-sb-state-mismatch and pep-sb-missing-state-snapshot are explicitly deferred pending profile/surface assignment, not counted as conformance passes. No live-state reader or Profile C claim; zero-upstream assertions cover applicable denials."
         }
       ],
       "supportFiles": []

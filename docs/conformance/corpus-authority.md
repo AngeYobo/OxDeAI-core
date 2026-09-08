@@ -89,11 +89,12 @@ The generic package Go driver is manual/adapter-dependent, not the root Go
 validator. Its Python adapter fails at import with `KeyError: intent_id` (#306);
 several later operations also use frozen expected-result lookup. It is marked
 blocked, not independent runtime coverage. Rust's four tests use one local auth
-fixture plus keyset, never a vector tree. `gateway.vectors.test.ts` reads selected
-docs corpora but is absent from the default guard test list; its explicit command
-is recorded explicitly. Its canonicalization subtest passed; its authorization
-and PEP subtests failed during #290 and are marked blocked.
-`gateway.enforcement.test.ts` is now in the default list.
+fixture plus keyset, never a vector tree. `gateway.vectors.test.ts` now runs in
+the default guard test list alongside gateway enforcement and authority tests.
+Its PEP coverage is a seven-case subset of the common A/B gateway surface; two
+snapshot-dependent cases have an explicit deferred profile/surface disposition.
+Authorization fixture-context checks do not establish live-state verification. See [gateway parity validation](gateway-vector-parity-validation.md)
+for the pre-existing failure diagnosis and the scoped repair.
 
 The legacy conformance extractor reads and rewrites selected package baselines;
 those maintenance reads are recorded below, not counted as verifier evidence.
@@ -135,7 +136,7 @@ Representation: `docs/spec/test-vectors/canonicalization-v1.json` (authoritative
 | [scripts/verify-canonicalization-vectors.ts](../../scripts/verify-canonicalization-vectors.ts) | TypeScript / verifier / default-ci | `pnpm test:vectors:ts` | Selected corpus cases only; existence is not execution proof. |
 | [go-harness/canonicalization_verify.go](../../go-harness/canonicalization_verify.go) | Go / verifier / default-ci | `pnpm test:vectors:go` | Selected corpus cases only; existence is not execution proof. |
 | [python-harness/verify_canonicalization_vectors.py](../../python-harness/verify_canonicalization_vectors.py) | Python / verifier / default-ci | `pnpm test:vectors:py` | Selected corpus cases only; existence is not execution proof. |
-| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / manual | `pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js` | Manual consumer absent from default guard test list; its canonicalization subtest passed during #290. |
+| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / default-ci | `pnpm --filter @oxdeai/guard test` | Default guard test consumer; verifies all 11 canonicalization vectors. |
 
 
 ### docs-authorization-v1
@@ -149,7 +150,7 @@ Representation: `docs/spec/test-vectors/authorization-v1.json` (authoritative), 
 | Consumer | Runtime / role / execution | Command | Scope note |
 |---|---|---|---|
 | [scripts/verify-authorization-vectors.mjs](../../scripts/verify-authorization-vectors.mjs) | JavaScript / verifier / default-ci | `pnpm test:vectors:auth` | Selected corpus cases only; existence is not execution proof. |
-| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / blocked | `pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js` | Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage. |
+| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / default-ci | `pnpm --filter @oxdeai/guard test` | Default guard test consumer; 12 authorization corpus cases combine strict Core verification with fixture action/state-context checks. Static fixture comparisons are not live-state gateway verification or Profile C evidence. |
 | [scripts/verify-pep-vectors.mjs](../../scripts/verify-pep-vectors.mjs) | JavaScript / input-fixture / default-ci | `pnpm test:vectors:pep` | Loads referenced authorization fixtures to evaluate PEP cases. |
 
 
@@ -163,8 +164,8 @@ Representation: `docs/spec/test-vectors/pep-vectors-v1.json` (authoritative), 9 
 
 | Consumer | Runtime / role / execution | Command | Scope note |
 |---|---|---|---|
-| [scripts/verify-pep-vectors.mjs](../../scripts/verify-pep-vectors.mjs) | JavaScript / verifier / default-ci | `pnpm test:vectors:pep` | Selected corpus cases only; existence is not execution proof. |
-| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / blocked | `pnpm -C packages/guard build:test && node --test packages/guard/dist/test/gateway.vectors.test.js` | Executed during #290: authorization auth-allow-valid rejects INVALID_SIGNATURE; PEP pep-allow-upstream-success returns 403 rather than 200. Pre-existing consumer mismatch, absent from default test list. Not passing coverage. |
+| [scripts/verify-pep-vectors.mjs](../../scripts/verify-pep-vectors.mjs) | JavaScript / verifier / default-ci | `pnpm test:vectors:pep` | Standalone fixture evaluator exercises all 9 cases, including static snapshot comparisons. This does not establish live-state verification by createPepGatewayExecutor or Profile C conformance. |
+| [packages/guard/src/test/gateway.vectors.test.ts](../../packages/guard/src/test/gateway.vectors.test.ts) | TypeScript / verifier / default-ci | `pnpm --filter @oxdeai/guard test` | Default guard test consumer; 7 of 9 PEP cases exercise the common A/B gateway surface. pep-sb-state-mismatch and pep-sb-missing-state-snapshot are explicitly deferred pending profile/surface assignment, not counted as conformance passes. No live-state reader or Profile C claim; zero-upstream assertions cover applicable denials. |
 
 
 ### docs-delegation-vectors-v1
