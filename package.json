@@ -42,7 +42,10 @@
     "test:vectors:trusted-time": "pnpm -C packages/conformance validate:trusted-time",
     "test:vectors:all": "pnpm test:vectors:ts && pnpm test:vectors:auth && pnpm test:vectors:pep && pnpm test:vectors:delegation && pnpm test:vectors:trusted-time && pnpm test:vectors:go && pnpm test:vectors:py",
     "verify:spec-claims": "node scripts/spec-claims/verify.mjs",
-    "test:spec-claims": "node --test scripts/spec-claims/verify.test.mjs"
+    "test:spec-claims": "node --test scripts/spec-claims/verify.test.mjs",
+    "project:profile-c": "node scripts/corpus/profile-c.mjs --write",
+    "verify:corpus-authority": "node scripts/corpus/verify-authority.mjs",
+    "test:corpus-authority": "node --test scripts/corpus/corpus.test.mjs"
   },
   "devDependencies": {
     "@oxdeai/core": "workspace:*",

@@ -1,5 +1,12 @@
 # Go Conformance Harness (Adapter Protocol)
 
+Actual runtime coverage is documented in [corpus authority](../../../docs/conformance/corpus-authority.md). Root Go/Python
+validators cover canonicalization, Profile-C and SignedKRL only. The optional
+package Go driver is separate and requires an adapter; its bundled Python adapter
+fails at import (#306) and supplies no passing coverage. Rust tests consume only
+`examples/rust-verifier/auth_case.json` and its key fixture, not either vector tree.
+
+
 This harness reads OxDeAI conformance vectors from `packages/conformance/vectors` and prints PASS/FAIL assertions similar to the TypeScript validator.
 
 It is intended for Rust/Go/Python native implementations that want protocol-aligned validation without depending on the TypeScript runtime directly.

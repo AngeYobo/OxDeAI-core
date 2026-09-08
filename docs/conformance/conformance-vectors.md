@@ -1,5 +1,12 @@
 # Conformance Vectors Index
 
+Actual runtime coverage is documented in [corpus authority](corpus-authority.md). Root Go/Python
+validators cover canonicalization, Profile-C and SignedKRL only. The optional
+package Go driver is separate and requires an adapter; its bundled Python adapter
+fails at import (#306) and supplies no passing coverage. Rust tests consume only
+`examples/rust-verifier/auth_case.json` and its key fixture, not either vector tree.
+
+
 ## Status
 
 Non-normative (developer documentation)

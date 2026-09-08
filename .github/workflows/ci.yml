@@ -102,6 +102,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Verify corpus authority and Profile-C projection
+        run: pnpm verify:corpus-authority && pnpm test:corpus-authority
+
       - name: Verify spec claims
         run: pnpm verify:spec-claims
 

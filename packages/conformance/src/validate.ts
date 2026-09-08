@@ -1192,7 +1192,7 @@ function validateAuditVerificationVectors(ctx: CheckCtx, adapter: ConformanceAda
 //                algorithm such as siftCanonicalJsonHash; distinct from "core")
 //   "throws"   — always throws (models a broken or unavailable hash implementation)
 //
-// Encoding B vectors additionally exercise full Profile C: Sift-compatible wire format
+// Encoding B vectors additionally exercise selected Profile-C semantics: Sift-compatible wire format
 // (alg="ed25519", expires_at, base64url sig) + live-state semantic verification.
 
 function profileCCoreHash(state: unknown): string {
@@ -1306,8 +1306,6 @@ function validateKeyLifecycleVectors(ctx: CheckCtx, adapter: ConformanceAdapter)
 
 function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: ConformanceAdapter): void {
   const file = loadJson<VectorFile>("profile-c-state-verification.json");
-  const now = 1_730_000_000;
-
   for (const v of file.vectors) {
     const id    = String(v.id);
     const mode  = String(v.mode);
@@ -1363,7 +1361,7 @@ function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: Confor
     }
 
     // ── Encoding B modes ──────────────────────────────────────────────────────
-    // These build a real Sift-compatible (Encoding B) AuthorizationV1 artifact
+    // These consume a committed Sift-compatible (Encoding B) AuthorizationV1 artifact
     // with state_hash = signingHashFn(state_input), verify the signature
     // (exercising the ed25519/expires_at/base64url path), then simulate
     // Profile C step 10: computeStateHash(live_state_input) == authorization.state_hash.
@@ -1378,38 +1376,23 @@ function validateProfileCStateVerificationVectors(ctx: CheckCtx, adapter: Confor
 
       const committedHash = profileCGetHashFn(signingStrategy)(stateInput);
 
-      // Build a real Encoding B authorization with the computed state_hash.
-      const unsigned: Record<string, unknown> = {
-        auth_id:     "c".repeat(64),
-        issuer:      "oxdeai.policy-engine",
-        audience:    "merchant-gateway",
-        intent_hash: "a".repeat(64),
-        state_hash:  committedHash,
-        policy_id:   "c".repeat(64),
-        decision:    "ALLOW",
-        issued_at:   now,
-        expires_at:  now + 60,
-        signature:   { alg: "ed25519", kid: "2026-01" },
-      };
-      const preimage = Buffer.from(canonicalJson(unsigned), "utf8");
-      const sigBytes = nodeSign(
-        null,
-        preimage,
-        TEST_ONLY_ED25519_PRIVATE_KEY_PEM_DO_NOT_USE_IN_PRODUCTION
-      );
-      const auth = {
-        ...unsigned,
-        signature: { alg: "ed25519", kid: "2026-01", sig: sigBytes.toString("base64url") },
-      } as unknown as AuthorizationV1;
-
-      // Step 1: signature + audience + expiry (Profile B checks via verifyAuthorization).
+      // Consume the committed authority fixture preserved by the one-way projection.
+      // Do not synthesize/re-sign an artifact: Go and Python verify these same bytes.
+      const auth = v.auth as unknown as AuthorizationV1;
+      const opts = asRecord(v.opts);
+      const trustedKey = asRecord(opts.trustedKey);
+      eq(ctx, `${id} committed state hash`, auth.state_hash, committedHash);
       const sigResult = adapter.verifyAuthorization(auth, {
-        now:                          now + 10,
-        expectedIssuer:               "oxdeai.policy-engine",
-        expectedAudience:             "merchant-gateway",
-        trustedKeySets:               TEST_KEYSET,
+        now: Number(opts.now),
+        expectedIssuer: "oxdeai.policy-engine",
+        expectedAudience: "merchant-gateway",
+        trustedKeySets: {
+          issuer: "oxdeai.policy-engine",
+          version: "1",
+          keys: [{ kid: String(trustedKey.kid), alg: trustedKey.alg as KeySetKey["alg"], public_key: String(trustedKey.public_key) }],
+        },
         requireSignatureVerification: true,
-        consumedAuthIds:              [],
+        consumedAuthIds: [],
       });
 
       if (sigResult.status !== "ok") {

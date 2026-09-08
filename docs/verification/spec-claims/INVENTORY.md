@@ -1,5 +1,13 @@
 # Claim mapping audit (schema v2)
 
+#290 review update: the Profile-C docs representation is authoritative and the
+package representation is its deterministic projection, not independent corpus
+evidence. PROFILE-C-001 retains its original evidence/levels and adds a forbidden
+inference from projection equality to independent evidence. CANON-ESC-001 remains
+unresolved/deferred; current eight cases do not require an escaping resolution.
+See [corpus authority](../../conformance/corpus-authority.md) and the live registry.
+
+
 Review snapshot. Run `pnpm verify:spec-claims` for live counts. Locks are contextual records, not additional normative requirements.
 
 ```text

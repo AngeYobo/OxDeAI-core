@@ -32,7 +32,7 @@ Passing validation means the implementation reproduces expected deterministic ar
 
 ### Profile C - Semantic State Verification (v1.5+)
 
-- `profile-c-state-verification.json` - exercises the full semantic state verification path (Profile C, guard step 10): `computeStateHash(liveState)` compared against the committed `state_hash` in the authorization.
+- `profile-c-state-verification.json` - models selected Profile-C state-hash comparisons (guard step 10), separately from actual guard integration: `computeStateHash(liveState)` compared against the committed `state_hash` in the authorization.
 
 Eight vectors covering:
 
@@ -111,7 +111,7 @@ Nine vectors covering:
 
 Signing domain: `OXDEAI_KRL_V1`. KRL signing fixture key (`krl-2026-01`, issuer `krl.issuer`) is distinct from the AuthorizationV1 / DelegationV1 signing fixture key to exercise trust-domain separation.
 
-**Coverage scope:** TypeScript / `@oxdeai/core` conformance runner. No cross-language harness integration in Patch A. `SiftHttpKeyStore` integration deferred to Patch B.
+**Coverage scope:** TypeScript / `@oxdeai/core` conformance runner. The separate docs SignedKRL corpus is consumed by the root Go/Python harnesses. These are distinct corpora, not a projection or mirror.
 
 ### Trusted-Time Semantics (v2.0+)
 
@@ -119,7 +119,7 @@ Signing domain: `OXDEAI_KRL_V1`. KRL signing fixture key (`krl-2026-01`, issuer 
 
 44 vectors, 1 assertion each, run via a dedicated `runTrustedTimeConformance` harness (`src/trustedTimeConformance.ts`) rather than the generic vector-comparison path used by the sets above.
 
-Current validator assertion count: `259` (re-run `pnpm -C packages/conformance validate` for the live figure before relying on this number).
+Current validator assertion count: `262` (re-run `pnpm -C packages/conformance validate` for the live figure before relying on this number).
 
 ### Adapter ops required for DelegationV1
 
@@ -132,10 +132,10 @@ Current validator assertion count: `259` (re-run `pnpm -C packages/conformance v
 | `verify_delegation_chain_case` | `{ id: string }` | `{ status, violations }` | Lookup (frozen) |
 | `verify_delegation_signature_case` | `{ id: string }` | `{ status, violations }` | Lookup (frozen) |
 
-The Go harness uses `verify_delegation_chain` and `verify_delegation_signature`
-with inline `input` from the vector files. Each adapter independently recomputes
-`SHA256(canonical_json(parent))`, performs the chain-level structural checks,
-and (for signature cases) performs Ed25519 verification using the test key
+The optional `packages/conformance/go-harness` driver (not root vector CI; Python adapter blocked by #306) uses `verify_delegation_chain` and `verify_delegation_signature`
+with inline `input` from the vector files. Those operations are designed to recompute
+`SHA256(canonical_json(parent))`, perform the chain-level structural checks,
+and (for signature cases) perform Ed25519 verification using the test key
 material embedded in `opts.trustedKeySets`. Lookup ops are retained for
 compatibility but not used by the harness runners.
 
@@ -156,7 +156,7 @@ language. Everything else is TypeScript-only today.
 | `key-lifecycle-verification.json` | Key status (active/revoked/retired), `not_before`/`not_after` windows, wrong-kid rejection | TypeScript only - portable across any `verifyAuthorization` implementation, but `validate.ts` is its only consumer |
 | `clock-semantics-verification.json` | Strict zero-tolerance expiry, `issued_at` informational, Encoding A + B boundary pins | TypeScript only - portable, no crypto required, but `validate.ts` is its only consumer |
 | `trusted-time.json` | Trusted-time freshness gate: issuance, velocity, tool-window, replay under `evaluationTime`; protocol-domain and malformed-input rejection | TypeScript only (dedicated `runTrustedTimeConformance` harness) |
-| `profile-c-state-verification.json` | Semantic state verification: hash comparison, strategy mismatch, compute-throws, TOCTOU, Encoding B | TypeScript only (TS runner); **Go + Python cover all 8 modes** via `docs/spec/test-vectors/profile-c-state-verification.json` (#120) |
+| `profile-c-state-verification.json` | Generated Profile-C representation; preserved signed fixtures and expected-result projection | TypeScript consumes this projection; Go/Python consume the docs authority. Same eight cases, not independent corpora. |
 | `delegation.property.test.ts` (D-P1–D-P5) | PBT over scope / hash / mutation | TypeScript only |
 | `guard.delegation.property.test.ts` (G-D1–G-D3) | Guard PEP delegation path | TypeScript only |
 | `cross-adapter.test.ts` (CA-1–CA-10) | Cross-adapter equivalence, I6 | TypeScript only |
@@ -172,7 +172,7 @@ pnpm -C packages/conformance validate
 Expected success output includes:
 
 ```text
-Conformance passed: 259 assertions
+Conformance passed: 262 assertions
 ```
 
 (This figure moves as vectors are added. Treat the live `pnpm validate` output
@@ -199,6 +199,16 @@ Conformance checks deterministic behavior for artifacts and verifiers used in th
 Diagram source/editing policy:
 - [`docs/diagrams/README.md`](../../docs/diagrams/README.md)
 
+## Profile-C authority and generated representation
+
+`vectors/profile-c-state-verification.json` is generated solely from
+`docs/spec/test-vectors/profile-c-state-verification.json`. Edit the authority,
+then run `pnpm project:profile-c` from the repository root.
+`pnpm verify:corpus-authority` checks semantic and exact-byte consistency without
+writing files. Build/prepack use the committed projection and do not copy either
+vector tree. See [corpus authority](../../docs/conformance/corpus-authority.md).
+The remaining package corpora retain their own frozen authorities.
+
 ## Freeze Policy
 Vectors are frozen per protocol version.
 
@@ -214,9 +224,9 @@ OxDeAI defines three interoperability profiles. Conformance coverage maps direct
 |---------|-------------|----------------------|
 | A | Core-native `AuthorizationV1` | Core protocol + DelegationV1 |
 | B | External provider wire-compatible (Encoding A and Encoding B accepted) | Core + authorization-signature vectors |
-| C | Full semantic state verification via `computeStateHash` | Core + DelegationV1 + Profile C state vectors |
+| C | Semantic state verification via `computeStateHash` | Core + DelegationV1 + Profile C state vectors (selected cases, not full deployment proof) |
 
-Profile C now has **executable conformance coverage** via `profile-c-state-verification.json` (12 assertions).
+Profile C now has **executable conformance coverage** via `profile-c-state-verification.json` (15 assertions).
 
 Key lifecycle enforcement (Profile A/B/C) is covered by `key-lifecycle-verification.json` (20 assertions): active, revoked, retired (within/past window), `not_before`/`not_after` time windows, and wrong-kid rejection.
 
