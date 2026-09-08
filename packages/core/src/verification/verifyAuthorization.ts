@@ -222,7 +222,12 @@ export function authorizationSigningPayload(auth: AuthorizationV1): Omit<Authori
     // so Sift-issued tokens remain verifiable without re-signing.
     const raw = auth as Record<string, unknown>;
     if (typeof raw["expires_at"] === "number") payload["expires_at"] = raw["expires_at"];
-    if (!hasFlatAlgKid) {
+    if (hasFlatAlgKid) {
+      // The locked corpus uses nested signature bytes with signed top-level
+      // alg/kid. Preserve those public fields when filtering engine internals.
+      payload.alg = pub.alg;
+      payload.kid = pub.kid;
+    } else {
       payload.signature = { alg: sig.alg, kid: sig.kid };
     }
     return payload;
