@@ -230,7 +230,10 @@ test("RS-5 failing consumeAuthId: execution blocked when store throws", async ()
     },
   };
 
-  const auth = signAuth({ auth_id: "rs-auth-5" });
+  // #320: verification now precedes the consume, so this fixture must be
+  // verification-clean to reach the store at all — otherwise the test would
+  // assert a binding failure instead of the store failure it exists to cover.
+  const auth = signAuth({ auth_id: "rs-auth-5", state_hash: stateSnapshotHash(makeBaseState()), intent_hash: RS_INTENT_HASH });
   const guard = OxDeAIGuard(makeGuardConfig(auth, { replayStore: failingStore }));
   const action = makeAction();
 

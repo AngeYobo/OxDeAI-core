@@ -57,6 +57,31 @@ from the same producer that emitted the artifact restates that producer's own
 derivation and establishes no independent constraint, so it does not satisfy this
 rule even though the two values are compared.
 
+### 4.2 Side Effects Relative to Authentication
+
+Input that has not been authenticated **MUST NOT** cause durable mutation of
+trusted security state.
+
+A durable mutation is any write a verifier or enforcement boundary makes that
+outlives the current request and can affect a later authorization decision —
+replay-store consumption is the canonical example. Authentication here means the
+artifact's signature has been verified against configured trust anchors; a
+structural or presence check is not authentication.
+
+This rule constrains **the ordering of side effects relative to authentication**.
+It does **NOT** make any store operation mandatory, does **NOT** prescribe a store
+implementation, and does **NOT** dictate the ordering of checks *within*
+verification — that is a separate question.
+
+The operative consequence is that a rejected artifact must leave no trace that
+can deny a later legitimate one. Where a boundary both authenticates and consumes
+a single-use identifier, the consume **MUST** follow successful authentication and
+**MUST** still precede the protected side effect. Atomicity of the consume is a
+property of the store operation, not of where it is called, so moving it after
+authentication does not weaken replay protection: two concurrent presentations of
+the same identifier still resolve to exactly one consumer, and neither executes
+before consuming.
+
 
 ## 5. AuthorizationV1 Verification (Required Ordering)
 

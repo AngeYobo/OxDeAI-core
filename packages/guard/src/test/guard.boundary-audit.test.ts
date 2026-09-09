@@ -507,7 +507,11 @@ test("B-13 a failed verifier emits AUTHORIZATION_VERIFICATION / AUTHORIZATION_VE
   assert.equal(event.stage, "AUTHORIZATION_VERIFICATION");
   assert.equal(event.boundaryFailure, "AUTHORIZATION_VERIFICATION_FAILED");
   assert.equal(event.authorizationIssued, true);
-  assert.equal(event.authorizationConsumed, true, "the id was consumed before verification");
+  assert.equal(
+    event.authorizationConsumed,
+    false,
+    "#320: a verification failure consumes nothing — the consume now follows authentication"
+  );
 });
 
 test("B-14 an unbound intent emits AUTHORIZATION_VERIFICATION / INTENT_HASH_MISMATCH", async () => {
