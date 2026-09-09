@@ -258,32 +258,6 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       const now = Math.floor(Date.now() / 1000);
       const violationMessages: string[] = [];
 
-      // Atomically check-and-consume the delegation_id. Fail closed on store errors.
-      let delegConsumed: boolean;
-      try {
-        delegConsumed = replayStore.consumeDelegationId
-          ? await replayStore.consumeDelegationId(delegation.delegation_id, { expiry: delegation.expiry })
-          : true;
-      } catch (err) {
-        throw reject(
-          "REPLAY",
-          "REPLAY_STORE_UNAVAILABLE",
-          new OxDeAIAuthorizationError(
-            `Replay store unavailable for delegation_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
-          )
-        );
-      }
-      if (!delegConsumed) {
-        throw reject(
-          "REPLAY",
-          "DELEGATION_REPLAY",
-          new OxDeAIAuthorizationError("Delegation replay detected. Execution blocked.")
-        );
-      }
-      // Only a store that implements the optional check-and-consume actually
-      // consumed anything; the fallback above assumes success without a store.
-      lifecycle.delegationConsumed = replayStore.consumeDelegationId !== undefined;
-
       // Validate parentScope before anything trusts it. Fail closed on missing
       // or malformed scope.
       const { parentScope } = opts.delegation;
@@ -310,32 +284,21 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
       // parent shape the child's validation before its own signature had been
       // checked at all.
       //
-      // Consume the parentAuth auth_id first, so a replayed parent cannot be
-      // re-presented while its authority is being evaluated.
-      let parentAuthConsumed: boolean;
-      try {
-        parentAuthConsumed = await replayStore.consumeAuthId(
-          parentAuth.auth_id, { expiry: parentAuth.expiry }
-        );
-      } catch (err) {
-        throw reject(
-          "REPLAY",
-          "REPLAY_STORE_UNAVAILABLE",
-          new OxDeAIAuthorizationError(
-            `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
-          )
-        );
-      }
-      if (!parentAuthConsumed) {
-        throw reject(
-          "REPLAY",
-          "AUTHORIZATION_REPLAY",
-          new OxDeAIAuthorizationError(
-            "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
-          )
-        );
-      }
-      lifecycle.authorizationConsumed = true;
+      // The replay consumes for BOTH ids now sit after every verification they
+      // depend on, immediately before execution (#320). An earlier form
+      // consumed them here, before the parent had been authenticated at all,
+      // on the rationale that consuming first stopped a replayed parent being
+      // re-presented mid-evaluation. That rationale does not hold: replay
+      // safety is a property of the store's atomic check-and-set, not of where
+      // the call sits, and nothing executes during authority evaluation, so the
+      // window it described does not exist. What it did cost was real — an
+      // unauthenticated caller could commit a durable write that survived the
+      // rejection and pre-emptively denied a later legitimate authorization
+      // carrying the same id. `gateway.ts` has shipped verify-then-consume for
+      // the same class of input throughout.
+      //
+      // Unauthenticated input must not cause durable mutation of trusted
+      // security state; see `verification-v1.md` §4.2.
 
       // Authenticate the parent signature AND authorize its (issuer, policy_id)
       // pair in one verification. `expectedIssuer` / `expectedPolicyId` are
@@ -448,6 +411,67 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
           new OxDeAIDelegationError(violationMessages)
         );
       }
+
+      // ── Replay consumption: after every verification, before any execution ──
+      //
+      // Placed here rather than immediately after each id's own verification so
+      // that NO denial on this path leaves a durable write behind — not a
+      // signature failure, not an authority rejection, not a chain or scope
+      // violation. Both ids are consumed only once the request is fully
+      // entitled to execute.
+      //
+      // Atomicity is unchanged: each consume is still a single atomic
+      // check-and-set, and both still strictly precede `execute()` below, so
+      // two concurrent presentations of the same id cannot both execute.
+      let delegConsumed: boolean;
+      try {
+        delegConsumed = replayStore.consumeDelegationId
+          ? await replayStore.consumeDelegationId(delegation.delegation_id, { expiry: delegation.expiry })
+          : true;
+      } catch (err) {
+        throw reject(
+          "REPLAY",
+          "REPLAY_STORE_UNAVAILABLE",
+          new OxDeAIAuthorizationError(
+            `Replay store unavailable for delegation_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+          )
+        );
+      }
+      if (!delegConsumed) {
+        throw reject(
+          "REPLAY",
+          "DELEGATION_REPLAY",
+          new OxDeAIAuthorizationError("Delegation replay detected. Execution blocked.")
+        );
+      }
+      // Only a store that implements the optional check-and-consume actually
+      // consumed anything; the fallback above assumes success without a store.
+      lifecycle.delegationConsumed = replayStore.consumeDelegationId !== undefined;
+
+      let parentAuthConsumed: boolean;
+      try {
+        parentAuthConsumed = await replayStore.consumeAuthId(
+          parentAuth.auth_id, { expiry: parentAuth.expiry }
+        );
+      } catch (err) {
+        throw reject(
+          "REPLAY",
+          "REPLAY_STORE_UNAVAILABLE",
+          new OxDeAIAuthorizationError(
+            `Replay store unavailable for parentAuth auth_id: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+          )
+        );
+      }
+      if (!parentAuthConsumed) {
+        throw reject(
+          "REPLAY",
+          "AUTHORIZATION_REPLAY",
+          new OxDeAIAuthorizationError(
+            "Authorization replay detected on parentAuth: auth_id already consumed. Execution blocked."
+          )
+        );
+      }
+      lifecycle.authorizationConsumed = true;
       // parentAuth is AuthorizationV1; cast to Authorization for hook/audit
       // compatibility. Legacy fields will be absent — callers on the delegation
       // path should treat the value as AuthorizationV1 shape only.
@@ -557,30 +581,6 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
     // ── 6b. Verify the authorization artifact (strict verifier, fail-closed) ─
     lifecycle.stage = "AUTHORIZATION_VERIFICATION";
     const now = Math.floor(Date.now() / 1000);
-
-    // Atomically check-and-consume the auth_id before execution. Fail closed on store errors.
-    let authConsumed: boolean;
-    try {
-      authConsumed = await replayStore.consumeAuthId(
-        authorization.auth_id, { expiry: (authorization as AuthorizationV1).expiry ?? 0 }
-      );
-    } catch (err) {
-      throw reject(
-        "REPLAY",
-        "REPLAY_STORE_UNAVAILABLE",
-        new OxDeAIAuthorizationError(
-          `Replay store unavailable: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
-        )
-      );
-    }
-    if (!authConsumed) {
-      throw reject(
-        "REPLAY",
-        "AUTHORIZATION_REPLAY",
-        new OxDeAIAuthorizationError("Authorization replay detected: auth_id already consumed. Execution blocked.")
-      );
-    }
-    lifecycle.authorizationConsumed = true;
 
     const authResult = strictVerifyAuthorization(authorization as AuthorizationV1, {
       now,
@@ -699,6 +699,43 @@ export function OxDeAIGuard(config: OxDeAIGuardConfig) {
         )
       );
     }
+
+    // ── Replay consumption: after verification and binding, before the commit ──
+    //
+    // Unlike the delegation path, `authorization` here is the untouched return
+    // value of `config.engine.evaluatePure()` in this same call — not caller
+    // supplied — so no unauthenticated third party can reach this write and
+    // there is no pre-emptive denial vector. It moves for internal consistency
+    // with the delegation and gateway paths, and to close a self-denial mode:
+    // consuming before verification burned the id of an artifact that was then
+    // rejected for a local misconfiguration.
+    //
+    // It sits before the CAS commit deliberately: state must never advance for
+    // an authorization that turns out to be already consumed. A CAS conflict
+    // after this point does burn the id, which is harmless here because the
+    // engine mints a fresh `auth_id` on the next evaluation.
+    let authConsumed: boolean;
+    try {
+      authConsumed = await replayStore.consumeAuthId(
+        authorization.auth_id, { expiry: (authorization as AuthorizationV1).expiry ?? 0 }
+      );
+    } catch (err) {
+      throw reject(
+        "REPLAY",
+        "REPLAY_STORE_UNAVAILABLE",
+        new OxDeAIAuthorizationError(
+          `Replay store unavailable: ${err instanceof Error ? err.message : String(err)}. Execution blocked.`
+        )
+      );
+    }
+    if (!authConsumed) {
+      throw reject(
+        "REPLAY",
+        "AUTHORIZATION_REPLAY",
+        new OxDeAIAuthorizationError("Authorization replay detected: auth_id already consumed. Execution blocked.")
+      );
+    }
+    lifecycle.authorizationConsumed = true;
 
     // ── 7. CAS state commit (before execution side effects) ──────────────
     // Commit the new state atomically. This must happen before execute() so

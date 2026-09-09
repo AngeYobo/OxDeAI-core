@@ -281,7 +281,9 @@ test("RS-R5 consumeDelegationId: first use true, replay false", async () => {
 
 test("RS-R6 Redis error in consumeAuthId: throws OxDeAIAuthorizationError via guard", async () => {
   const errClient = new ErrorRedisClient("connection refused");
-  const auth = signAuth({ auth_id: "redis-auth-r6" });
+  // #320: verification precedes the consume; the fixture must be
+  // verification-clean to reach Redis at all.
+  const auth = signAuth({ auth_id: "redis-auth-r6", state_hash: stateSnapshotHash(makeBaseState()), intent_hash: REDIS_INTENT_HASH });
   const guard = OxDeAIGuard(makeGuardConfig(auth, errClient));
 
   let executed = false;
